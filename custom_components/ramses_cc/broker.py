@@ -383,3 +383,71 @@ class RamsesBroker:
 
         await self.client.async_send_cmd(cmd)
         async_call_later(self.hass, _CALL_LATER_DELAY, self.async_update)
+
+    async def async_get_fan_param(self, call: ServiceCall) -> None:
+        """Handle get_fan_param service call.
+
+        This sends a parameter read request to the specified fan device. The response
+        will be processed by the device's normal packet handling.
+
+        Args:
+            call: Service call data containing:
+                - device_id: Target device ID (required)
+                - param_id: Parameter ID to read (required, 2 hex digits)
+                - from_id: Source device ID (optional, defaults to HGI)
+                - fan_id: Fan ID (optional, defaults to device_id)
+
+        Raises:
+            ValueError: If required parameters are missing or invalid
+        """
+        _LOGGER.debug("Processing get_fan_param service call with data: %s", call.data)
+        try:
+            # Get parameters from service call with defaults
+            device_id = call.data.get("device_id")
+            param_id = call.data.get("param_id")
+            from_id = call.data.get(
+                "from_id",
+                self.client.hgi.id if self.client and self.client.hgi else None,
+            )
+            fan_id = call.data.get("fan_id", device_id)
+
+            _LOGGER.debug(
+                "Parsed parameters - device_id: %s, param_id: %s, from_id: %s, fan_id: %s",
+                device_id,
+                param_id,
+                from_id,
+                fan_id,
+            )
+
+            # Validate required parameters
+            if not device_id:
+                _LOGGER.error("Missing required parameter: device_id")
+                raise ValueError("required key not provided @ data['device_id']")
+
+            if not param_id:
+                _LOGGER.error("Missing required parameter: param_id")
+                raise ValueError("required key not provided @ data['param_id']")
+
+            if not from_id:
+                raise ValueError("No source device ID specified and HGI not available")
+
+            cmd = Command.get_fan_param(fan_id, param_id, src_id=from_id)
+            _LOGGER.debug("Sending command: %s", cmd)
+
+            # Send the command directly using the gateway
+            await self.client.async_send_cmd(cmd)
+
+            # Add a small delay to prevent message flooding
+            await asyncio.sleep(0.2)
+
+        except Exception as ex:
+            _LOGGER.warning(
+                "Failed to send get_fan_param command to %s (param: %s, from: %s): %s",
+                device_id,
+                param_id,
+                from_id,
+                ex,
+                exc_info=_LOGGER.isEnabledFor(logging.DEBUG),
+            )
+            # Don't re-raise, as this is a fire-and-forget operation
+            # The RP packet handler will log any responses if received
