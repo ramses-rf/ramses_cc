@@ -449,5 +449,90 @@ class RamsesBroker:
                 ex,
                 exc_info=_LOGGER.isEnabledFor(logging.DEBUG),
             )
-            # Don't re-raise, as this is a fire-and-forget operation
-            # The RP packet handler will log any responses if received
+
+    async def async_set_fan_param(self, call: ServiceCall) -> None:
+        """Handle set_fan_param service call.
+
+        This sends a parameter write request to the specified fan device. The response
+        will be processed by the device's normal packet handling.
+
+        Args:
+            call: Service call data containing:
+                - device_id: Target device ID (required)
+                - param_id: Parameter ID to write (required, 2 hex digits)
+                - from_id: Source device ID (optional, defaults to HGI)
+                - fan_id: Fan ID (optional, defaults to device_id)
+
+        Raises:
+            ValueError: If required parameters are missing or invalid
+            ValueError: If parameter ID is not a valid 2-digit hex value
+        """
+        _LOGGER.debug("Processing set_fan_param service call with data: %s", call.data)
+        try:
+            # set parameters from service call with defaults
+            device_id = call.data.get("device_id")
+            param_id = call.data.get("param_id")
+            value = call.data.get("value")
+            from_id = call.data.get(
+                "from_id",
+                self.client.hgi.id if self.client and self.client.hgi else None,
+            )
+            fan_id = call.data.get("fan_id", device_id)
+
+            _LOGGER.debug(
+                "Parsed parameters - device_id: %s, param_id: %s, value: %s, from_id: %s, fan_id: %s",
+                device_id,
+                param_id,
+                value,
+                from_id,
+                fan_id,
+            )
+
+            # Validate required parameters
+            if not device_id:
+                _LOGGER.error("Missing required parameter: device_id")
+                raise ValueError("required key not provided @ data['device_id']")
+
+            if not param_id:
+                _LOGGER.error("Missing required parameter: param_id")
+                raise ValueError("required key not provided @ data['param_id']")
+
+            # Validate parameter ID format (must be 2-digit hex)
+            try:
+                if (
+                    len(param_id) != 2
+                    or int(param_id, 16) < 0
+                    or int(param_id, 16) > 0xFF
+                ):
+                    raise ValueError
+            except (ValueError, TypeError):
+                error_msg = f"Invalid parameter ID: '{param_id}'. Must be a 2-digit hexadecimal value (00-FF)"
+                _LOGGER.error(error_msg)
+                raise ValueError(error_msg) from None
+
+            if not value:
+                _LOGGER.error("Missing required parameter: value")
+                raise ValueError("required key not provided @ data['value']")
+
+            if not from_id:
+                raise ValueError("No source device ID specified and HGI not available")
+
+            cmd = Command.set_fan_param(fan_id, param_id, value, src_id=from_id)
+            _LOGGER.debug("Sending command: %s", cmd)
+
+            # Send the command directly using the gateway
+            await self.client.async_send_cmd(cmd)
+
+            # Add a small delay to prevent message flooding
+            await asyncio.sleep(0.2)
+
+        except Exception as ex:
+            _LOGGER.warning(
+                "Failed to send set_fan_param command to %s (param: %s, from: %s, value: %s): %s",
+                device_id,
+                param_id,
+                from_id,
+                value,
+                ex,
+                exc_info=_LOGGER.isEnabledFor(logging.DEBUG),
+            )

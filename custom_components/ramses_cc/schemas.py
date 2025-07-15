@@ -1,5 +1,6 @@
 """Schemas for RAMSES integration."""
 
+# ruff: noqa: I001  # Allow non-standard import order
 from __future__ import annotations
 
 import logging
@@ -603,12 +604,14 @@ SCH_DELETE_COMMAND = cv.make_entity_service_schema(
     },
 )
 
-# Service schema for getting fan parameters (using ramses_rf implementation)
+# Service schema for getting and setting fan parameters (using ramses_rf implementation)
 SVC_GET_FAN_PARAM: Final = "get_fan_param"
+SVC_SET_FAN_PARAM: Final = "set_fan_param"
 
-# Schema for get_fan_param service
+# Schema for_fan_param services
 # Note: Parameter validation is handled by ramses_rf
 _SCH_PARAM_ID = _SCH_DOM_IDX  # Reuse the same schema as domain index (2 hex digits)
+_SCH_VALUE = cv.string
 
 SCH_GET_FAN_PARAM = vol.Schema(
     {
@@ -619,9 +622,19 @@ SCH_GET_FAN_PARAM = vol.Schema(
     }
 )
 
+SCH_SET_FAN_PARAM = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Required("value"): _SCH_VALUE,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        vol.Optional("fan_id"): _SCH_DEVICE_ID,
+    }
+)
 SVCS_RAMSES_REMOTE = {
     SVC_DELETE_COMMAND: SCH_DELETE_COMMAND,
     SVC_LEARN_COMMAND: SCH_LEARN_COMMAND,
     SVC_SEND_COMMAND: SCH_SEND_COMMAND,
     SVC_GET_FAN_PARAM: SCH_GET_FAN_PARAM,
+    SVC_SET_FAN_PARAM: SCH_SET_FAN_PARAM,
 }

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -35,7 +36,9 @@ class TestFanParameterMinimal:
     """
 
     @pytest.fixture(autouse=True)
-    async def setup_fixture(self, hass: HomeAssistant) -> None:
+    async def setup_fixture(
+        self, hass: HomeAssistant
+    ) -> AsyncGenerator[None, None, None]:
         """Set up test environment.
 
         This fixture runs before each test method and sets up:

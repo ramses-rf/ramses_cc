@@ -3,6 +3,7 @@
 Requires a Honeywell HGI80 (or compatible) gateway.
 """
 
+# ruff: noqa: I001  # Allow non-standard import order
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,7 @@ from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.service import verify_domain_control
 from homeassistant.helpers.typing import ConfigType
 
-from ramses_rf import Entity as RamsesRFEntity
+from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_tx import exceptions as exc
 
 from .broker import RamsesBroker
@@ -38,11 +39,13 @@ from .schemas import (
     SCH_BIND_DEVICE,
     SCH_DOMAIN_CONFIG,
     SCH_GET_FAN_PARAM,
+    SCH_SET_FAN_PARAM,
     SCH_NO_SVC_PARAMS,
     SCH_SEND_PACKET,
     SVC_BIND_DEVICE,
     SVC_FORCE_UPDATE,
     SVC_GET_FAN_PARAM,
+    SVC_SET_FAN_PARAM,
     SVC_SEND_PACKET,
 )
 
@@ -198,6 +201,10 @@ def async_register_domain_services(
     async def async_get_fan_param(call: ServiceCall) -> None:
         await broker.async_get_fan_param(call)
 
+    @verify_domain_control(hass, DOMAIN)
+    async def async_set_fan_param(call: ServiceCall) -> None:
+        await broker.async_set_fan_param(call)
+
     hass.services.async_register(
         DOMAIN, SVC_BIND_DEVICE, async_bind_device, schema=SCH_BIND_DEVICE
     )
@@ -207,6 +214,10 @@ def async_register_domain_services(
 
     hass.services.async_register(
         DOMAIN, SVC_GET_FAN_PARAM, async_get_fan_param, schema=SCH_GET_FAN_PARAM
+    )
+
+    hass.services.async_register(
+        DOMAIN, SVC_SET_FAN_PARAM, async_set_fan_param, schema=SCH_SET_FAN_PARAM
     )
 
     # Advanced features
