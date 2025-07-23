@@ -540,11 +540,11 @@ class RamsesOptionsFlow(BaseRamsesFlow, OptionsFlow):
             if self.config_entry.state == ConfigEntryState.LOADED:
                 await self.hass.config_entries.async_unload(self.config_entry.entry_id)
 
-            store: Store = self.hass.helpers.storage.Store(STORAGE_VERSION, STORAGE_KEY)
-            storage: dict[str, Any] = await store.async_load() or {}
-            if SZ_CLIENT_STATE in storage:
+            store = Store(self.hass, STORAGE_VERSION, STORAGE_KEY)
+            stored_data: dict[str, Any] = await store.async_load() or {}
+            if SZ_CLIENT_STATE in stored_data:
                 if user_input["clear_schema"]:
-                    storage[SZ_CLIENT_STATE].pop(SZ_SCHEMA)
+                    stored_data[SZ_CLIENT_STATE].pop(SZ_SCHEMA)
 
                     def filter_schema_packets(
                         packets: dict[str, str],
@@ -556,13 +556,13 @@ class RamsesOptionsFlow(BaseRamsesFlow, OptionsFlow):
                         }
 
                     # Filter out cached packets used for schema discovery
-                    storage[SZ_CLIENT_STATE][SZ_PACKETS] = filter_schema_packets(
-                        storage[SZ_CLIENT_STATE].get(SZ_PACKETS, {})
+                    stored_data[SZ_CLIENT_STATE][SZ_PACKETS] = filter_schema_packets(
+                        stored_data[SZ_CLIENT_STATE].get(SZ_PACKETS, {})
                     )
 
                 if user_input["clear_packets"]:
-                    storage[SZ_CLIENT_STATE].pop(SZ_PACKETS)
-            await store.async_save(storage)
+                    stored_data[SZ_CLIENT_STATE].pop(SZ_PACKETS)
+            await store.async_save(stored_data)
 
             self.hass.async_create_task(
                 self.hass.config_entries.async_setup(self.config_entry.entry_id)
