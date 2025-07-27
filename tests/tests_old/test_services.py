@@ -70,7 +70,10 @@ from custom_components.ramses_cc.schemas import (
 )
 from custom_components.ramses_cc.sensor import SVCS_RAMSES_SENSOR
 from custom_components.ramses_cc.water_heater import SVCS_RAMSES_WATER_HEATER
+from ramses_rf import Device
 from ramses_rf.gateway import Gateway
+from ramses_rf.system.heat import SysMode
+# from ramses_rf.system.zones import DhwZone, Zone  # TODO once SysMode works
 
 from ..virtual_rf import VirtualRf
 from .helpers import TEST_DIR, cast_packets_to_rf
@@ -187,6 +190,12 @@ SERVICES = {
         SCH_NO_ENTITY_SVC_PARAMS,
     ),
     SVC_SET_DHW_MODE: (
+        # WIP EBR issue 233
+        # Use ramses_rf built-in validation, by mocking
+        # ramses_rf/system/zones.py, class DhwZone(ZoneSchedule): L384
+        # def set_mode(
+        # Requires imports + setting up ramses_rf.Gateway and DHW Device first
+        # TODO adapt from SVC_SET_SYSTEM_MODE below once that works
         "custom_components.ramses_cc.water_heater.RamsesWaterHeater.async_set_dhw_mode",
         SCH_SET_DHW_MODE,
     ),
@@ -199,9 +208,19 @@ SERVICES = {
         SCH_SET_DHW_SCHEDULE,
     ),
     SVC_SET_SYSTEM_MODE: (
-        # WIP EBR ramses_tx.Command class: create packets to be transmitted from ...
-        # use ramses_rf validation, as advised. Requires setting up ramses_rf.Gateway
-        "self._broker.client.async_send_cmd",  # used in remote.async_send_command() and in broker.async_send_packet()
+        # WIP EBR issue 233
+        # Use ramses_rf built-in validation, by mocking
+        # "ramses_rf.gateway.Gateway.async_send_cmd"
+        # ramses_rf/system/heat.py, class SysMode(SystemBase): L873
+        # def set_mode(
+        #         self,
+        #         system_mode: int | str | None,
+        #         *,
+        #         until: dt | str | None = None
+        # ) -> asyncio.Task[Packet]:
+        # Requires imports + setting up ramses_rf.Gateway and Heat Device first
+        # We will directly call: "ramses_rf.system.heat.SysMode.set_mode" ->
+        "ramses_rf.gateway.Gateway.async_send_cmd",
         # instead of
         # "custom_components.ramses_cc.climate.RamsesController.async_set_system_mode",
         SCH_SET_SYSTEM_MODE,
@@ -211,6 +230,12 @@ SERVICES = {
         SCH_SET_ZONE_CONFIG,
     ),
     SVC_SET_ZONE_MODE: (
+        # WIP EBR issue 233
+        # Use ramses_rf built-in validation, by mocking
+        # ramses_rf/system/zones.py, class Zone(ZoneSchedule): L791
+        # def set_mode(
+        # Requires imports + setting up ramses_rf.Gateway and Zone Device first
+        # TODO adapt from SVC_SET_SYSTEM_MODE above once that works
         "custom_components.ramses_cc.climate.RamsesZone.async_set_zone_mode",
         SCH_SET_ZONE_MODE,
     ),
@@ -656,6 +681,9 @@ TESTS_SET_SYSTEM_MODE: dict[str, dict[str, Any]] = {
 async def test_set_system_mode(
     hass: HomeAssistant, entry: ConfigEntry, idx: str
 ) -> None:
+
+    gwy: Gateway = list(hass.data[DOMAIN].values())[0].client  # EBR
+
     data = {
         "entity_id": "climate.01_145038",
         **TESTS_SET_SYSTEM_MODE[idx],

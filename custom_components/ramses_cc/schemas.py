@@ -330,7 +330,6 @@ SCH_SET_SYSTEM_MODE = cv.make_entity_service_schema(
         # Period: None is indefinitely; 0 is the end of today, 1 is end of tomorrow
     }
 )
-# issue 233
 
 DEFAULT_MIN_TEMP: Final[float] = 5
 MIN_MIN_TEMP: Final[float] = 5
@@ -383,7 +382,6 @@ SCH_SET_ZONE_MODE = cv.make_entity_service_schema(
         vol.Optional(ATTR_UNTIL): cv.datetime,
     }
 )
-# issue 233
 
 SVC_SET_ZONE_SCHEDULE: Final = "set_zone_schedule"
 SCH_SET_ZONE_SCHEDULE = cv.make_entity_service_schema(
@@ -454,7 +452,6 @@ SCH_SET_DHW_MODE = cv.make_entity_service_schema(
         vol.Optional(ATTR_UNTIL): cv.datetime,
     }
 )
-# issue 233
 
 DEFAULT_DHW_SETPOINT: Final[float] = 50  # degrees celsius, float
 MIN_DHW_SETPOINT: Final[float] = 30
