@@ -320,37 +320,17 @@ SCH_PERIOD = vol.All(  # of days (0-99)
 )
 
 SVC_SET_SYSTEM_MODE: Final = "set_system_mode"
-SCH_SET_SYSTEM_MODE = vol.Schema(
-    vol.Any(
-        cv.make_entity_service_schema(  # canBeTemporary: false
-            {  # also: Off, Heat, Cool (for pre-evohome)
-                vol.Required(ATTR_MODE): vol.In(
-                    [SystemMode.AUTO, SystemMode.HEAT_OFF, SystemMode.RESET]
-                )
-            }
-        ),
-        cv.make_entity_service_schema(  # canBeTemporary: true, timingMode: Duration
-            {
-                vol.Required(ATTR_MODE): vol.In([SystemMode.ECO_BOOST]),
-                vol.Optional(ATTR_DURATION): vol.Any(SCH_DURATION, None),
-            }
-        ),  # Duration: : None is indefinitely; 0 is invalid
-        cv.make_entity_service_schema(  # canBeTemporary: true, timingMode: Period
-            {
-                vol.Required(ATTR_MODE): vol.In(
-                    [
-                        SystemMode.AWAY,
-                        SystemMode.CUSTOM,
-                        SystemMode.DAY_OFF,
-                        SystemMode.DAY_OFF_ECO,
-                    ]
-                ),
-                vol.Optional(ATTR_PERIOD): vol.Any(SCH_PERIOD, None),
-            }
-        ),  # Period: None is indefinitely; 0 is the end of today, 1 is end of tomorrow
-        extra=vol.PREVENT_EXTRA,
-    ),
+SCH_SET_SYSTEM_MODE = cv.make_entity_service_schema(
+    # nested schemas not allowed after HA 2025.9
+    {
+        vol.Required(ATTR_MODE): vol.In([SystemMode]),
+        vol.Optional(ATTR_DURATION): vol.Any(SCH_DURATION, None),
+        # canBeTemporary: true, timingMode: Duration
+        vol.Optional(ATTR_PERIOD): vol.Any(SCH_PERIOD, None),
+        # Period: None is indefinitely; 0 is the end of today, 1 is end of tomorrow
+    }
 )
+# issue 233
 
 DEFAULT_MIN_TEMP: Final[float] = 5
 MIN_MIN_TEMP: Final[float] = 5
@@ -376,47 +356,34 @@ SCH_SET_ZONE_CONFIG = cv.make_entity_service_schema(
 )
 
 SVC_SET_ZONE_MODE: Final = "set_zone_mode"
-SCH_SET_ZONE_MODE = vol.Schema(
-    vol.Any(
-        cv.make_entity_service_schema(
-            {
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.SCHEDULE]),
-                # only mode with no setpoint
-            }
+SCH_SET_ZONE_MODE = cv.make_entity_service_schema(
+    # nested schemas not allowed after HA 2025.9
+    {
+        vol.Required(ATTR_MODE): vol.In(
+            [
+                ZoneMode.SCHEDULE,
+                ZoneMode.PERMANENT,
+                ZoneMode.ADVANCED,
+                ZoneMode.TEMPORARY,
+            ]
         ),
-        cv.make_entity_service_schema(
-            {
-                vol.Required(ATTR_MODE): vol.In(
-                    [ZoneMode.PERMANENT, ZoneMode.ADVANCED]
-                ),
-                vol.Required(ATTR_SETPOINT): vol.All(
-                    cv.positive_float, vol.Range(min=5, max=35)
-                ),
-            }
+        vol.Optional(ATTR_SETPOINT): vol.All(
+            cv.positive_float, vol.Range(min=5, max=35)
         ),
-        cv.make_entity_service_schema(
-            {
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_SETPOINT): vol.All(
-                    cv.positive_float, vol.Range(min=5, max=35)
-                ),
-                vol.Required(ATTR_DURATION, default=timedelta(hours=1)): vol.All(
-                    cv.time_period,
-                    vol.Range(min=timedelta(minutes=5), max=timedelta(days=1)),
-                ),
-            }
+        vol.Optional(ATTR_SETPOINT): vol.All(
+            cv.positive_float, vol.Range(min=5, max=35)
         ),
-        cv.make_entity_service_schema(
-            {
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_SETPOINT): vol.All(
-                    cv.positive_float, vol.Range(min=5, max=35)
-                ),
-                vol.Required(ATTR_UNTIL): cv.datetime,
-            }
+        vol.Optional(ATTR_DURATION, default=timedelta(hours=1)): vol.All(
+            cv.time_period,
+            vol.Range(min=timedelta(minutes=5), max=timedelta(days=1)),
         ),
-    )
+        vol.Optional(ATTR_SETPOINT): vol.All(
+            cv.positive_float, vol.Range(min=5, max=35)
+        ),
+        vol.Optional(ATTR_UNTIL): cv.datetime,
+    }
 )
+# issue 233
 
 SVC_SET_ZONE_SCHEDULE: Final = "set_zone_schedule"
 SCH_SET_ZONE_SCHEDULE = cv.make_entity_service_schema(
@@ -460,51 +427,34 @@ SVCS_RAMSES_CLIMATE = {
 # services for water_heater platform
 
 SVC_SET_DHW_MODE: Final = "set_dhw_mode"
-SCH_SET_DHW_MODE = vol.Schema(
-    vol.Any(
-        cv.make_entity_service_schema(
-            {
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.SCHEDULE]),
-                # only mode with no active
-            }
+SCH_SET_DHW_MODE = cv.make_entity_service_schema(
+    # nested schemas not allowed after HA 2025.9
+    {
+        vol.Required(ATTR_MODE): vol.In(
+            [
+                ZoneMode.SCHEDULE,
+                ZoneMode.PERMANENT,
+                ZoneMode.ADVANCED,
+                ZoneMode.TEMPORARY
+
+            ]
         ),
-        cv.make_entity_service_schema(
-            {
-                vol.Required(ATTR_MODE): vol.In(
-                    [ZoneMode.PERMANENT, ZoneMode.ADVANCED]
-                ),
-                vol.Required(ATTR_ACTIVE): cv.boolean,
-            }
+        vol.Optional(ATTR_ACTIVE): cv.boolean,
+        vol.Optional(ATTR_ACTIVE): True,  # TODO: vol.Any(truthy)
+        vol.Optional(ATTR_DURATION, default=timedelta(hours=1)): vol.All(
+            cv.time_period,
+            vol.Range(min=timedelta(minutes=5), max=timedelta(days=1)),
         ),
-        cv.make_entity_service_schema(  # a.k.a DHW boost
-            {
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_ACTIVE): True,  # TODO: vol.Any(truthy)
-                vol.Required(ATTR_DURATION, default=timedelta(hours=1)): vol.All(
-                    cv.time_period,
-                    vol.Range(min=timedelta(minutes=5), max=timedelta(days=1)),
-                ),
-            }
+        vol.Optional(ATTR_ACTIVE): cv.boolean,
+        vol.Optional(ATTR_DURATION): vol.All(
+            cv.time_period,
+            vol.Range(min=timedelta(minutes=5), max=timedelta(days=1)),
         ),
-        cv.make_entity_service_schema(
-            {
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_ACTIVE): cv.boolean,
-                vol.Required(ATTR_DURATION): vol.All(
-                    cv.time_period,
-                    vol.Range(min=timedelta(minutes=5), max=timedelta(days=1)),
-                ),
-            }
-        ),
-        cv.make_entity_service_schema(
-            {
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_ACTIVE): cv.boolean,
-                vol.Required(ATTR_UNTIL): cv.datetime,
-            }
-        ),
-    )
+        vol.Optional(ATTR_ACTIVE): cv.boolean,
+        vol.Optional(ATTR_UNTIL): cv.datetime,
+    }
 )
+# issue 233
 
 DEFAULT_DHW_SETPOINT: Final[float] = 50  # degrees celsius, float
 MIN_DHW_SETPOINT: Final[float] = 30
