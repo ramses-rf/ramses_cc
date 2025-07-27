@@ -323,7 +323,7 @@ SVC_SET_SYSTEM_MODE: Final = "set_system_mode"
 SCH_SET_SYSTEM_MODE = cv.make_entity_service_schema(
     # nested schemas not allowed after HA 2025.9
     {
-        vol.Required(ATTR_MODE): vol.In([SystemMode]),
+        vol.Required(ATTR_MODE): vol.In(SystemMode),
         vol.Optional(ATTR_DURATION): vol.Any(SCH_DURATION, None),
         # canBeTemporary: true, timingMode: Duration
         vol.Optional(ATTR_PERIOD): vol.Any(SCH_PERIOD, None),
