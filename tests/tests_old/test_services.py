@@ -71,6 +71,8 @@ from custom_components.ramses_cc.schemas import (
 from custom_components.ramses_cc.sensor import SVCS_RAMSES_SENSOR
 from custom_components.ramses_cc.water_heater import SVCS_RAMSES_WATER_HEATER
 from ramses_rf.gateway import Gateway
+from ramses_tx.const import Priority
+from ramses_tx.exceptions import CommandInvalid
 
 from ..virtual_rf import VirtualRf
 from .helpers import TEST_DIR, cast_packets_to_rf
@@ -91,7 +93,7 @@ _UNTIL = (dt.now().replace(minute=0, second=0, microsecond=0) + td(hours=2)).str
 )
 
 
-TEST_CONFIG = {
+TEST_CONFIG: Final = {
     "serial_port": {"port_name": None},
     "ramses_rf": {"disable_discovery": True},
     "advanced_features": {"send_packet": True},
@@ -187,7 +189,9 @@ SERVICES = {
         SCH_NO_ENTITY_SVC_PARAMS,
     ),
     SVC_SET_DHW_MODE: (
-        "custom_components.ramses_cc.water_heater.RamsesWaterHeater.async_set_dhw_mode",
+        # Use ramses_rf built-in validation, by mocking
+        "ramses_rf.gateway.Gateway.send_cmd",
+        # to catch nested entry schema, uses dedicated asserts then other services
         SCH_SET_DHW_MODE,
     ),
     SVC_SET_DHW_PARAMS: (
@@ -199,11 +203,9 @@ SERVICES = {
         SCH_SET_DHW_SCHEDULE,
     ),
     SVC_SET_SYSTEM_MODE: (
-        # WIP EBR ramses_tx.Command class: create packets to be transmitted from ...
-        # use ramses_rf validation, as advised. Requires setting up ramses_rf.Gateway
-        "self._broker.client.async_send_cmd",  # used in remote.async_send_command() and in broker.async_send_packet()
-        # instead of
-        # "custom_components.ramses_cc.climate.RamsesController.async_set_system_mode",
+        # Use ramses_rf built-in validation, by mocking
+        "ramses_rf.gateway.Gateway.send_cmd",
+        # to catch nested entry schema, uses dedicated asserts then other services
         SCH_SET_SYSTEM_MODE,
     ),
     SVC_SET_ZONE_CONFIG: (
@@ -211,7 +213,9 @@ SERVICES = {
         SCH_SET_ZONE_CONFIG,
     ),
     SVC_SET_ZONE_MODE: (
-        "custom_components.ramses_cc.climate.RamsesZone.async_set_zone_mode",
+        # Use ramses_rf built-in validation, by mocking
+        "ramses_rf.gateway.Gateway.send_cmd",
+        # to catch nested entry schema, uses dedicated asserts then other services
         SCH_SET_ZONE_MODE,
     ),
     SVC_SET_ZONE_SCHEDULE: (
@@ -293,6 +297,7 @@ async def _test_entity_service_call(
     hass: HomeAssistant,
     service: str,
     data: dict[str, Any],
+    asserts: dict[str, Any] | None = None,
     *,
     schemas: dict[str, vol.Schema] | None = None,
 ) -> None:
@@ -309,9 +314,12 @@ async def _test_entity_service_call(
 
         mock_method.assert_called_once()
 
-        assert mock_method.call_args.kwargs == {
-            k: v for k, v in SERVICES[service][1](data).items() if k != "entity_id"
-        }
+        if asserts is None:
+            assert mock_method.call_args.kwargs == {
+                k: v for k, v in SERVICES[service][1](data).items() if k != "entity_id"
+            }
+        else:
+            assert mock_method.call_args.kwargs == asserts
 
 
 async def _test_service_call(
@@ -534,36 +542,79 @@ async def test_set_dhw_boost(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 # See: https://github.com/zxdavb/ramses_cc/issues/163
 TESTS_SET_DHW_MODE_GOOD = {
-    "11": {"mode": "follow_schedule"},
-    "21": {"mode": "permanent_override", "active": True},
-    "31": {"mode": "advanced_override", "active": True},
-    "41": {"mode": "temporary_override", "active": True},  # default duration 1 hour
+    # "11": {"mode": "follow_schedule"},  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
+    # "21": {"mode": "permanent_override", "active": True},  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
+    # "31": {"mode": "advanced_override", "active": True},  # CommandInvalid: Invalid args: For mode=01, until and duration must both be None
+    "41": {"mode": "temporary_override", "active": True},
     "52": {"mode": "temporary_override", "active": True, "duration": {"hours": 5}},
     "62": {"mode": "temporary_override", "active": True, "until": _UNTIL},
-}
-TESTS_SET_DHW_MODE_FAIL: dict[str, dict[str, Any]] = {
-    "00": {},  # #                                                     missing mode
-    "12": {"mode": "follow_schedule", "active": True},  # #            *extra* active
-    "20": {"mode": "permanent_override"},  # #                         missing active
-    "22": {"mode": "permanent_override", "active": True, "duration": {"hours": 5}},
-    "23": {"mode": "permanent_override", "active": True, "until": _UNTIL},
-    "29": {"active": True},  # #                                       missing mode
-    "30": {"mode": "advanced_override"},  # #                          missing active
-    "32": {"mode": "advanced_override", "active": True, "duration": {"hours": 5}},
-    "33": {"mode": "advanced_override", "active": True, "until": _UNTIL},
-    "40": {"mode": "temporary_override"},  # #                         missing active
+    # TODO next 2 should fail in Gateway.send_cmd()
     "42": {"mode": "temporary_override", "active": False},  # #        missing duration
-    "50": {"mode": "temporary_override", "duration": {"hours": 5}},  # missing active
-    "59": {"active": True, "duration": {"hours": 5}},  # #             missing mode
-    "60": {"mode": "temporary_override", "until": _UNTIL},  # #        missing active
-    "69": {"active": True, "until": _UNTIL},  # #                      missing mode
     "79": {
         "mode": "temporary_override",
         "active": True,
         "duration": {"hours": 5},
         "until": _UNTIL,
     },
+}  # requires custom asserts, returned from mock method success
+TESTS_SET_DHW_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
+    "41": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "52": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "62": {"priority": Priority.HIGH, "wait_for_reply": True},
+    # TODO next 2 should fail in Gateway.send_cmd()
+    "42": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "79": {"priority": Priority.HIGH, "wait_for_reply": True},
 }
+TESTS_SET_DHW_MODE_FAIL: dict[str, dict[str, Any]] = {
+    "00": {},  # #                                                     missing mode
+    "29": {"active": True},  # #                                       missing mode
+    "59": {"active": True, "duration": {"hours": 5}},  # #             missing mode
+    "69": {"active": True, "until": _UNTIL},  # #                      missing mode
+}
+TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
+    "11": {
+        "mode": "follow_schedule"
+    },  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
+    "21": {
+        "mode": "permanent_override",
+        "active": True,
+    },  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
+    "31": {
+        "mode": "advanced_override",
+        "active": True,
+    },  # CommandInvalid: Invalid args: For mode=01, until and duration must both be None
+    # above 3 should be GOOD
+    "12": {"mode": "follow_schedule", "active": True},  # #            *extra* active
+    "20": {"mode": "permanent_override"},  # #                         missing active
+    "22": {"mode": "permanent_override", "active": True, "duration": {"hours": 5}},
+    "23": {"mode": "permanent_override", "active": True, "until": _UNTIL},
+    "30": {"mode": "advanced_override"},  # #                          missing active
+    "32": {"mode": "advanced_override", "active": True, "duration": {"hours": 5}},
+    "33": {"mode": "advanced_override", "active": True, "until": _UNTIL},
+    "40": {"mode": "temporary_override"},  # #                         missing active
+    # "42": {"mode": "temporary_override", "active": False},  # #        missing duration
+    "50": {"mode": "temporary_override", "duration": {"hours": 5}},  # missing active
+    "60": {"mode": "temporary_override", "until": _UNTIL},  # #        missing active
+    # "79": {
+    #     "mode": "temporary_override",
+    #     "active": True,
+    #     "duration": {"hours": 5},
+    #     "until": _UNTIL,
+    # },
+}
+# TESTS_SET_DHW_MODE_FAIL2_EXCEPTIONS:
+#     "12": {},  # #  extra active: CommandInvalid: Invalid args: For mode=00, until and duration must both be None
+#     "20": {},  # #  missing active
+#     "22": {},
+#     "23": {},
+#     "30": {},  # #  missing active
+#     "32": {},
+#     "33": {},
+#     "40": {},  # #  missing active
+#     "42": {},  # #  missing duration
+#     "50": {},  # #  missing active
+#     "60": {},  # #  missing active
+#     "79": {},  # # assert {'priority': <Priority.HIGH: -2>, 'wait_for_reply': True}
 
 
 # TODO: extended test of underlying method (duration/until)
@@ -578,8 +629,12 @@ async def test_set_dhw_mode_good(
         **TESTS_SET_DHW_MODE_GOOD[idx],  # type: ignore[dict-item]
     }
 
+    asserts = {
+        **TESTS_SET_DHW_MODE_GOOD_ASSERTS[idx],
+    }
+
     await _test_entity_service_call(
-        hass, SVC_SET_DHW_MODE, data, schemas=SVCS_RAMSES_WATER_HEATER
+        hass, SVC_SET_DHW_MODE, data, asserts, schemas=SVCS_RAMSES_WATER_HEATER
     )
 
     # # without the mock, can confirm the params are acceptable to the library
@@ -607,6 +662,27 @@ async def test_set_dhw_mode_fail(
         pass
     else:
         raise AssertionError("Expected vol.MultipleInvalid")
+
+
+@pytest.mark.parametrize("idx", TESTS_SET_DHW_MODE_FAIL2)
+async def test_set_dhw_mode_fail2(
+    hass: HomeAssistant, entry: ConfigEntry, idx: str
+) -> None:
+    """Confirm that invalid params are unacceptable to the entity service schema."""
+
+    data = {
+        "entity_id": "water_heater.01_145038_hw",
+        **TESTS_SET_DHW_MODE_FAIL2[idx],
+    }
+
+    try:
+        await _test_entity_service_call(
+            hass, SVC_SET_DHW_MODE, data, schemas=SVCS_RAMSES_WATER_HEATER
+        )
+    except CommandInvalid:
+        pass
+    else:
+        raise AssertionError("Expected wrong argument exception")
 
 
 TESTS_SET_DHW_PARAMS = {
@@ -643,27 +719,107 @@ async def test_set_dhw_schedule(hass: HomeAssistant, entry: ConfigEntry) -> None
     )
 
 
-TESTS_SET_SYSTEM_MODE: dict[str, dict[str, Any]] = {
+# Set system mode tests,
+TESTS_SET_SYSTEM_MODE_GOOD: dict[str, dict[str, Any]] = {
     "00": {"mode": "auto"},
     "01": {"mode": "eco_boost"},
     "02": {"mode": "day_off", "period": {"days": 3}},
     "03": {"mode": "eco_boost", "duration": {"hours": 3, "minutes": 30}},
+    # TODO next entry should fail in Gateway.send_cmd()
+    "05": {
+        "mode": "day_off",
+        "period": {"days": 3},
+        "duration": {"hours": 3, "minutes": 30},
+    },
+}  # requires custom asserts, returned from mock method success
+TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
+    "00": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "01": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "02": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "03": {"priority": Priority.HIGH, "wait_for_reply": True},
+    # TODO next entry should fail in Gateway.send_cmd()
+    "05": {"priority": Priority.HIGH, "wait_for_reply": True},
 }
+TESTS_SET_SYSTEM_MODE_FAIL: dict[str, dict[str, Any]] = {
+    "04": {},
+}  # no asserts, caught in entity_schema
+TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
+    # TODO next entry should fail in Gateway.send_cmd()
+    # "05": {
+    #     "mode": "day_off",
+    #     "period": {"days": 3},
+    #     "duration": {"hours": 3, "minutes": 30},
+    # },
+}
+# TESTS_SET_SYSTEM_MODE_FAIL2_EXCEPTIONS:
+#     "05": {},  # requires custom asserts, returned from mock method failure
 
 
 # TODO: extended test of underlying method (duration/period)
-@pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE)
-async def test_set_system_mode(
+@pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE_GOOD)
+async def test_set_system_mode_good(
     hass: HomeAssistant, entry: ConfigEntry, idx: str
 ) -> None:
+    """Confirm that valid params are acceptable to the entity service schema
+    as well as to the (mocked) parsing checks in ramses_rf.gateway.Gateway.send_cmd
+    Cover nested if-then-else not supported as entity-schema since HA 2025.09"""
+
     data = {
         "entity_id": "climate.01_145038",
-        **TESTS_SET_SYSTEM_MODE[idx],
+        **TESTS_SET_SYSTEM_MODE_GOOD[idx],
+    }
+
+    asserts = {
+        **TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS[idx],
     }
 
     await _test_entity_service_call(
-        hass, SVC_SET_SYSTEM_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        hass, SVC_SET_SYSTEM_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
     )
+
+
+@pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE_FAIL)
+async def test_set_system_mode_fail(
+    hass: HomeAssistant, entry: ConfigEntry, idx: str
+) -> None:
+    """Confirm that invalid params are unacceptable to the entity service schema."""
+
+    data = {
+        "entity_id": "climate.01_145038_02",
+        **TESTS_SET_SYSTEM_MODE_FAIL[idx],
+    }
+
+    try:
+        await _test_entity_service_call(
+            hass, SVC_SET_SYSTEM_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        )
+    except vol.MultipleInvalid:
+        pass
+    else:
+        raise AssertionError("Expected vol.MultipleInvalid")
+
+
+@pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE_FAIL2)
+async def test_set_system_mode_fail2(
+    hass: HomeAssistant, entry: ConfigEntry, idx: str
+) -> None:
+    """Confirm that valid params are acceptable to the entity service schema
+    as well as to the (mocked) parsing checks in ramses_rf.gateway.Gateway.send_cmd
+    Cover nested if-then-else not supported as entity-schema since HA 2025.09"""
+
+    data = {
+        "entity_id": "climate.01_145038",
+        **TESTS_SET_SYSTEM_MODE_FAIL2[idx],
+    }
+
+    try:
+        await _test_entity_service_call(
+            hass, SVC_SET_SYSTEM_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        )
+    except CommandInvalid:
+        pass
+    else:
+        raise AssertionError("Expected wrong argument exception")
 
 
 TESTS_SET_ZONE_CONFIG = {
@@ -705,21 +861,32 @@ TESTS_SET_ZONE_MODE_GOOD: dict[str, dict[str, Any]] = {
     "52": {"mode": "temporary_override", "setpoint": 15.1, "duration": {"hours": 5}},
     "62": {"mode": "temporary_override", "setpoint": 16.1, "until": _UNTIL},
 }
+TESTS_SET_ZONE_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
+    "11": {"priority": Priority.HIGH},
+    "21": {"priority": Priority.HIGH},
+    "31": {"priority": Priority.HIGH},
+    "41": {"priority": Priority.HIGH},
+    "52": {"priority": Priority.HIGH},
+    "62": {"priority": Priority.HIGH},
+}
 TESTS_SET_ZONE_MODE_FAIL: dict[str, dict[str, Any]] = {
     "00": {},  # #                                                     missing mode
+    "29": {"setpoint": 12.9},  # #                                     missing mode
+    "59": {"setpoint": 15.9, "duration": {"hours": 5}},  # #           missing mode
+    "69": {"setpoint": 16.9, "until": _UNTIL},  # #                    missing mode
+    "70": {"other": True},  # #                                        extra
+}
+TESTS_SET_ZONE_MODE_FAIL2: dict[str, dict[str, Any]] = {
     "12": {"mode": "follow_schedule", "setpoint": 11.2},  # #          *extra* setpoint
     "20": {"mode": "permanent_override"},  # #                         missing setpoint
     "22": {"mode": "permanent_override", "setpoint": 12.2, "duration": {"hours": 5}},
     "23": {"mode": "permanent_override", "setpoint": 12.3, "until": _UNTIL},
-    "29": {"setpoint": 12.9},  # #                                     missing mode
     "30": {"mode": "advanced_override"},  # #                          missing setpoint
     "32": {"mode": "advanced_override", "setpoint": 13.2, "duration": {"hours": 5}},
     "33": {"mode": "advanced_override", "setpoint": 13.3, "until": _UNTIL},
-    "40": {"mode": "temporary_override"},  # #                         missing setpoint
+    "40": {"mode": "temporary_override"},  # # missing setpoint + duration
     "50": {"mode": "temporary_override", "duration": {"hours": 5}},  # missing setpoint
-    "59": {"setpoint": 15.9, "duration": {"hours": 5}},  # #           missing mode
     "60": {"mode": "temporary_override", "until": _UNTIL},  # #        missing setpoint
-    "69": {"setpoint": 16.9, "until": _UNTIL},  # #                    missing mode
     "79": {
         "mode": "temporary_override",
         "setpoint": 16.9,
@@ -727,6 +894,18 @@ TESTS_SET_ZONE_MODE_FAIL: dict[str, dict[str, Any]] = {
         "until": _UNTIL,
     },
 }
+# TESTS_SET_ZONE_MODE_FAIL2_EXCEPTIONS:
+#     "12": {},  # #  *extra* active
+#     "20": {},  # #  missing active
+#     "22": {},
+#     "23": {},
+#     "30": {},  # #  missing active
+#     "32": {},
+#     "33": {},
+#     "40": {},  # #  missing setpoint + duration
+#     "50": {},  # #  missing active
+#     "60": {},  # #  missing active
+#     "79": {},
 
 
 @pytest.mark.parametrize("idx", TESTS_SET_ZONE_MODE_GOOD)
@@ -740,8 +919,12 @@ async def test_set_zone_mode_good(
         **TESTS_SET_ZONE_MODE_GOOD[idx],
     }
 
+    asserts = {
+        **TESTS_SET_ZONE_MODE_GOOD_ASSERTS[idx],
+    }
+
     await _test_entity_service_call(
-        hass, SVC_SET_ZONE_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        hass, SVC_SET_ZONE_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
     )
 
     # # without the mock, can confirm the params are acceptable to the library
@@ -769,6 +952,27 @@ async def test_set_zone_mode_fail(
         pass
     else:
         raise AssertionError("Expected vol.MultipleInvalid")
+
+
+@pytest.mark.parametrize("idx", TESTS_SET_ZONE_MODE_FAIL2)
+async def test_set_zone_mode_fail2(
+    hass: HomeAssistant, entry: ConfigEntry, idx: str
+) -> None:
+    """Confirm that valid params are acceptable to the entity service schema."""
+
+    data = {
+        "entity_id": "climate.01_145038_02",
+        **TESTS_SET_ZONE_MODE_FAIL2[idx],
+    }
+
+    try:
+        await _test_entity_service_call(
+            hass, SVC_SET_ZONE_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        )
+    except CommandInvalid:
+        pass
+    else:
+        raise AssertionError("Expected wrong argument exception")
 
 
 async def test_set_zone_schedule(hass: HomeAssistant, entry: ConfigEntry) -> None:
