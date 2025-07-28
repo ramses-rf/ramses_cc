@@ -223,7 +223,7 @@ SERVICES = {
         # Directly call: "ramses_rf.system.heat.SysMode.set_mode" ->
         # "ramses_tx.command.Command.set_system_mode",
         # "ramses_rf.gateway.Gateway.send_cmd",  # async_send_command produces different reply
-        "ramses_tx.command.from_attrs",
+        "ramses_tx.command.Command.from_attrs",
         # instead of
         # "custom_components.ramses_cc.climate.RamsesController.async_set_system_mode",
         SCH_SET_SYSTEM_MODE,
