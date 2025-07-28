@@ -221,7 +221,7 @@ SERVICES = {
         # ) -> asyncio.Task[Packet]:
         # Requires imports + setting up ramses_rf.Gateway and Heat Device first?
         # Directly call: "ramses_rf.system.heat.SysMode.set_mode" ->
-        "ramses_tx.commands.Commands.set_system_mode",
+        "ramses_tx.command.Command.set_system_mode",
         # "ramses_rf.gateway.Gateway.async_send_cmd", produces different reply
         # instead of
         # "custom_components.ramses_cc.climate.RamsesController.async_set_system_mode",
