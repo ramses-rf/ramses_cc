@@ -70,12 +70,12 @@ from custom_components.ramses_cc.schemas import (
 )
 from custom_components.ramses_cc.sensor import SVCS_RAMSES_SENSOR
 from custom_components.ramses_cc.water_heater import SVCS_RAMSES_WATER_HEATER
+
 # from ramses_rf import Device
 # from ramses_rf.gateway import Gateway
 # from ramses_rf.system.heat import SysMode
 # from ramses_tx.commands import Commands
 # from ramses_rf.system.zones import DhwZone, Zone  # TODO once SysMode works
-
 from ..virtual_rf import VirtualRf
 from .helpers import TEST_DIR, cast_packets_to_rf
 
@@ -197,7 +197,9 @@ SERVICES = {
         # def set_mode(
         # Requires imports + setting up ramses_rf.Gateway and DHW Device first
         # TODO adapt from SVC_SET_SYSTEM_MODE below once that works
-        "custom_components.ramses_cc.water_heater.RamsesWaterHeater.async_set_dhw_mode",
+        "ramses_rf.gateway.Gateway.send_cmd",
+        # was:
+        # "custom_components.ramses_cc.water_heater.RamsesWaterHeater.async_set_dhw_mode",
         SCH_SET_DHW_MODE,
     ),
     SVC_SET_DHW_PARAMS: (
@@ -222,8 +224,8 @@ SERVICES = {
         # Requires imports + setting up ramses_rf.Gateway and Heat Device first?
         # Directly call: "ramses_rf.system.heat.SysMode.set_mode" ->
         # "ramses_tx.command.Command.set_system_mode",
-        # "ramses_rf.gateway.Gateway.send_cmd",  # async_send_command produces different reply
-        "ramses_tx.command.Command.from_attrs",
+        "ramses_rf.gateway.Gateway.send_cmd",  # async_send_command produces different reply
+        # "ramses_tx.command.Command.from_attrs",
         # instead of
         # "custom_components.ramses_cc.climate.RamsesController.async_set_system_mode",
         SCH_SET_SYSTEM_MODE,
@@ -239,7 +241,9 @@ SERVICES = {
         # def set_mode(
         # Requires imports + setting up ramses_rf.Gateway and Zone Device first
         # TODO adapt from SVC_SET_SYSTEM_MODE above once that works
-        "custom_components.ramses_cc.climate.RamsesZone.async_set_zone_mode",
+        "ramses_rf.gateway.Gateway.send_cmd",
+        # was:
+        # "custom_components.ramses_cc.climate.RamsesZone.async_set_zone_mode",
         SCH_SET_ZONE_MODE,
     ),
     SVC_SET_ZONE_SCHEDULE: (
@@ -684,7 +688,6 @@ TESTS_SET_SYSTEM_MODE: dict[str, dict[str, Any]] = {
 async def test_set_system_mode(
     hass: HomeAssistant, entry: ConfigEntry, idx: str
 ) -> None:
-
     gwy: Gateway = list(hass.data[DOMAIN].values())[0].client
 
     data = {

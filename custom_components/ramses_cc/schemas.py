@@ -433,8 +433,7 @@ SCH_SET_DHW_MODE = cv.make_entity_service_schema(
                 ZoneMode.SCHEDULE,
                 ZoneMode.PERMANENT,
                 ZoneMode.ADVANCED,
-                ZoneMode.TEMPORARY
-
+                ZoneMode.TEMPORARY,
             ]
         ),
         vol.Optional(ATTR_ACTIVE): cv.boolean,
