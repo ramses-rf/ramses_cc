@@ -671,7 +671,7 @@ async def test_set_dhw_schedule(hass: HomeAssistant, entry: ConfigEntry) -> None
 
 
 TESTS_SET_SYSTEM_MODE: dict[str, dict[str, Any]] = {
-    "00": {"mode": "auto"},
+    "00": {},  # "mode": "auto"},
     "01": {"mode": "eco_boost"},
     "02": {"mode": "day_off", "period": {"days": 3}},
     "03": {"mode": "eco_boost", "duration": {"hours": 3, "minutes": 30}},
