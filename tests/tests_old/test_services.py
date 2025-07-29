@@ -224,7 +224,7 @@ SERVICES = {
         # Requires imports + setting up ramses_rf.Gateway and Heat Device first?
         # Directly call: "ramses_rf.system.heat.SysMode.set_mode" ->
         # "ramses_tx.command.Command.set_system_mode",
-        "custom_components.ramses_cc.climate.RamsesController.send_cmd"
+        "custom_components.ramses_cc.climate.RamsesController.send_cmd",
         # the following has no params filled in !
         # "ramses_rf.gateway.Gateway.send_cmd",  # async_send_command produces different reply
         # "ramses_tx.command.Command.from_attrs",
