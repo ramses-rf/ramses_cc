@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
     MockConfigEntry,
 )
+from ramses_tx.exceptions import CommandInvalid
 
 from custom_components.ramses_cc import (
     DOMAIN,
@@ -544,16 +545,20 @@ async def test_set_dhw_boost(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 # See: https://github.com/zxdavb/ramses_cc/issues/163
 TESTS_SET_DHW_MODE_GOOD = {
-    "11": {"mode": "follow_schedule"},
-    "21": {"mode": "permanent_override", "active": True},
-    "31": {"mode": "advanced_override", "active": True},
-    "41": {"mode": "temporary_override", "active": True},  # default duration 1 hour
-    "52": {"mode": "temporary_override", "active": True, "duration": {"hours": 5}},
-    "62": {"mode": "temporary_override", "active": True, "until": _UNTIL},
+    "11": {"mode": "follow_schedule"},  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
+    "21": {"mode": "permanent_override", "active": True},  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
+    "31": {"mode": "advanced_override", "active": True},  # CommandInvalid: Invalid args: For mode=01, until and duration must both be None
+    "41": {"mode": "temporary_override", "active": True},  # add assert {'active': True, 'duration': datetime.timedelta(seconds=3600), 'mode': 'temporary_override'}
+    "52": {"mode": "temporary_override", "active": True, "duration": {"hours": 5}},  # assert {'priority': <Priority.HIGH: -2>, 'wait_for_reply': True}
+    "62": {"mode": "temporary_override", "active": True, "until": _UNTIL},  # {'priority': <Priority.HIGH: -2>, 'wait_for_reply': True}
+}  # requires custom asserts, returned from mock method success
+TESTS_SET_DHW_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
+    "41": {'active': True, 'duration': td(seconds=3600), 'mode': 'temporary_override'},
+    "52": {"priority": {Priority.HIGH: -2}, "wait_for_reply": True},
+    "62": {"priority": {Priority.HIGH: -2}, "wait_for_reply": True},
 }
 TESTS_SET_DHW_MODE_FAIL: dict[str, dict[str, Any]] = {
     "00": {},  # #                                                     missing mode
-    "12": {"mode": "follow_schedule", "active": True},  # #            *extra* active
     "29": {"active": True},  # #                                       missing mode
     "59": {"active": True, "duration": {"hours": 5}},  # #             missing mode
     "69": {"active": True, "until": _UNTIL},  # #                      missing mode
@@ -577,20 +582,19 @@ TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
         "until": _UNTIL,
     },
 }
-TESTS_SET_DHW_MODE_FAIL2_ASSERTS: dict[str, dict[str, Any]] = {
-    "12": {},  # #  *extra* active
-    "20": {},  # #  missing active
-    "22": {},
-    "23": {},
-    "30": {},  # #  missing active
-    "32": {},
-    "33": {},
-    "40": {},  # #  missing active
-    "42": {},  # #  missing duration
-    "50": {},  # #  missing active
-    "60": {},  # #  missing active
-    "79": {},
-}
+# TESTS_SET_DHW_MODE_FAIL2_EXCEPTIONS:
+#     "12": {},  # #  extra active: CommandInvalid: Invalid args: For mode=00, until and duration must both be None
+#     "20": {},  # #  missing active
+#     "22": {},
+#     "23": {},
+#     "30": {},  # #  missing active
+#     "32": {},
+#     "33": {},
+#     "40": {},  # #  missing active
+#     "42": {},  # #  missing duration
+#     "50": {},  # #  missing active
+#     "60": {},  # #  missing active
+#     "79": {},
 
 
 # TODO: extended test of underlying method (duration/until)
@@ -636,7 +640,7 @@ async def test_set_dhw_mode_fail(
         raise AssertionError("Expected vol.MultipleInvalid")
 
 
-@pytest.mark.parametrize("idx", TESTS_SET_DHW_MODE_FAIL)
+@pytest.mark.parametrize("idx", TESTS_SET_DHW_MODE_FAIL2)
 async def test_set_dhw_mode_fail2(
     hass: HomeAssistant, entry: ConfigEntry, idx: str
 ) -> None:
@@ -647,13 +651,14 @@ async def test_set_dhw_mode_fail2(
         **TESTS_SET_DHW_MODE_FAIL2[idx],
     }
 
-    asserts = {
-        **TESTS_SET_DHW_MODE_FAIL2_ASSERTS[idx],
-    }
-
-    await _test_entity_service_call(
-        hass, SVC_SET_DHW_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
-    )
+    try:
+        await _test_entity_service_call(
+            hass, SVC_SET_DHW_MODE, data, schemas=SVCS_RAMSES_WATER_HEATER
+        )
+    except CommandInvalid:
+        pass
+    else:
+        raise AssertionError("Expected wrong argument exception")
 
 
 TESTS_SET_DHW_PARAMS = {
@@ -713,9 +718,8 @@ TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
         "duration": {"hours": 3, "minutes": 30},
     },
 }
-TESTS_SET_SYSTEM_MODE_FAIL2_ASSERTS: dict[str, dict[str, Any]] = {
-    "05": {},
-}  # requires custom asserts, returned from mock method failure
+# TESTS_SET_SYSTEM_MODE_FAIL2_EXCEPTIONS:
+#     "05": {},  # requires custom asserts, returned from mock method failure
 
 
 # TODO: extended test of underlying method (duration/period)
@@ -775,13 +779,14 @@ async def test_set_system_mode_fail2(
         **TESTS_SET_SYSTEM_MODE_FAIL2[idx],
     }
 
-    asserts = {
-        **TESTS_SET_SYSTEM_MODE_FAIL2_ASSERTS[idx],
-    }
-
-    await _test_entity_service_call(
-        hass, SVC_SET_SYSTEM_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
-    )
+    try:
+        await _test_entity_service_call(
+            hass, SVC_SET_SYSTEM_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        )
+    except CommandInvalid:
+        pass
+    else:
+        raise AssertionError("Expected wrong argument exception")
 
 
 TESTS_SET_ZONE_CONFIG = {
@@ -840,7 +845,7 @@ TESTS_SET_ZONE_MODE_FAIL2: dict[str, dict[str, Any]] = {
     "33": {"mode": "advanced_override", "setpoint": 13.3, "until": _UNTIL},
     "40": {
         "mode": "temporary_override"
-    },  # #                         missing setpoint + duration
+    },  # # missing setpoint + duration
     "50": {"mode": "temporary_override", "duration": {"hours": 5}},  # missing setpoint
     "60": {"mode": "temporary_override", "until": _UNTIL},  # #        missing setpoint
     "79": {
@@ -850,19 +855,18 @@ TESTS_SET_ZONE_MODE_FAIL2: dict[str, dict[str, Any]] = {
         "until": _UNTIL,
     },
 }
-TESTS_SET_ZONE_MODE_FAIL2_ASSERTS: dict[str, dict[str, Any]] = {
-    "12": {},  # #  *extra* active
-    "20": {},  # #  missing active
-    "22": {},
-    "23": {},
-    "30": {},  # #  missing active
-    "32": {},
-    "33": {},
-    "40": {},  # #  missing setpoint + duration
-    "50": {},  # #  missing active
-    "60": {},  # #  missing active
-    "79": {},
-}
+# TESTS_SET_ZONE_MODE_FAIL2_EXCEPTIONS:
+#     "12": {},  # #  *extra* active
+#     "20": {},  # #  missing active
+#     "22": {},
+#     "23": {},
+#     "30": {},  # #  missing active
+#     "32": {},
+#     "33": {},
+#     "40": {},  # #  missing setpoint + duration
+#     "50": {},  # #  missing active
+#     "60": {},  # #  missing active
+#     "79": {},
 
 
 @pytest.mark.parametrize("idx", TESTS_SET_ZONE_MODE_GOOD)
@@ -907,8 +911,8 @@ async def test_set_zone_mode_fail(
         raise AssertionError("Expected vol.MultipleInvalid")
 
 
-@pytest.mark.parametrize("idx", TESTS_SET_ZONE_MODE_GOOD)
-async def test_set_zone_mode_good(
+@pytest.mark.parametrize("idx", TESTS_SET_ZONE_MODE_FAIL2)
+async def test_set_zone_mode_fail2(
     hass: HomeAssistant, entry: ConfigEntry, idx: str
 ) -> None:
     """Confirm that valid params are acceptable to the entity service schema."""
@@ -919,12 +923,17 @@ async def test_set_zone_mode_good(
     }
 
     asserts = {
-        **TESTS_SET_SYSTEM_MODE_FAIL2_ASSERTS[idx],
+        **TESTS_SET_ZONE_MODE_FAIL2_ASSERTS[idx],
     }
 
-    await _test_entity_service_call(
-        hass, SVC_SET_ZONE_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
-    )
+    try:
+        await _test_entity_service_call(
+            hass, SVC_SET_ZONE_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        )
+    except CommandInvalid:
+        pass
+    else:
+        raise AssertionError("Expected wrong argument exception")
 
 
 async def test_set_zone_schedule(hass: HomeAssistant, entry: ConfigEntry) -> None:
