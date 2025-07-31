@@ -320,9 +320,7 @@ async def _test_entity_service_call(
                 k: v for k, v in SERVICES[service][1](data).items() if k != "entity_id"
             }
         else:
-            assert mock_method.call_args.kwargs == {
-                k: v for k, v in SERVICES[service][1](asserts).items()
-            }
+            assert mock_method.call_args.kwargs == asserts
 
 
 async def _test_service_call(
