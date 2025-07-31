@@ -552,6 +552,7 @@ TESTS_SET_DHW_MODE_GOOD = {
     "52": {"mode": "temporary_override", "active": True, "duration": {"hours": 5}},
     "62": {"mode": "temporary_override", "active": True, "until": _UNTIL},
     "42": {"mode": "temporary_override", "active": False},  # #        missing duration
+    # next entry should fail?
     "79": {
         "mode": "temporary_override",
         "active": True,
@@ -561,11 +562,11 @@ TESTS_SET_DHW_MODE_GOOD = {
 }  # requires custom asserts, returned from mock method success
 TESTS_SET_DHW_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
     "41": {'active': True, 'duration': td(seconds=3600), 'mode': 'temporary_override'},
-    "52": {"priority": Priority.DEFAULT, "wait_for_reply": True},
-    "62": {"priority": Priority.DEFAULT, "wait_for_reply": True},
+    "52": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "62": {"priority": Priority.HIGH, "wait_for_reply": True},
     # next should fail?
-    "42": {"priority": Priority.DEFAULT, "wait_for_reply": True},
-    "79": {"priority": Priority.DEFAULT, "wait_for_reply": True},
+    "42": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "79": {"priority": Priority.HIGH, "wait_for_reply": True},
 }
 TESTS_SET_DHW_MODE_FAIL: dict[str, dict[str, Any]] = {
     "00": {},  # #                                                     missing mode
@@ -623,8 +624,12 @@ async def test_set_dhw_mode_good(
         **TESTS_SET_DHW_MODE_GOOD[idx],  # type: ignore[dict-item]
     }
 
+    asserts = {
+        **TESTS_SET_DHW_MODE_GOOD_ASSERTS[idx],
+    }
+
     await _test_entity_service_call(
-        hass, SVC_SET_DHW_MODE, data, schemas=SVCS_RAMSES_WATER_HEATER
+        hass, SVC_SET_DHW_MODE, data, asserts, schemas=SVCS_RAMSES_WATER_HEATER
     )
 
     # # without the mock, can confirm the params are acceptable to the library
@@ -715,22 +720,30 @@ TESTS_SET_SYSTEM_MODE_GOOD: dict[str, dict[str, Any]] = {
     "01": {"mode": "eco_boost"},
     "02": {"mode": "day_off", "period": {"days": 3}},
     "03": {"mode": "eco_boost", "duration": {"hours": 3, "minutes": 30}},
-}  # requires custom asserts, returned from mock method success
-TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
-    "00": {"priority": Priority.DEFAULT, "wait_for_reply": True},
-    "01": {"priority": Priority.DEFAULT, "wait_for_reply": True},
-    "02": {"priority": Priority.DEFAULT, "wait_for_reply": True},
-    "03": {"priority": Priority.DEFAULT, "wait_for_reply": True},
-}
-TESTS_SET_SYSTEM_MODE_FAIL: dict[str, dict[str, Any]] = {
-    "04": {},
-}  # no asserts, caught in entity_schema
-TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
+    # the next should fail
     "05": {
         "mode": "day_off",
         "period": {"days": 3},
         "duration": {"hours": 3, "minutes": 30},
     },
+}  # requires custom asserts, returned from mock method success
+TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
+    "00": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "01": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "02": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "03": {"priority": Priority.HIGH, "wait_for_reply": True},
+    # next entry should fail
+    "05": {"priority": Priority.HIGH, "wait_for_reply": True},
+}
+TESTS_SET_SYSTEM_MODE_FAIL: dict[str, dict[str, Any]] = {
+    "04": {},
+}  # no asserts, caught in entity_schema
+TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
+    # "05": {
+    #     "mode": "day_off",
+    #     "period": {"days": 3},
+    #     "duration": {"hours": 3, "minutes": 30},
+    # },
 }
 # TESTS_SET_SYSTEM_MODE_FAIL2_EXCEPTIONS:
 #     "05": {},  # requires custom asserts, returned from mock method failure
@@ -738,7 +751,7 @@ TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
 
 # TODO: extended test of underlying method (duration/period)
 @pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE_GOOD)
-async def test_set_system_mode(
+async def test_set_system_mode_good(
     hass: HomeAssistant, entry: ConfigEntry, idx: str
 ) -> None:
     """Confirm that valid params are acceptable to the entity service schema
@@ -842,6 +855,14 @@ TESTS_SET_ZONE_MODE_GOOD: dict[str, dict[str, Any]] = {
     "52": {"mode": "temporary_override", "setpoint": 15.1, "duration": {"hours": 5}},
     "62": {"mode": "temporary_override", "setpoint": 16.1, "until": _UNTIL},
 }
+TESTS_SET_ZONE_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
+    "11": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "21": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "31": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "41": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "52": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "62": {"priority": Priority.HIGH, "wait_for_reply": True},
+}
 TESTS_SET_ZONE_MODE_FAIL: dict[str, dict[str, Any]] = {
     "00": {},  # #                                                     missing mode
     "29": {"setpoint": 12.9},  # #                                     missing mode
@@ -894,8 +915,12 @@ async def test_set_zone_mode_good(
         **TESTS_SET_ZONE_MODE_GOOD[idx],
     }
 
+    asserts = {
+        **TESTS_SET_ZONE_MODE_GOOD_ASSERTS[idx],
+    }
+
     await _test_entity_service_call(
-        hass, SVC_SET_ZONE_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        hass, SVC_SET_ZONE_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
     )
 
     # # without the mock, can confirm the params are acceptable to the library
