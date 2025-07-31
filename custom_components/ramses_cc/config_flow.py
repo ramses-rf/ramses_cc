@@ -95,17 +95,20 @@ class BaseRamsesFlow(FlowHandler):
 
     options: dict[str, Any]
 
-    def __init__(
-        self, options: dict[str, Any] | None = None, initial_setup: bool = False
-    ) -> None:
+    def __init__(self, initial_setup: bool = False) -> None:
         """Initialize flow."""
-        if options is None:
+        super().__init__()
+        self._initial_setup = initial_setup
+        self._manual_serial_port = False
+
+    def get_options(self) -> None:
+        if self.config_entry is not None and self.config_entry.options is not None:
+            options = deepcopy(dict(self.config_entry.options))
+        else:  # config_entry is None:
             options = {}
         options.setdefault(CONF_RAMSES_RF, {})
         options.setdefault(SZ_SERIAL_PORT, {})
         self.options = options
-        self._initial_setup = initial_setup
-        self._manual_serial_port = False
 
     @abstractmethod
     def _async_save(self) -> FlowResult:
@@ -115,6 +118,7 @@ class BaseRamsesFlow(FlowHandler):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Ramses choose serial port step."""
+        self.get_options()  # not available during init
         if user_input is not None:
             port_name = user_input[SZ_PORT_NAME]
             if port_name == CONF_MANUAL_PATH:
@@ -164,6 +168,7 @@ class BaseRamsesFlow(FlowHandler):
         """Ramses configure serial port step."""
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
+        self.get_options()  # not available during init
 
         if user_input is not None:
             suggested_values = deepcopy(dict(user_input))
@@ -224,6 +229,7 @@ class BaseRamsesFlow(FlowHandler):
         managed_keys = (SZ_ENFORCE_KNOWN_LIST,)
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
+        self.get_options()  # not available during init
 
         if user_input is not None:
             suggested_values = user_input
@@ -295,6 +301,7 @@ class BaseRamsesFlow(FlowHandler):
         """System schema step."""
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
+        self.get_options()  # not available during init
 
         if user_input is not None:
             suggested_values = user_input
@@ -363,6 +370,7 @@ class BaseRamsesFlow(FlowHandler):
         """Advanced features step."""
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
+        self.get_options()  # not available during init
 
         if user_input is not None:
             suggested_values = user_input
@@ -411,6 +419,7 @@ class BaseRamsesFlow(FlowHandler):
             self.options[SZ_PACKET_LOG] = user_input
             return self._async_save()
 
+        self.get_options()  # not available during init
         suggested_values = self.options.get(SZ_PACKET_LOG, {})
 
         data_schema = {
@@ -490,21 +499,20 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         """Options callback for Ramses."""
-        return RamsesOptionsFlow(config_entry)
+        return RamsesOptionsFlowHandler()
 
 
-class RamsesOptionsFlow(BaseRamsesFlow, OptionsFlow):
-    """Options flow for Ramses."""
+class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
+    """Options config flow handler for Ramses."""
 
-    def __init__(self, entry: ConfigEntry) -> None:
-        """Initialize Ramses options flow."""
-        self.config_entry = entry
-        super().__init__(options=deepcopy(dict(entry.options)))
+    def __init__(self) -> None:
+        """Initialize Ramses config options flow."""
+        super().__init__()
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the options."""
+        """Manage the config options."""
         return self.async_show_menu(
             step_id="init",
             menu_options=[

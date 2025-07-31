@@ -234,7 +234,7 @@
                     "description": "De Bericht-code (klasse)."
                 },
                 "payload": {
-                    "name": "Inhoud (HEX)",
+                    "name": "Inhoud als HEX",
                     "description": "De inhoud (`payload`) als hexadecimale string."
                 }
             }
@@ -281,56 +281,34 @@
 
         "get_zone_schedule": {
             "name": "Haal weekschema van een Zone op",
-            "description": "Leest het laatste weekschema van een zone uit de Controller en werkt met die data de device-status bij. Het weekschema is op te vragen als: `{{ state_attr('climate.main_room', 'schedule') }}`. Noot: alleen evohome-compatibele zones hebben een weekschema en in Ramses RF hebben niet alle klimaat-entiteiten zulke zones (er volgt een `TypeError`).",
+            "description": "Leest het laatste weekschema van een zone uit de Controller en werkt met die data de device-status bij. Het weekschema is op te vragen als: '{{' state_attr('climate.main_room', 'schedule') '}}'. Noot: alleen evohome-compatibele zones hebben een weekschema en in Ramses RF hebben niet alle klimaat-entiteiten zulke zones (er volgt een `TypeError`).",
             "fields": {
                 "entity_id": {
                     "name": "Zone",
-                    "description": "Entity_id van de evohome Zone. NB: in Ramses RF zijn sommige klimaat-entiteiten geen zones (zij zullen een `AttributeError` geven)."
+                    "description": "De entity_id van de evohome Zone. NB: in Ramses RF zijn sommige klimaat-entiteiten geen zones (zij zullen een `AttributeError` geven)."
                 }
             }
         },
 
         "put_zone_temp": {
             "name": "Imiteer sensortemperatuur van een Zone",
-            "description": "Niet mee gebruikt. Gebruik `fake_zone_temp` of `put_room_temp`.",
-            "fields": {
-                "entity_id": {
-                    "name": "Zone",
-                    "description": "Entity_id van de evohome Zone. NB: in Ramses RF zijn sommige klimaat-entiteiten geen zones (zij zullen een `AttributeError` geven)."
-                }
-            }
+            "description": "Niet mee gebruikt. Gebruik `fake_zone_temp` of `put_room_temp`."
         },
 
         "reset_zone_config": {
             "name": "Reset Configuratie van een Zone",
-            "description": "Reset de configuratie van de zone.",
-            "fields": {
-                "entity_id": {
-                    "name": "Zone",
-                    "description": "Entity_id van de evohome Zone. NB: in Ramses RF zijn sommige klimaat-entiteiten geen zones (zij zullen een `AttributeError` geven)."
-                }
-            }
+            "description": "Reset de configuratie van de zone."
         },
 
         "reset_zone_mode": {
             "name": "Reset Modus van een Zone",
-            "description": "Reset de werkmodus van de zone.",
-            "fields": {
-                "entity_id": {
-                    "name": "Zone",
-                    "description": "Entity_id van de evohome Zone. NB: in Ramses RF zijn sommige klimaat-entiteiten geen zones (zij zullen een `AttributeError` geven)."
-                }
-            }
+            "description": "Reset de werkmodus van de zone."
         },
 
         "set_zone_config": {
             "name": "Stel Configuratie van een Zone in",
             "description": "Stel de configuratie van de zone in als:",
             "fields": {
-                "entity_id": {
-                    "name": "Zone",
-                    "description": "Entity_id van de evohome Zone. NB: in Ramses RF zijn sommige klimaat-entiteiten geen zones (zij zullen een `AttributeError` geven)."
-                },
                 "min_temp": {
                     "name": "Minimum",
                     "description": "Het laagst mogelijke instelpunt in graden Celsius (5-21 °C)."
@@ -346,10 +324,6 @@
             "name": "Stel Modus van een Zone in",
             "description": "Stel de werkmodus van de zone in, permanent of voor een bepaalde periode.",
             "fields": {
-                "entity_id": {
-                    "name": "Zone",
-                    "description": "Entity_id van de evohome Zone. NB: in Ramses RF zijn sommige klimaat-entiteiten geen zones (zij zullen een `AttributeError` geven)."
-                },
                 "mode": {
                     "name": "Zone-modus",
                     "description": "Hoe lang is de aanpassing geldig? Kies uit: `follow_schedule`, `advanced_override` (tot vlg. geplande instelling), `temporary_override` (vul hiervoor ook de duur of tot-moment in), of `permanent_override` (vanaf nu)."
@@ -373,10 +347,6 @@
             "name": "Stel weekschema van een Zone in",
             "description": "Upload het weekschema voor een zone in JSON formaat.",
             "fields": {
-                "entity_id": {
-                    "name": "Zone",
-                    "description": "Entity_id van de evohome Zone. NB: in Ramses RF zijn sommige klimaat-entiteiten geen zones (zij zullen een `AttributeError` geven)."
-                },
                 "schedule": {
                     "name": "Weekschema",
                     "description": "Nieuw weekschema voor een zone, in JSON format."
@@ -386,7 +356,7 @@
 
         "get_dhw_schedule": {
             "name": "Haal weekschema warmtapwater op",
-            "description": "Leest het laatste weekschema van een warmtapwaterapparaat op en werkt met die data de device-status bij. Het weekschema is op te vragen als:: `{{ state_attr('water_heater.stored_hw', 'schedule') }}`",
+            "description": "Haalt het laatste weekschema van een warmtapwaterapparaat op en werkt met die data de device-status bij. Het weekschema is op te vragen als: '{{' state_attr('water_heater.stored_hw', 'schedule') '}}'",
             "fields": {
                 "entity_id": {
                     "name": "Warmtapwater",
@@ -397,45 +367,23 @@
 
         "reset_dhw_mode": {
             "name": "Reset Modus Warmtapwater",
-            "description": "Reset de werkmodus van een warmtapwaterapparaat.",
-            "fields": {
-                "entity_id": {
-                    "name": "Warmtapwater",
-                    "description": "Entity_id van het Warmtapwaterapparaat."
-                }
-            }
+            "description": "Reset de werkmodus van een warmtapwaterapparaat."
         },
 
         "reset_dhw_params": {
             "name": "Reset de Configuratie Warmtapwater",
-            "description": "Reset the configuratie van een warmtapwaterapparaat.",
-            "fields": {
-                "entity_id": {
-                    "name": "Warmtapwater",
-                    "description": "Entity_id van het Warmtapwaterapparaat."
-                }
-            }
+            "description": "Reset the configuratie van een warmtapwaterapparaat."
         },
 
         "set_dhw_boost": {
             "name": "Boost Warmtapwater",
-            "description": "Activeer een warmtapwaterapparaat voor 1 uur.",
-            "fields": {
-                "entity_id": {
-                    "name": "Warmtapwater",
-                    "description": "Entity_id van het Warmtapwaterapparaat."
-                }
-            }
+            "description": "Activeer een warmtapwaterapparaat voor 1 uur."
         },
 
         "set_dhw_mode": {
             "name": "Stel Modus voor Warmtapwater in",
             "description": "Stel de werkmodus van een warmtapwaterapparaat in, optioneel voor een bepaalde tijd.",
             "fields": {
-                "entity_id": {
-                    "name": "Warmtapwater",
-                    "description": "Entity_id van het Warmtapwaterapparaat."
-                },
                 "mode": {
                     "name": "Warmwater-modus",
                     "description": "Hoe lang is de aanpassing geldig? Kies uit: `follow_schedule`, `advanced_override` (tot vlg. geplande instelling), `temporary_override` (vul hiervoor ook de duur of tot-moment in), of `permanent_override` (vanaf nu)."
@@ -459,10 +407,6 @@
             "name": "Stel Configuratie van Warmtapwater in",
             "description": "Instellingen voor warmtapwater-apparaat.",
             "fields": {
-                "entity_id": {
-                    "name": "Warmtapwater",
-                    "description": "Entity_id van het Warmtapwaterapparaat."
-                },
                 "setpoint": {
                     "name": "Instelpunt",
                     "description": "Doeltemperatuur in ˚C. Standaardwaarde is 50.0"
@@ -482,10 +426,6 @@
             "name": "Stel weekschema Warmtapwater in",
             "description": "Upload het weekschema voor Warmtapwaterverwarming in JSON formaat.",
             "fields": {
-                "entity_id": {
-                    "name": "Warmtapwater",
-                    "description": "Entity_id van het Warmtapwaterapparaat."
-                },
                 "schedule": {
                     "name": "Weekschema",
                     "description": "Nieuw weekschema voor Warmtapwaterverwarming, in JSON-formaat."
@@ -494,7 +434,7 @@
         },
 
         "fake_zone_temp": {
-            "name": "Simuleer Kamertemperatuur",
+            "name": "Pas Kamertemperatuur aan",
             "description": "Stel een nieuwe ruimtetemperatuur in (niet het instelpunt) voor een evohome zone. Dit is een makkelijke versie van de `Meld Ruimtetemperatuur` actie.",
             "fields": {
                 "entity_id": {
@@ -593,13 +533,13 @@
                 },
                 "command": {
                     "name": "Commando",
-                    "description": "Naam van het commando. Eén per opdracht."
+                    "description": "Naam van het te verwijderen commando. Eén commando per opdracht."
                 }
             }
         },
 
         "learn_command": {
-            "name": "Leer Afstandsbediening-commando",
+            "name": "Leer een Afstandsbediening-commando",
             "description": "Vangt een RAMSES commando op en voegt het toe aan de database. Dit is een makkelijke actie voor HA's eigen `learn_command` actie. De afstandsbediening moet als schakelaar al gekoppeld zijn aan een fan/ventilator.",
             "fields": {
                 "entity_id": {
@@ -627,7 +567,7 @@
                 },
                 "command": {
                     "name": "Commando",
-                    "description": ""
+                    "description": "Naam van het commando. Eén per opdracht."
                 },
                 "num_repeats": {
                     "name": "Herhalen",
