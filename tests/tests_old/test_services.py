@@ -14,7 +14,6 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
     MockConfigEntry,
 )
-from ramses_tx.exceptions import CommandInvalid
 
 from custom_components.ramses_cc import (
     DOMAIN,
@@ -73,6 +72,7 @@ from custom_components.ramses_cc.sensor import SVCS_RAMSES_SENSOR
 from custom_components.ramses_cc.water_heater import SVCS_RAMSES_WATER_HEATER
 from ramses_rf.gateway import Gateway
 from ramses_tx.const import Priority
+from ramses_tx.exceptions import CommandInvalid
 
 from ..virtual_rf import VirtualRf
 from .helpers import TEST_DIR, cast_packets_to_rf
@@ -191,8 +191,7 @@ SERVICES = {
     SVC_SET_DHW_MODE: (
         # Use ramses_rf built-in validation, by mocking
         "ramses_rf.gateway.Gateway.send_cmd",
-        # this uses a different set of asserts then original:
-        # "custom_components.ramses_cc.water_heater.RamsesWaterHeater.async_set_dhw_mode",
+        # to catch nested entry schema, uses dedicated asserts then other services
         SCH_SET_DHW_MODE,
     ),
     SVC_SET_DHW_PARAMS: (
@@ -206,8 +205,7 @@ SERVICES = {
     SVC_SET_SYSTEM_MODE: (
         # Use ramses_rf built-in validation, by mocking
         "ramses_rf.gateway.Gateway.send_cmd",
-        # this uses a different set of asserts then original:
-        # "custom_components.ramses_cc.climate.RamsesController.async_set_system_mode",
+        # to catch nested entry schema, uses dedicated asserts then other services
         SCH_SET_SYSTEM_MODE,
     ),
     SVC_SET_ZONE_CONFIG: (
@@ -217,8 +215,7 @@ SERVICES = {
     SVC_SET_ZONE_MODE: (
         # Use ramses_rf built-in validation, by mocking
         "ramses_rf.gateway.Gateway.send_cmd",
-        # this uses a different set of asserts then original:
-        # "custom_components.ramses_cc.climate.RamsesZone.async_set_zone_mode",
+        # to catch nested entry schema, uses dedicated asserts then other services
         SCH_SET_ZONE_MODE,
     ),
     SVC_SET_ZONE_SCHEDULE: (
@@ -551,8 +548,8 @@ TESTS_SET_DHW_MODE_GOOD = {
     "41": {"mode": "temporary_override", "active": True},
     "52": {"mode": "temporary_override", "active": True, "duration": {"hours": 5}},
     "62": {"mode": "temporary_override", "active": True, "until": _UNTIL},
+    # TODO next 2 should fail in Gateway.send_cmd()
     "42": {"mode": "temporary_override", "active": False},  # #        missing duration
-    # next entry should fail?
     "79": {
         "mode": "temporary_override",
         "active": True,
@@ -561,10 +558,10 @@ TESTS_SET_DHW_MODE_GOOD = {
     },
 }  # requires custom asserts, returned from mock method success
 TESTS_SET_DHW_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
-    "41": {'active': True, 'duration': td(seconds=3600), 'mode': 'temporary_override'},
+    "41": {"priority": Priority.HIGH, "wait_for_reply": True},
     "52": {"priority": Priority.HIGH, "wait_for_reply": True},
     "62": {"priority": Priority.HIGH, "wait_for_reply": True},
-    # next should fail?
+    # TODO next 2 should fail in Gateway.send_cmd()
     "42": {"priority": Priority.HIGH, "wait_for_reply": True},
     "79": {"priority": Priority.HIGH, "wait_for_reply": True},
 }
@@ -575,10 +572,18 @@ TESTS_SET_DHW_MODE_FAIL: dict[str, dict[str, Any]] = {
     "69": {"active": True, "until": _UNTIL},  # #                      missing mode
 }
 TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
-    "11": {"mode": "follow_schedule"},  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
-    "21": {"mode": "permanent_override", "active": True},  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
-    "31": {"mode": "advanced_override", "active": True},  # CommandInvalid: Invalid args: For mode=01, until and duration must both be None
-    # above should be GOOD
+    "11": {
+        "mode": "follow_schedule"
+    },  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
+    "21": {
+        "mode": "permanent_override",
+        "active": True,
+    },  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
+    "31": {
+        "mode": "advanced_override",
+        "active": True,
+    },  # CommandInvalid: Invalid args: For mode=01, until and duration must both be None
+    # above 3 should be GOOD
     "12": {"mode": "follow_schedule", "active": True},  # #            *extra* active
     "20": {"mode": "permanent_override"},  # #                         missing active
     "22": {"mode": "permanent_override", "active": True, "duration": {"hours": 5}},
@@ -720,7 +725,7 @@ TESTS_SET_SYSTEM_MODE_GOOD: dict[str, dict[str, Any]] = {
     "01": {"mode": "eco_boost"},
     "02": {"mode": "day_off", "period": {"days": 3}},
     "03": {"mode": "eco_boost", "duration": {"hours": 3, "minutes": 30}},
-    # the next should fail
+    # TODO next entry should fail in Gateway.send_cmd()
     "05": {
         "mode": "day_off",
         "period": {"days": 3},
@@ -732,13 +737,14 @@ TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
     "01": {"priority": Priority.HIGH, "wait_for_reply": True},
     "02": {"priority": Priority.HIGH, "wait_for_reply": True},
     "03": {"priority": Priority.HIGH, "wait_for_reply": True},
-    # next entry should fail
+    # TODO next entry should fail in Gateway.send_cmd()
     "05": {"priority": Priority.HIGH, "wait_for_reply": True},
 }
 TESTS_SET_SYSTEM_MODE_FAIL: dict[str, dict[str, Any]] = {
     "04": {},
 }  # no asserts, caught in entity_schema
 TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
+    # TODO next entry should fail in Gateway.send_cmd()
     # "05": {
     #     "mode": "day_off",
     #     "period": {"days": 3},
@@ -856,12 +862,12 @@ TESTS_SET_ZONE_MODE_GOOD: dict[str, dict[str, Any]] = {
     "62": {"mode": "temporary_override", "setpoint": 16.1, "until": _UNTIL},
 }
 TESTS_SET_ZONE_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
-    "11": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "21": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "31": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "41": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "52": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "62": {"priority": Priority.HIGH, "wait_for_reply": True},
+    "11": {"priority": Priority.HIGH},
+    "21": {"priority": Priority.HIGH},
+    "31": {"priority": Priority.HIGH},
+    "41": {"priority": Priority.HIGH},
+    "52": {"priority": Priority.HIGH},
+    "62": {"priority": Priority.HIGH},
 }
 TESTS_SET_ZONE_MODE_FAIL: dict[str, dict[str, Any]] = {
     "00": {},  # #                                                     missing mode
@@ -878,9 +884,7 @@ TESTS_SET_ZONE_MODE_FAIL2: dict[str, dict[str, Any]] = {
     "30": {"mode": "advanced_override"},  # #                          missing setpoint
     "32": {"mode": "advanced_override", "setpoint": 13.2, "duration": {"hours": 5}},
     "33": {"mode": "advanced_override", "setpoint": 13.3, "until": _UNTIL},
-    "40": {
-        "mode": "temporary_override"
-    },  # # missing setpoint + duration
+    "40": {"mode": "temporary_override"},  # # missing setpoint + duration
     "50": {"mode": "temporary_override", "duration": {"hours": 5}},  # missing setpoint
     "60": {"mode": "temporary_override", "until": _UNTIL},  # #        missing setpoint
     "79": {
@@ -958,7 +962,7 @@ async def test_set_zone_mode_fail2(
 
     data = {
         "entity_id": "climate.01_145038_02",
-        **TESTS_SET_ZONE_MODE_GOOD[idx],
+        **TESTS_SET_ZONE_MODE_FAIL2[idx],
     }
 
     try:
