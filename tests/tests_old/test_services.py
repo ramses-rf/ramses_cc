@@ -70,12 +70,8 @@ from custom_components.ramses_cc.schemas import (
 )
 from custom_components.ramses_cc.sensor import SVCS_RAMSES_SENSOR
 from custom_components.ramses_cc.water_heater import SVCS_RAMSES_WATER_HEATER
+from ramses_rf.gateway import Gateway
 
-# from ramses_rf import Device
-# from ramses_rf.gateway import Gateway
-# from ramses_rf.system.heat import SysMode
-# from ramses_tx.commands import Commands
-# from ramses_rf.system.zones import DhwZone, Zone  # TODO once SysMode works
 from ..virtual_rf import VirtualRf
 from .helpers import TEST_DIR, cast_packets_to_rf
 
@@ -95,7 +91,7 @@ _UNTIL = (dt.now().replace(minute=0, second=0, microsecond=0) + td(hours=2)).str
 )
 
 
-TEST_CONFIG = {
+TEST_CONFIG: Final = {
     "serial_port": {"port_name": None},
     "ramses_rf": {"disable_discovery": True},
     "advanced_features": {"send_packet": True},
@@ -191,14 +187,9 @@ SERVICES = {
         SCH_NO_ENTITY_SVC_PARAMS,
     ),
     SVC_SET_DHW_MODE: (
-        # WIP EBR issue 233
         # Use ramses_rf built-in validation, by mocking
-        # ramses_rf/system/zones.py, class DhwZone(ZoneSchedule): L384
-        # def set_mode(
-        # Requires imports + setting up ramses_rf.Gateway and DHW Device first
-        # TODO adapt from SVC_SET_SYSTEM_MODE below once that works
         "ramses_rf.gateway.Gateway.send_cmd",
-        # was:
+        # this uses a different set of asserts then original:
         # "custom_components.ramses_cc.water_heater.RamsesWaterHeater.async_set_dhw_mode",
         SCH_SET_DHW_MODE,
     ),
@@ -211,25 +202,9 @@ SERVICES = {
         SCH_SET_DHW_SCHEDULE,
     ),
     SVC_SET_SYSTEM_MODE: (
-        # WIP EBR issue 233
         # Use ramses_rf built-in validation, by mocking
-        # "ramses_rf.gateway.Gateway.async_send_cmd"
-        # ramses_rf/system/heat.py, class SysMode(SystemBase): L873
-        # def set_mode(
-        #         self,
-        #         system_mode: int | str | None,
-        #         *,
-        #         until: dt | str | None = None
-        # ) -> asyncio.Task[Packet]:
-        # Requires imports + setting up ramses_rf.Gateway and Heat Device first?
-        # Directly call: "ramses_rf.system.heat.SysMode.set_mode" ->
-        # "ramses_tx.command.Command.set_system_mode",
-        # next doesn't work (no method named...):
-        # "custom_components.ramses_cc.climate.RamsesController.send_cmd",
-        # the following has no params filled in !
-        # "ramses_rf.gateway.Gateway.send_cmd",  # async_send_command produces different reply
-        "ramses_rf.system.heat.Command.set_system_mode",
-        # instead of
+        "ramses_rf.gateway.Gateway.send_cmd",
+        # this uses a different set of asserts then original:
         # "custom_components.ramses_cc.climate.RamsesController.async_set_system_mode",
         SCH_SET_SYSTEM_MODE,
     ),
@@ -238,14 +213,9 @@ SERVICES = {
         SCH_SET_ZONE_CONFIG,
     ),
     SVC_SET_ZONE_MODE: (
-        # WIP EBR issue 233
         # Use ramses_rf built-in validation, by mocking
-        # ramses_rf/system/zones.py, class Zone(ZoneSchedule): L791
-        # def set_mode(
-        # Requires imports + setting up ramses_rf.Gateway and Zone Device first
-        # TODO adapt from SVC_SET_SYSTEM_MODE above once that works
         "ramses_rf.gateway.Gateway.send_cmd",
-        # was:
+        # this uses a different set of asserts then original:
         # "custom_components.ramses_cc.climate.RamsesZone.async_set_zone_mode",
         SCH_SET_ZONE_MODE,
     ),
@@ -328,6 +298,7 @@ async def _test_entity_service_call(
     hass: HomeAssistant,
     service: str,
     data: dict[str, Any],
+    asserts: dict[str, Any] | None = None,
     *,
     schemas: dict[str, vol.Schema] | None = None,
 ) -> None:
@@ -344,9 +315,14 @@ async def _test_entity_service_call(
 
         mock_method.assert_called_once()
 
-        assert mock_method.call_args.kwargs == {
-            k: v for k, v in SERVICES[service][1](data).items() if k != "entity_id"
-        }
+        if asserts is None:
+            assert mock_method.call_args.kwargs == {
+                k: v for k, v in SERVICES[service][1](data).items() if k != "entity_id"
+            }
+        else:
+            assert mock_method.call_args.kwargs == {
+                k: v for k, v in SERVICES[service][1](asserts).items()
+            }
 
 
 async def _test_service_call(
@@ -678,29 +654,66 @@ async def test_set_dhw_schedule(hass: HomeAssistant, entry: ConfigEntry) -> None
     )
 
 
-TESTS_SET_SYSTEM_MODE: dict[str, dict[str, Any]] = {
-    "00": {},  # "mode": "auto"},
+# Set system mode tests,
+TESTS_SET_SYSTEM_MODE_GOOD: dict[str, dict[str, Any]] = {
+    "00": {"mode": "auto"},
     "01": {"mode": "eco_boost"},
     "02": {"mode": "day_off", "period": {"days": 3}},
     "03": {"mode": "eco_boost", "duration": {"hours": 3, "minutes": 30}},
 }
+TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
+    "00": {"until": None},
+    "01": {"until": None},
+    "02": {"until": dt(2025, 8, 2, 0, 0)},
+    "03": {"until": dt(2025, 7, 29, 22, 6, 30, 934961)},
+}
+TESTS_SET_SYSTEM_MODE_FAIL: dict[str, dict[str, Any]] = {
+    "04": {},
+}
 
 
 # TODO: extended test of underlying method (duration/period)
-@pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE)
+@pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE_GOOD)
 async def test_set_system_mode(
     hass: HomeAssistant, entry: ConfigEntry, idx: str
 ) -> None:
-    gwy: Gateway = list(hass.data[DOMAIN].values())[0].client
+    """Confirm that valid params are acceptable to the entity service schema
+    as well as to the (mocked) parsing checks in ramses_rf.gateway.Gateway.send_cmd
+    Cover nested if-then-else not supported as entity-schema since HA 2025.09"""
 
     data = {
         "entity_id": "climate.01_145038",
-        **TESTS_SET_SYSTEM_MODE[idx],
+        **TESTS_SET_SYSTEM_MODE_GOOD[idx],
+    }
+
+    asserts = {
+        **TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS[idx],
     }
 
     await _test_entity_service_call(
-        hass, SVC_SET_SYSTEM_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        hass, SVC_SET_SYSTEM_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
     )
+
+
+@pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE_FAIL)
+async def test_set_system_mode_fail(
+    hass: HomeAssistant, entry: ConfigEntry, idx: str
+) -> None:
+    """Confirm that invalid params are unacceptable to the entity service schema."""
+
+    data = {
+        "entity_id": "climate.01_145038_02",
+        **TESTS_SET_SYSTEM_MODE_FAIL[idx],
+    }
+
+    try:
+        await _test_entity_service_call(
+            hass, SVC_SET_SYSTEM_MODE, data, schemas=SVCS_RAMSES_CLIMATE
+        )
+    except vol.MultipleInvalid:
+        pass
+    else:
+        raise AssertionError("Expected vol.MultipleInvalid")
 
 
 TESTS_SET_ZONE_CONFIG = {
