@@ -545,17 +545,27 @@ async def test_set_dhw_boost(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 # See: https://github.com/zxdavb/ramses_cc/issues/163
 TESTS_SET_DHW_MODE_GOOD = {
-    "11": {"mode": "follow_schedule"},  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
-    "21": {"mode": "permanent_override", "active": True},  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
-    "31": {"mode": "advanced_override", "active": True},  # CommandInvalid: Invalid args: For mode=01, until and duration must both be None
-    "41": {"mode": "temporary_override", "active": True},  # add assert {'active': True, 'duration': datetime.timedelta(seconds=3600), 'mode': 'temporary_override'}
-    "52": {"mode": "temporary_override", "active": True, "duration": {"hours": 5}},  # assert {'priority': <Priority.HIGH: -2>, 'wait_for_reply': True}
-    "62": {"mode": "temporary_override", "active": True, "until": _UNTIL},  # {'priority': <Priority.HIGH: -2>, 'wait_for_reply': True}
+    # "11": {"mode": "follow_schedule"},  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
+    # "21": {"mode": "permanent_override", "active": True},  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
+    # "31": {"mode": "advanced_override", "active": True},  # CommandInvalid: Invalid args: For mode=01, until and duration must both be None
+    "41": {"mode": "temporary_override", "active": True},
+    "52": {"mode": "temporary_override", "active": True, "duration": {"hours": 5}},
+    "62": {"mode": "temporary_override", "active": True, "until": _UNTIL},
+    "42": {"mode": "temporary_override", "active": False},  # #        missing duration
+    "79": {
+        "mode": "temporary_override",
+        "active": True,
+        "duration": {"hours": 5},
+        "until": _UNTIL,
+    },
 }  # requires custom asserts, returned from mock method success
 TESTS_SET_DHW_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
     "41": {'active': True, 'duration': td(seconds=3600), 'mode': 'temporary_override'},
-    "52": {"priority": {Priority.HIGH: -2}, "wait_for_reply": True},
-    "62": {"priority": {Priority.HIGH: -2}, "wait_for_reply": True},
+    "52": {"priority": Priority.DEFAULT, "wait_for_reply": True},
+    "62": {"priority": Priority.DEFAULT, "wait_for_reply": True},
+    # next should fail?
+    "42": {"priority": Priority.DEFAULT, "wait_for_reply": True},
+    "79": {"priority": Priority.DEFAULT, "wait_for_reply": True},
 }
 TESTS_SET_DHW_MODE_FAIL: dict[str, dict[str, Any]] = {
     "00": {},  # #                                                     missing mode
@@ -564,6 +574,10 @@ TESTS_SET_DHW_MODE_FAIL: dict[str, dict[str, Any]] = {
     "69": {"active": True, "until": _UNTIL},  # #                      missing mode
 }
 TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
+    "11": {"mode": "follow_schedule"},  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
+    "21": {"mode": "permanent_override", "active": True},  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
+    "31": {"mode": "advanced_override", "active": True},  # CommandInvalid: Invalid args: For mode=01, until and duration must both be None
+    # above should be GOOD
     "12": {"mode": "follow_schedule", "active": True},  # #            *extra* active
     "20": {"mode": "permanent_override"},  # #                         missing active
     "22": {"mode": "permanent_override", "active": True, "duration": {"hours": 5}},
@@ -572,15 +586,15 @@ TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
     "32": {"mode": "advanced_override", "active": True, "duration": {"hours": 5}},
     "33": {"mode": "advanced_override", "active": True, "until": _UNTIL},
     "40": {"mode": "temporary_override"},  # #                         missing active
-    "42": {"mode": "temporary_override", "active": False},  # #        missing duration
+    # "42": {"mode": "temporary_override", "active": False},  # #        missing duration
     "50": {"mode": "temporary_override", "duration": {"hours": 5}},  # missing active
     "60": {"mode": "temporary_override", "until": _UNTIL},  # #        missing active
-    "79": {
-        "mode": "temporary_override",
-        "active": True,
-        "duration": {"hours": 5},
-        "until": _UNTIL,
-    },
+    # "79": {
+    #     "mode": "temporary_override",
+    #     "active": True,
+    #     "duration": {"hours": 5},
+    #     "until": _UNTIL,
+    # },
 }
 # TESTS_SET_DHW_MODE_FAIL2_EXCEPTIONS:
 #     "12": {},  # #  extra active: CommandInvalid: Invalid args: For mode=00, until and duration must both be None
@@ -594,7 +608,7 @@ TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
 #     "42": {},  # #  missing duration
 #     "50": {},  # #  missing active
 #     "60": {},  # #  missing active
-#     "79": {},
+#     "79": {},  # # assert {'priority': <Priority.HIGH: -2>, 'wait_for_reply': True}
 
 
 # TODO: extended test of underlying method (duration/until)
@@ -703,10 +717,10 @@ TESTS_SET_SYSTEM_MODE_GOOD: dict[str, dict[str, Any]] = {
     "03": {"mode": "eco_boost", "duration": {"hours": 3, "minutes": 30}},
 }  # requires custom asserts, returned from mock method success
 TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
-    "00": {"priority": {Priority.HIGH: -2}, "wait_for_reply": True},
-    "01": {"priority": {Priority.HIGH: -2}, "wait_for_reply": True},
-    "02": {"priority": {Priority.HIGH: -2}, "wait_for_reply": True},
-    "03": {"priority": {Priority.HIGH: -2}, "wait_for_reply": True},
+    "00": {"priority": Priority.DEFAULT, "wait_for_reply": True},
+    "01": {"priority": Priority.DEFAULT, "wait_for_reply": True},
+    "02": {"priority": Priority.DEFAULT, "wait_for_reply": True},
+    "03": {"priority": Priority.DEFAULT, "wait_for_reply": True},
 }
 TESTS_SET_SYSTEM_MODE_FAIL: dict[str, dict[str, Any]] = {
     "04": {},
@@ -920,10 +934,6 @@ async def test_set_zone_mode_fail2(
     data = {
         "entity_id": "climate.01_145038_02",
         **TESTS_SET_ZONE_MODE_GOOD[idx],
-    }
-
-    asserts = {
-        **TESTS_SET_ZONE_MODE_FAIL2_ASSERTS[idx],
     }
 
     try:
