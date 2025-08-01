@@ -263,7 +263,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
         """Set the (native) operating mode of the Controller."""
 
         if duration is not None:
-            # evohome controllers uitilse whole hours
+            # evohome controllers utilise whole hours
             until = datetime.now() + duration  # <=24 hours
         elif period is None:
             until = None
