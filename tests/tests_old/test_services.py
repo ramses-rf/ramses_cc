@@ -556,15 +556,7 @@ TESTS_SET_DHW_MODE_GOOD = {
         "duration": {"hours": 5},
         "until": _UNTIL,
     },
-}  # requires custom asserts, returned from mock method success
-TESTS_SET_DHW_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
-    "41": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "52": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "62": {"priority": Priority.HIGH, "wait_for_reply": True},
-    # TODO next 2 should fail in Gateway.send_cmd()
-    "42": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "79": {"priority": Priority.HIGH, "wait_for_reply": True},
-}
+}  # requires custom assert, returned from mock method success
 TESTS_SET_DHW_MODE_FAIL: dict[str, dict[str, Any]] = {
     "00": {},  # #                                                     missing mode
     "29": {"active": True},  # #                                       missing mode
@@ -629,9 +621,7 @@ async def test_set_dhw_mode_good(
         **TESTS_SET_DHW_MODE_GOOD[idx],  # type: ignore[dict-item]
     }
 
-    asserts = {
-        **TESTS_SET_DHW_MODE_GOOD_ASSERTS[idx],
-    }
+    asserts = {"priority": Priority.HIGH, "wait_for_reply": True}
 
     await _test_entity_service_call(
         hass, SVC_SET_DHW_MODE, data, asserts, schemas=SVCS_RAMSES_WATER_HEATER
@@ -731,15 +721,7 @@ TESTS_SET_SYSTEM_MODE_GOOD: dict[str, dict[str, Any]] = {
         "period": {"days": 3},
         "duration": {"hours": 3, "minutes": 30},
     },
-}  # requires custom asserts, returned from mock method success
-TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
-    "00": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "01": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "02": {"priority": Priority.HIGH, "wait_for_reply": True},
-    "03": {"priority": Priority.HIGH, "wait_for_reply": True},
-    # TODO next entry should fail in Gateway.send_cmd()
-    "05": {"priority": Priority.HIGH, "wait_for_reply": True},
-}
+}  # requires custom assert, returned from mock method success
 TESTS_SET_SYSTEM_MODE_FAIL: dict[str, dict[str, Any]] = {
     "04": {},
 }  # no asserts, caught in entity_schema
@@ -769,9 +751,7 @@ async def test_set_system_mode_good(
         **TESTS_SET_SYSTEM_MODE_GOOD[idx],
     }
 
-    asserts = {
-        **TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS[idx],
-    }
+    asserts = {"priority": Priority.HIGH, "wait_for_reply": True}
 
     await _test_entity_service_call(
         hass, SVC_SET_SYSTEM_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
@@ -868,16 +848,6 @@ TESTS_SET_ZONE_MODE_GOOD: dict[str, dict[str, Any]] = {
         "until": _UNTIL,
     },
 }
-TESTS_SET_ZONE_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
-    # "11": {"priority": Priority.HIGH},
-    # "21": {"priority": Priority.HIGH},
-    # "31": {"priority": Priority.HIGH},
-    "41": {"priority": Priority.HIGH},
-    "52": {"priority": Priority.HIGH},
-    "62": {"priority": Priority.HIGH},
-    # TODO next shouldn't pass
-    "79": {"priority": Priority.HIGH},
-}
 TESTS_SET_ZONE_MODE_FAIL: dict[str, dict[str, Any]] = {
     "00": {},  # #                                                     missing mode
     "29": {"setpoint": 12.9},  # #                                     missing mode
@@ -933,9 +903,7 @@ async def test_set_zone_mode_good(
         **TESTS_SET_ZONE_MODE_GOOD[idx],
     }
 
-    asserts = {
-        **TESTS_SET_ZONE_MODE_GOOD_ASSERTS[idx],
-    }
+    asserts = {"priority": Priority.HIGH}
 
     await _test_entity_service_call(
         hass, SVC_SET_ZONE_MODE, data, asserts, schemas=SVCS_RAMSES_CLIMATE
