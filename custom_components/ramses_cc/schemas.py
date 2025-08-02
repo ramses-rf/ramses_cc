@@ -603,8 +603,25 @@ SCH_DELETE_COMMAND = cv.make_entity_service_schema(
     },
 )
 
+# Service schema for getting fan parameters (using ramses_rf implementation)
+SVC_GET_FAN_PARAM: Final = "get_fan_param"
+
+# Schema for get_fan_param service
+# Note: Parameter validation is handled by ramses_rf
+_SCH_PARAM_ID = _SCH_DOM_IDX  # Reuse the same schema as domain index (2 hex digits)
+
+SCH_GET_FAN_PARAM = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        vol.Optional("fan_id"): _SCH_DEVICE_ID,
+    }
+)
+
 SVCS_RAMSES_REMOTE = {
     SVC_DELETE_COMMAND: SCH_DELETE_COMMAND,
     SVC_LEARN_COMMAND: SCH_LEARN_COMMAND,
     SVC_SEND_COMMAND: SCH_SEND_COMMAND,
+    SVC_GET_FAN_PARAM: SCH_GET_FAN_PARAM,
 }
