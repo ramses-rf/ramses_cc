@@ -540,7 +540,7 @@ async def test_set_dhw_boost(hass: HomeAssistant, entry: ConfigEntry) -> None:
     )
 
 
-# See: https://github.com/zxdavb/ramses_cc/issues/163
+# See: https://github.com/ramses-rf/ramses_cc/issues/163
 TESTS_SET_DHW_MODE_GOOD = {
     # "11": {"mode": "follow_schedule"},  # CommandInvalid: Invalid args: For mode=00, until and duration must both be None
     # "21": {"mode": "permanent_override", "active": True},  # CommandInvalid: Invalid args: For mode=02, until and duration must both be None
@@ -594,19 +594,6 @@ TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
     #     "until": _UNTIL,
     # },
 }
-# TESTS_SET_DHW_MODE_FAIL2_EXCEPTIONS:
-#     "12": {},  # #  extra active: CommandInvalid: Invalid args: For mode=00, until and duration must both be None
-#     "20": {},  # #  missing active
-#     "22": {},
-#     "23": {},
-#     "30": {},  # #  missing active
-#     "32": {},
-#     "33": {},
-#     "40": {},  # #  missing active
-#     "42": {},  # #  missing duration
-#     "50": {},  # #  missing active
-#     "60": {},  # #  missing active
-#     "79": {},  # # assert {'priority': <Priority.HIGH: -2>, 'wait_for_reply': True}
 
 
 # TODO: extended test of underlying method (duration/until)
@@ -672,7 +659,7 @@ async def test_set_dhw_mode_fail2(
     except CommandInvalid:
         pass
     else:
-        raise AssertionError("Expected wrong argument exception")
+        raise AssertionError("Expected Wrong Argument exception")
 
 
 TESTS_SET_DHW_PARAMS = {
@@ -709,7 +696,7 @@ async def test_set_dhw_schedule(hass: HomeAssistant, entry: ConfigEntry) -> None
     )
 
 
-# Set system mode tests,
+# Set_system_mode tests
 TESTS_SET_SYSTEM_MODE_GOOD: dict[str, dict[str, Any]] = {
     "00": {"mode": "auto"},
     "01": {"mode": "eco_boost"},
@@ -799,7 +786,7 @@ async def test_set_system_mode_fail2(
     except CommandInvalid:
         pass
     else:
-        raise AssertionError("Expected wrong argument exception")
+        raise AssertionError("Expected Wrong Argument exception")
 
 
 TESTS_SET_ZONE_CONFIG = {
@@ -832,7 +819,6 @@ async def test_set_zone_config(
     )
 
 
-# https://github.com/zxdavb/ramses_cc/issues/163
 TESTS_SET_ZONE_MODE_GOOD: dict[str, dict[str, Any]] = {
     # "11": {"mode": "follow_schedule"},
     # "21": {"mode": "permanent_override", "setpoint": 12.1},
@@ -878,18 +864,6 @@ TESTS_SET_ZONE_MODE_FAIL2: dict[str, dict[str, Any]] = {
     #     "until": _UNTIL,
     # },
 }
-# TESTS_SET_ZONE_MODE_FAIL2_EXCEPTIONS:
-#     "12": {},  # #  *extra* active
-#     "20": {},  # #  missing active
-#     "22": {},
-#     "23": {},
-#     "30": {},  # #  missing active
-#     "32": {},
-#     "33": {},
-#     "40": {},  # #  missing setpoint + duration
-#     "50": {},  # #  missing active
-#     "60": {},  # #  missing active
-#     "79": {},
 
 
 @pytest.mark.parametrize("idx", TESTS_SET_ZONE_MODE_GOOD)
@@ -954,7 +928,7 @@ async def test_set_zone_mode_fail2(
     except CommandInvalid:
         pass
     else:
-        raise AssertionError("Expected wrong argument exception")
+        raise AssertionError("Expected Wrong Argument exception")
 
 
 async def test_set_zone_schedule(hass: HomeAssistant, entry: ConfigEntry) -> None:
