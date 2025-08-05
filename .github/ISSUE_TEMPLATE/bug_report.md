@@ -1,11 +1,6 @@
-# New code owner wanted
-I no longer am able to work on this project and active development has ceased.
-
-Please reach out to me if you feel able to take over. I will hand over the entire repo to teh right person.
-
 ---
 name: Bug report
-about: Create a useful report to help us improve
+about: Create a useful report to help us improve ramses_cc
 title: ''
 labels: ''
 assignees: ''
@@ -13,7 +8,7 @@ assignees: ''
 ---
 
 **Describe the bug**
-A clear and concise description of what the bug is.
+A clear and concise description of the bug.
 
 **To Reproduce**
 Steps to reproduce the behaviour (for example):
@@ -22,13 +17,13 @@ Steps to reproduce the behaviour (for example):
 3. Scroll down to '....'
 4. See error
 
-Please provide text if you can. For example, if you are having an issue with a service call, provide a copy of the service call YAML/
+Please provide code if you can. For example, if you are having an issue with a service call, provide a copy of the service call YAML/
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.
 
-**Please complete the following information:**
- - `ramses_cc:` section from **configuration.yaml**
+**Please include the following information:**
+ - `ramses_cc:` your integration **config** (copy from HA > Integrations > Ramses RF > Diagnose > Gateway > Attributes dropdown)
  - contemporaneous portion of the **home-assistant.log**
  - contemporaneous portion of the **packet.log**
 
@@ -36,4 +31,4 @@ A clear and concise description of what you expected to happen.
 Only if applicable, add screenshots to help explain your problem. Do not provide a screenshot as an alternative to providing the above information.
 
 **Additional context**
-Add any other context about the problem here, such as the make/model of your hardware.
+Add any other context about the problem here, such as the make/model of your hardware dongle, interface (USB or MQTT) etc.
