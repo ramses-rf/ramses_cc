@@ -2,7 +2,6 @@
     "domain": "ramses_cc",
     "name": "RAMSES RF",
     "codeowners": ["@zxdavb","@silverailscolo"],
-    "maintainers": ["@silverailscolo"],
     "config_flow": true,
     "dependencies": ["usb"],
     "documentation": "https://github.com/ramses-rf/ramses_cc",
