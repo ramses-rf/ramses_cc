@@ -1,19 +1,20 @@
 {
     "domain": "ramses_cc",
     "name": "RAMSES RF",
-    "codeowners": ["@zxdavb"],
+    "codeowners": ["@zxdavb","@silverailscolo"],
+    "maintainers": ["@silverailscolo"],
     "config_flow": true,
     "dependencies": ["usb"],
-    "documentation": "https://github.com/zxdavb/ramses_cc",
+    "documentation": "https://github.com/ramses-rf/ramses_cc",
     "integration_type": "hub",
     "iot_class": "local_polling",
-    "issue_tracker": "https://github.com/zxdavb/ramses_cc/issues",
+    "issue_tracker": "https://github.com/ramses-rf/ramses_cc/issues",
     "loggers": ["ramses_rf"],
     "requirements": [
       "aiousbwatcher>=1.1.1",
       "pyserial-asyncio-fast>=0.14",
-      "ramses-rf==0.50.1"
+      "ramses-rf==0.51.0"
     ],
     "single_config_entry": true,
-    "version": "0.50.1"
+    "version": "0.51.0"
   }

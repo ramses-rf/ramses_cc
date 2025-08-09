@@ -1,5 +1,5 @@
 # Requirements to dev the source code
-# - last checked/updated: 2025-02-18 (c.f. HA 2025.2.2)
+# - last checked/updated: 2025-08-09 (c.f. HA 2025.7.5)
 #
 
 # requirements (dependencies) are in manifest.json
@@ -7,7 +7,7 @@
 
   aiousbwatcher         >= 1.1.1                 # as per: manifest.json
   pyserial-asyncio-fast >= 0.14                  # as per: manifest.json
-  ramses_rf             == 0.50.1                # as per: manifest.json
+  ramses_rf             == 0.51.0                # as per: manifest.json
 
 
 
