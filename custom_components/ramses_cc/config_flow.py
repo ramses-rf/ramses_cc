@@ -1,4 +1,4 @@
-"""Config flow to configure Ramses integration."""
+"""Config flow to configure Ramses integration since 0.41.0."""
 
 import logging
 import re
@@ -102,9 +102,13 @@ class BaseRamsesFlow(FlowHandler):
         self._manual_serial_port = False
 
     def get_options(self) -> None:
-        if self.config_entry is not None and self.config_entry.options is not None:
+        if (
+            hasattr(self, "config_entry")
+            and self.config_entry is not None
+            and self.config_entry.options is not None
+        ):
             options = deepcopy(dict(self.config_entry.options))
-        else:  # config_entry is None:
+        else:  # create an empty config_entry for new installs
             options = {}
         options.setdefault(CONF_RAMSES_RF, {})
         options.setdefault(SZ_SERIAL_PORT, {})
