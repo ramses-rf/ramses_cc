@@ -31,9 +31,9 @@ from homeassistant.helpers.entity_platform import (
 )
 
 from ramses_rf.const import (
-    SZ_BYPASS_MODE,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
+    SZ_BYPASS_MODE,
     SZ_CO2_LEVEL,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
@@ -548,15 +548,16 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         entity_category=None,
     ),
-    RamsesSensorEntityDescription(
-        key=SZ_TEMPERATURE,
-        ramses_rf_attr=SZ_TEMPERATURE,
-        ramses_rf_class=HvacVentilator,
-        name="Temperature",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        entity_category=None,
-    ),
+    # next one is really ruining tests
+    # RamsesSensorEntityDescription(
+    #     key=SZ_TEMPERATURE,
+    #     ramses_rf_attr=SZ_TEMPERATURE,
+    #     ramses_rf_class=HvacVentilator,
+    #     name="Temperature",
+    #     device_class=SensorDeviceClass.TEMPERATURE,
+    #     native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+    #     entity_category=None,
+    # ),
     # Special projects
     RamsesSensorEntityDescription(
         key=SZ_OEM_CODE,
