@@ -181,7 +181,6 @@
       'attributes': ReadOnlyDict({
         'friendly_name': 'REM 29:179540 Fan rate',
         'id': '29:179540',
-        'unit_of_measurement': '%',
       }),
       'context': <ANY>,
       'entity_id': 'sensor.29_179540_fan_rate',

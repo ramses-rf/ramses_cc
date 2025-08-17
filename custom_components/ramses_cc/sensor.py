@@ -461,7 +461,6 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
         ramses_rf_attr=SZ_FAN_RATE,
         name="Fan rate",
         state_class=None,
-        native_unit_of_measurement=PERCENTAGE,
     ),
     RamsesSensorEntityDescription(
         key=SZ_FILTER_REMAINING,
