@@ -76,11 +76,7 @@ from ramses_rf.device.heat import (
     TrvActuator,
     UfhController,
 )
-from ramses_rf.device.hvac import (
-    HvacCarbonDioxideSensor,
-    HvacHumiditySensor,
-    HvacVentilator,
-)
+from ramses_rf.device.hvac import HvacCarbonDioxideSensor, HvacHumiditySensor
 from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_rf.system.heat import System
 from ramses_rf.system.zones import ZoneBase
