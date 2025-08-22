@@ -335,7 +335,9 @@ async def _test_entity_service_call(
             # the set_x_mode tests compare the kwargs arriving after they were normalised
             # these test involve datetime comparison, and must be approximated to be reliable
             # simple/unreliable: assert mock_method.call_args.kwargs == asserts
-            assert mock_method.call_args.kwargs == pytest.approx(asserts, rel=1e-6, abs=1e-12)
+            assert mock_method.call_args.kwargs == pytest.approx(
+                asserts, rel=1e-6, abs=1e-12
+            )
 
 
 async def _test_service_call(
