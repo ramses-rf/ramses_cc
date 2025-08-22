@@ -1069,3 +1069,27 @@ async def test_svc_send_packet_with_impersonation(
     schemas = {SVC_SEND_PACKET: SCH_SEND_PACKET}
 
     await _test_service_call(hass, SVC_SEND_PACKET, data, schemas=schemas)
+
+
+# TODO add tests for core climate services that ramses_cc intercepts/handles
+
+# async def test_set_temperature(hass: HomeAssistant, entry: ConfigEntry) -> None:
+#     """
+#     Test standard HA action, picked up by ramses_cc and sent to set_zone_mode().
+#     No schema (entry handled by HA).
+#     See issue #276
+#
+#     :param hass: the HA instance
+#     :param entry: the climate entity object to configure
+#     """
+#     data = {
+#         "entity_id": "climate.01_145038_02",
+#         "temperature": 25,
+#     }
+#
+#     # how to address the hass core CLIMATE domain, not ramses_cc
+#     hass.async_create_task(
+#         hass.services.async_call(
+#             'climate', 'async_set_temperature', {"temperature": 25}
+#         )
+#     )

@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import Any, Final, NewType
 
 import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
+from homeassistant.components.climate import HVACMode
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers import config_validation as cv
 
@@ -331,7 +332,7 @@ SCH_SET_SYSTEM_MODE = cv.make_entity_service_schema(
     }
 )
 
-SCH_SET_SYSTEM_MODE_EXTRA = vol.Schema(  # original Entity Service action schema
+SCH_SET_SYSTEM_MODE_EXTRA = vol.Schema(  # original Entity Service action validation schema
     # vol.Msg(  # TODO turn on if good checks are working 8-2025
     vol.Any(
         {  # A also: Off, Heat, Cool (for pre-evohome)
@@ -406,40 +407,44 @@ SCH_SET_ZONE_MODE = cv.make_entity_service_schema(
     }
 )
 
-SCH_SET_ZONE_MODE_EXTRA = vol.Schema(  # original Entity Service action schema
-    # vol.Msg(  # TODO turn on if good checks are working 8-2025
-    vol.Any(
-        {  # A
-            vol.Required(ATTR_MODE): vol.In([ZoneMode.SCHEDULE]),
-            # only mode with no setpoint
-        },
-        {  # B
-            vol.Required(ATTR_MODE): vol.In([ZoneMode.PERMANENT, ZoneMode.ADVANCED]),
-            vol.Required(ATTR_SETPOINT): vol.All(
-                cv.positive_float, vol.Range(min=5, max=35)
-            ),
-        },
-        {  # C
-            vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-            vol.Required(ATTR_SETPOINT): vol.All(
-                cv.positive_float, vol.Range(min=5, max=35)
-            ),
-            vol.Required(ATTR_DURATION, default=timedelta(hours=1)): vol.All(
-                cv.time_period,
-                vol.Range(min=timedelta(minutes=5), max=timedelta(days=1)),
-            ),
-        },
-        {  # D
-            vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-            vol.Required(ATTR_SETPOINT): vol.All(
-                cv.positive_float, vol.Range(min=5, max=35)
-            ),
-            vol.Required(ATTR_UNTIL): cv.datetime,
-        },
-    ),
-    #     msg="Invalid ramses_cc Zone Mode entry in Entity Service call",
-    # ),
-    extra=vol.PREVENT_EXTRA,
+SCH_SET_ZONE_MODE_EXTRA = (
+    vol.Schema(  # original Entity Service action validation schema
+        # vol.Msg(  # TODO turn on if good checks are working 8-2025
+        vol.Any(
+            {  # A
+                vol.Required(ATTR_MODE): vol.In([ZoneMode.SCHEDULE]),
+                # only mode with no setpoint
+            },
+            {  # B
+                vol.Required(ATTR_MODE): vol.In(
+                    [ZoneMode.PERMANENT, ZoneMode.ADVANCED]
+                ),
+                vol.Required(ATTR_SETPOINT): vol.All(
+                    cv.positive_float, vol.Range(min=5, max=35)
+                ),
+            },
+            {  # C
+                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
+                vol.Required(ATTR_SETPOINT): vol.All(
+                    cv.positive_float, vol.Range(min=5, max=35)
+                ),
+                vol.Required(ATTR_DURATION, default=timedelta(hours=1)): vol.All(
+                    cv.time_period,
+                    vol.Range(min=timedelta(minutes=5), max=timedelta(days=1)),
+                ),
+            },
+            {  # D
+                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
+                vol.Required(ATTR_SETPOINT): vol.All(
+                    cv.positive_float, vol.Range(min=5, max=35)
+                ),
+                vol.Required(ATTR_UNTIL): cv.datetime,
+            },
+        ),
+        #     msg="Invalid ramses_cc Zone Mode entry in Entity Service call",
+        # ),
+        extra=vol.PREVENT_EXTRA,
+    )
 )
 
 SVC_SET_ZONE_SCHEDULE: Final = "set_zone_schedule"
@@ -462,6 +467,7 @@ SCH_GET_SYSTEM_FAULTS = cv.make_entity_service_schema(
     }
 )
 
+# services without their own schema
 SVC_FAKE_ZONE_TEMP: Final = "fake_zone_temp"
 SVC_GET_ZONE_SCHEDULE: Final = "get_zone_schedule"
 SVC_RESET_SYSTEM_MODE: Final = "reset_system_mode"
@@ -504,7 +510,7 @@ SCH_SET_DHW_MODE = cv.make_entity_service_schema(
     }
 )
 
-SCH_SET_DHW_MODE_EXTRA = vol.Schema(  # original Entity Service action schema
+SCH_SET_DHW_MODE_EXTRA = vol.Schema(  # original Entity Service action validation schema
     # vol.Msg(  # TODO turn on if good checks are working 8-2025
     vol.Any(
         {  # A
