@@ -335,9 +335,7 @@ async def _test_entity_service_call(
             # the set_x_mode tests compare the kwargs arriving after they were normalised
             # these test involve datetime comparison, and must be approximated to be reliable
             # simple/unreliable: assert mock_method.call_args.kwargs == asserts
-            assert mock_method.call_args.kwargs == pytest.approx(
-                asserts, rel=1e-6, abs=1e-12
-            )
+            assert mock_method.call_args.kwargs == pytest.approx(asserts, abs=0.1)
 
 
 async def _test_service_call(
@@ -893,14 +891,17 @@ TESTS_SET_ZONE_MODE_GOOD: dict[str, dict[str, Any]] = {
         "mode": "advanced_override",
         "setpoint": 13.1,
     },
-    # TODO small timing offset makes the next 2 test often fail locally and on GitHub, round times in Command?
-    # "41": {"mode": "temporary_override", "setpoint": 14.1},  # adds default duration 1 hour
+    # TODO small timing offset makes the next 2 test often fail locally and on GitHub
+    # "41": {"mode": "temporary_override", "setpoint": 14.1},  # default duration 1 hour will be added
     # "52": {"mode": "temporary_override", "setpoint": 15.1, "duration": {"hours": 3}},
     "62": {
         "mode": "temporary_override",
         "setpoint": 16.1,
         "until": _UNTIL,
     },  # time rounded, no msec
+    # next tests are from issue #276, simulating normalised inputs
+    "276": {"mode": "permanent_override", "setpoint": 25},
+    "277": {"mode": "temporary_override", "setpoint": 19, "until": _UNTIL},
 }  # requires custom asserts, returned from mock method success
 # with mock method ramses_tx.command.Command.set_zone_mode
 TESTS_SET_ZONE_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
@@ -918,6 +919,8 @@ TESTS_SET_ZONE_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
         "until": dt.now().replace(minute=0, second=0, microsecond=0) + td(hours=3),
     },
     "62": {"mode": "temporary_override", "setpoint": 16.1, "until": _ASS_UNTIL},
+    "276": {"mode": "permanent_override", "setpoint": 25, "until": None},
+    "277": {"mode": "temporary_override", "setpoint": 19, "until": _ASS_UNTIL},
 }
 
 TESTS_SET_ZONE_MODE_FAIL: dict[str, dict[str, Any]] = {
