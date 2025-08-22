@@ -84,12 +84,13 @@ NUM_DEVS_AFTER = 15  # proxy for success of cast_packets_to_rf()
 NUM_SVCS_AFTER = 10  # proxy for success
 NUM_ENTS_AFTER = 45  # proxy for success
 
-# format for dt asserts, shows as: {'until': datetime.datetime(2025, 8, 11, 22, 11, 14, 774707)}
-# must round down to prev full hour to allow pytest server run time (or could still fail 1 sec after whole hour)
-# no problem if datetime is in the past, not verified
-_ASS_UNTIL = dt.now().replace(microsecond=0) + td(
-    hours=1  # min. 1, max. 24
-)  # until an hour from "now"
+# format for datetime asserts, returns as: {'until': datetime.datetime(2025, 8, 11, 22, 11, 14, 774707)}
+# we must round down to prev full hour to allow pytest server run time
+# this could still fail 1 sec after whole hour, so allow +/- 1 minute on test outcomes
+# no problem if datetime is in the past, it is not verified anywhere
+
+# until an hour from "now",  min. 1, max. 24:
+_ASS_UNTIL = dt.now().replace(microsecond=0) + td(hours=1)
 _ASS_UNTIL_3DAYS = dt.now().replace(minute=0, second=0, microsecond=0) + td(days=3)
 _ASS_UNTIL_MIDNIGHT = dt.now().replace(hour=0, minute=0, second=0, microsecond=0) + td(
     days=1
@@ -98,9 +99,9 @@ _ASS_UNTIL_10D = dt.now().replace(minute=0, second=0, microsecond=0) + td(
     days=10, hours=4
 )  # min. 1, max. 24
 
-# same in service call entry format
+# same item in service call entry format, calculated from their assert expected form above:
 _UNTIL = _ASS_UNTIL.strftime(
-    "%Y-%m-%d %H:%M:%S"  # until an hour from now, formatted as "2024-03-16 14:00:00" no msec
+    "%Y-%m-%d %H:%M:%S"  # until an hour from now, formatted "2024-03-16 14:00:00", no msec
 )
 # _UNTIL_MIDNIGHT = _ASS_UNTIL_MIDNIGHT.strftime("%Y-%m-%d %H:%M:%S")
 # _UNTIL10D = _ASS_UNTIL_10D.strftime("%Y-%m-%d %H:%M:%S")

@@ -439,15 +439,8 @@ class RamsesZone(RamsesEntity, ClimateEntity):
     ) -> None:
         """Set a new target temperature."""
 
-        if temperature is None:
-            mode = ZoneMode.SCHEDULE
-        else:
-            mode = ZoneMode.PERMANENT
-
-        if until is None and duration is None:
-            duration = timedelta(hours=1)
-        else:
-            duration = None
+        mode = ZoneMode.SCHEDULE if temperature is None else ZoneMode.PERMANENT
+        duration = timedelta(hours=1) if until is None and duration is None else None
 
         self.async_set_zone_mode(
             mode=mode, setpoint=temperature, duration=duration, until=until

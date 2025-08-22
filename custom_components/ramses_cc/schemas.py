@@ -8,7 +8,6 @@ from datetime import timedelta
 from typing import Any, Final, NewType
 
 import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
-from homeassistant.components.climate import HVACMode
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers import config_validation as cv
 
