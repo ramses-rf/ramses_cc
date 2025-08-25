@@ -179,6 +179,18 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
+        'friendly_name': 'REM 29:179540 Fan rate',
+        'id': '29:179540',
+      }),
+      'context': <ANY>,
+      'entity_id': 'sensor.29_179540_fan_rate',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
         'assumed_state': True,
         'commands': NodeDictClass({
           'auto': ' I --- 29:179540 32:157747 --:------ 22F1 003 000404',

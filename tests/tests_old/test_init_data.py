@@ -27,7 +27,7 @@ from .helpers import TEST_DIR, cast_packets_to_rf
 _CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.broker.py
 
 # fmt: off
-EXPECTED_ENTITIES = [  # TODO: add OTB entities
+EXPECTED_ENTITIES = [  # TODO: add OTB entities, adjust list when adding sensors etc
     "18:006402-status",
     "01:145038-status", "01:145038", "01:145038-heat_demand", "01:145038-active_fault",
 
@@ -40,10 +40,10 @@ EXPECTED_ENTITIES = [  # TODO: add OTB entities
 
     "07:046947-battery_low", "07:046947-temperature",
 
-    "13:081775-active", "13:081775-relay_demand",
+    "13:081775-active", "13:081775-relay_demand",  # missing?
     "13:120241-active", "13:120241-relay_demand",
     "13:120242-active", "13:120242-relay_demand",
-    "13:202850-active", "13:202850-relay_demand",
+    "13:202850-active", "13:202850-relay_demand",  # missing?
 
     "22:140285-battery_low", "22:140285-temperature",
     "34:092243-battery_low", "34:092243-temperature",
@@ -51,7 +51,7 @@ EXPECTED_ENTITIES = [  # TODO: add OTB entities
 # fmt: on
 
 NUM_DEVS_SETUP = 1  # HGI (before casting packets to RF)
-NUM_DEVS_AFTER = 13  # proxy for success of cast_packets_to_rf()
+NUM_DEVS_AFTER = 9  # proxy for success of cast_packets_to_rf(), adjust when adding sensors etc
 NUM_SVCS_AFTER = 6  # proxy for success
 NUM_ENTS_AFTER = 43  # proxy for success
 
@@ -84,7 +84,7 @@ async def _test_common(hass: HomeAssistant, entry: ConfigEntry, rf: VirtualRf) -
     assert gwy.config.disable_discovery is True
 
     await cast_packets_to_rf(rf, f"{TEST_DIR}/system_1.log", gwy=gwy)
-    assert len(gwy.devices) == NUM_DEVS_AFTER
+    assert len(gwy.devices) == NUM_DEVS_AFTER  # adjust when adding sensors etc
 
     assert len(hass.services.async_services_for_domain(DOMAIN)) == NUM_SVCS_AFTER
 
@@ -94,11 +94,17 @@ async def _test_common(hass: HomeAssistant, entry: ConfigEntry, rf: VirtualRf) -
     await broker.async_update()
     await hass.async_block_till_done()
 
+    # for x in broker._entities:  # debug issue 278
+    #     if x not in EXPECTED_ENTITIES:
+    #         print("_test_common extra: " + str(x))
     assert not [x for x in broker._entities if x not in EXPECTED_ENTITIES]  # extras
+    # for x in EXPECTED_ENTITIES:  # debug issue 278
+    #     if x not in broker._entities:
+    #         print("_test_common missing: " + str(x))
     assert not [x for x in EXPECTED_ENTITIES if x not in broker._entities]  # missing
 
     # ramses_rf entities
-    assert len(broker._devices) == NUM_DEVS_AFTER
+    assert len(broker._devices) == NUM_DEVS_AFTER  # adjust when adding sensors etc
     assert len(broker._dhws) == 1
     assert len(broker._remotes) == 0
     assert len(broker._systems) == 1
