@@ -51,9 +51,8 @@ EXPECTED_ENTITIES = [  # TODO: add OTB entities, adjust list when adding sensors
 # fmt: on
 
 NUM_DEVS_SETUP = 1  # HGI (before casting packets to RF)
-NUM_DEVS_AFTER = (
-    9  # proxy for success of cast_packets_to_rf(), adjust when adding sensors etc
-)
+NUM_DEVS_AFTER = 13  # proxy for success of cast_packets_to_rf()
+# adjust NUM_DEVS_AFTER when adding sensors etc. was: 9
 NUM_SVCS_AFTER = 6  # proxy for success
 NUM_ENTS_AFTER = 43  # proxy for success
 
