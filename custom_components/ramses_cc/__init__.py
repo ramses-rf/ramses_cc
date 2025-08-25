@@ -3,6 +3,7 @@
 Requires a Honeywell HGI80 (or compatible) gateway.
 """
 
+# ruff: noqa: I001  # Allow non-standard import order
 from __future__ import annotations
 
 import logging
@@ -37,10 +38,14 @@ from .const import (
 from .schemas import (
     SCH_BIND_DEVICE,
     SCH_DOMAIN_CONFIG,
+    SCH_GET_FAN_PARAM,
+    SCH_SET_FAN_PARAM,
     SCH_NO_SVC_PARAMS,
     SCH_SEND_PACKET,
     SVC_BIND_DEVICE,
     SVC_FORCE_UPDATE,
+    SVC_GET_FAN_PARAM,
+    SVC_SET_FAN_PARAM,
     SVC_SEND_PACKET,
 )
 
@@ -56,7 +61,7 @@ CONFIG_SCHEMA = vol.All(
     vol.Schema({DOMAIN: SCH_DOMAIN_CONFIG}, extra=vol.ALLOW_EXTRA),
 )
 
-PLATFORMS: Final[Platform] = (
+PLATFORMS: Final[tuple[Platform, ...]] = (
     Platform.BINARY_SENSOR,
     Platform.CLIMATE,
     Platform.SENSOR,
@@ -192,6 +197,14 @@ def async_register_domain_services(
     async def async_send_packet(call: ServiceCall) -> None:
         await broker.async_send_packet(call)
 
+    @verify_domain_control(hass, DOMAIN)
+    async def async_get_fan_param(call: ServiceCall) -> None:
+        await broker.async_get_fan_param(call)
+
+    @verify_domain_control(hass, DOMAIN)
+    async def async_set_fan_param(call: ServiceCall) -> None:
+        await broker.async_set_fan_param(call)
+
     hass.services.async_register(
         DOMAIN, SVC_BIND_DEVICE, async_bind_device, schema=SCH_BIND_DEVICE
     )
@@ -199,6 +212,15 @@ def async_register_domain_services(
         DOMAIN, SVC_FORCE_UPDATE, async_force_update, schema=SCH_NO_SVC_PARAMS
     )
 
+    hass.services.async_register(
+        DOMAIN, SVC_GET_FAN_PARAM, async_get_fan_param, schema=SCH_GET_FAN_PARAM
+    )
+
+    hass.services.async_register(
+        DOMAIN, SVC_SET_FAN_PARAM, async_set_fan_param, schema=SCH_SET_FAN_PARAM
+    )
+
+    # Advanced features
     if entry.options.get(CONF_ADVANCED_FEATURES, {}).get(CONF_SEND_PACKET):
         hass.services.async_register(
             DOMAIN, SVC_SEND_PACKET, async_send_packet, schema=SCH_SEND_PACKET
