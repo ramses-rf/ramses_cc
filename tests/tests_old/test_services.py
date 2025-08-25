@@ -84,7 +84,7 @@ NUM_DEVS_AFTER = 15  # proxy for success of cast_packets_to_rf()
 NUM_SVCS_AFTER = 10  # proxy for success
 NUM_ENTS_AFTER = 47  # proxy for success
 NUM_ENTS_AFTER_ALT = (
-    NUM_ENTS_AFTER - 0
+    NUM_ENTS_AFTER - 9
 )  # adjust number to subtract when adding sensors in sensors.py
 
 # format for datetime asserts, returns as: {'until': datetime.datetime(2025, 8, 11, 22, 11, 14, 774707)}
