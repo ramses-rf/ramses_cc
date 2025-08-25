@@ -83,12 +83,14 @@ NUM_DEVS_BEFORE = 3  # HGI, faked THM, faked REM
 NUM_DEVS_AFTER = 15  # proxy for success of cast_packets_to_rf()
 NUM_SVCS_AFTER = 10  # proxy for success
 NUM_ENTS_AFTER = 45  # proxy for success
-NUM_ENTS_AFTER_ALT = NUM_ENTS_AFTER - 7  # adjust number to subtract when adding sensors in sensors.py
+NUM_ENTS_AFTER_ALT = (
+    NUM_ENTS_AFTER - 3
+)  # adjust number to subtract when adding sensors in sensors.py
 
 # format for datetime asserts, returns as: {'until': datetime.datetime(2025, 8, 11, 22, 11, 14, 774707)}
 # we must round down to prev full hour to allow pytest server run time
 # this could still fail 1 sec after whole hour, so allow +/- 1 minute on test outcomes
-# no problem if datetime is in the past, it is not verified anywhere
+# no problem if datetime is in the past, as it is not verified anywhere
 
 # until an hour from "now",  min. 1, max. 24:
 _ASS_UNTIL = dt.now().replace(microsecond=0) + td(hours=1)
@@ -220,7 +222,7 @@ SERVICES = {
     SVC_SET_SYSTEM_MODE: (
         # validates extra schema in Ramses_cc ramses_rf built-in validation, by mocking
         "ramses_tx.command.Command.set_system_mode",  # small timing offset would often make tests fail, hence approx
-        # to catch nested entry schema, uses dedicated asserts than other services because values are adjusted
+        # to catch nested entry schema, uses dedicated asserts than other services because values are normalised
         SCH_SET_SYSTEM_MODE,
     ),
     SVC_SET_ZONE_CONFIG: (
@@ -230,7 +232,7 @@ SERVICES = {
     SVC_SET_ZONE_MODE: (
         # validates extra schema in Ramses_cc ramses_rf built-in validation, by mocking
         "ramses_tx.command.Command.set_zone_mode",  # small timing offset would often make tests fail, hence approx
-        # to catch nested entry schema, uses dedicated asserts than other services because values are adjusted
+        # to catch nested entry schema, uses dedicated asserts than other services because values are normalised
         SCH_SET_ZONE_MODE,
     ),
     SVC_SET_ZONE_SCHEDULE: (
@@ -280,7 +282,9 @@ async def _setup_via_entry_(
     try:
         assert len(broker._entities) == NUM_ENTS_AFTER  # proxy for success of above
     except AssertionError:
-        assert len(broker._entities) == NUM_ENTS_AFTER_ALT  # adjust when adding sensors etc
+        assert (
+            len(broker._entities) == NUM_ENTS_AFTER_ALT  # _setup_via_entry_
+        )  # adjust when adding sensors etc
 
     return entry
 

@@ -253,16 +253,6 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
             ATTR_SETPOINT: SZ_SETPOINT,
         },
     ),
-    # # duplicate? next one influences snaphot for REM
-    # RamsesSensorEntityDescription(
-    #     key=SZ_TEMPERATURE,
-    #     ramses_rf_class=HvacHumiditySensor,
-    #     ramses_rf_attr=SZ_TEMPERATURE,
-    #     name="Temperature",
-    #     device_class=SensorDeviceClass.TEMPERATURE,
-    #     native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-    #     entity_category=None,
-    # ),
     RamsesSensorEntityDescription(
         key=SZ_TEMPERATURE,
         ramses_rf_class=DhwSensor | OutSensor | Thermostat,
