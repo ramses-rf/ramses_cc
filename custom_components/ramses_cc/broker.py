@@ -273,21 +273,21 @@ class RamsesBroker:
             via_device = (DOMAIN, device.tcs.id)
         elif isinstance(device, Child) and device._parent:
             _LOGGER.info(f"CHILD {model} via_device SET to {device._parent}")
-            try:
-                # check for issue 249, not allowed after HA 2025.12
-                # see core/homeassistant/helpers/device_registry.py L968
-                _LOGGER.debug(f"Parent {device._parent} has id: {device._parent.id}")
-                via = device_registry.async_get(device._parent.id)
-                if via is None:
-                    _LOGGER.info(
-                        f"Parent device {device._parent} does not exist. Removing via"
-                    )
-                    via_device = None
-                else:
-                    via_device = (DOMAIN, device._parent.id)
-            except TransportSourceInvalid:
-                _LOGGER.info(f"Parent {device._parent} HAS NO ID")
-                via_device = None
+            # try:
+            #     # check for issue 249, not allowed after HA 2025.12
+            #     # see core/homeassistant/helpers/device_registry.py L968
+            #     _LOGGER.debug(f"Parent {device._parent} has id: {device._parent.id}")
+            #     via = device_registry.async_get(device._parent.id)
+            #     if via is None:
+            #         _LOGGER.info(
+            #             f"Parent device {device._parent} does not exist. Removing via"
+            #         )
+            #         via_device = None
+            #     else:
+            via_device = (DOMAIN, device._parent.id)
+            # except TransportSourceInvalid:
+            #     _LOGGER.info(f"Parent {device._parent} HAS NO ID")
+            #     via_device = None
         else:
             via_device = None
 
