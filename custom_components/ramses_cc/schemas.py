@@ -1,5 +1,6 @@
 """Schemas for RAMSES integration."""
 
+# ruff: noqa: I001  # Allow non-standard import order
 from __future__ import annotations
 
 import logging
@@ -28,6 +29,7 @@ from ramses_rf.schemas import (
     SZ_ZONES,
 )
 from ramses_tx.const import COMMAND_REGEX
+from ramses_tx import SZ_BOUND_TO
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
     SZ_PORT_CONFIG,
@@ -92,8 +94,14 @@ SCH_ADVANCED_FEATURES = vol.Schema(
     }
 )
 
+# Define the traits for FAN devices
+FAN_TRAITS = {
+    vol.Optional(SZ_BOUND_TO): vol.Match(r"^[0-9]{2}:[0-9]{6}$"),  # Device ID format
+    vol.Optional(CONF_COMMANDS): dict,
+}
+
 SCH_GLOBAL_TRAITS_DICT, SCH_TRAITS = sch_global_traits_dict_factory(
-    hvac_traits={vol.Optional(CONF_COMMANDS): dict}
+    hvac_traits=FAN_TRAITS
 )
 
 SCH_GATEWAY_CONFIG = SCH_GATEWAY_CONFIG.extend(
@@ -653,9 +661,62 @@ SCH_DELETE_COMMAND = cv.make_entity_service_schema(
     },
 )
 
+# Service schema for getting and setting fan parameters (using ramses_rf implementation)
+SVC_GET_FAN_PARAM: Final = "get_fan_param"
+SVC_GET_ALL_FAN_PARAMS: Final = "get_all_fan_params"
+SVC_SET_FAN_PARAM: Final = "set_fan_param"
+SVC_UPDATE_PARAMETERS: Final = "update_parameters"
+
+# Schema for_fan_param services
+# Note: Parameter validation is handled by ramses_rf
+_SCH_PARAM_ID = _SCH_DOM_IDX  # Reuse the same schema as domain index (2 hex digits)
+_SCH_VALUE = cv.string
+
+SCH_GET_ALL_FAN_PARAMS = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        vol.Optional("fan_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_GET_FAN_PARAM = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        vol.Optional("fan_id"): _SCH_DEVICE_ID,
+    }
+)
+
+SCH_SET_FAN_PARAM = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Required("value"): _SCH_VALUE,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        vol.Optional("fan_id"): _SCH_DEVICE_ID,
+    }
+)
 SVCS_RAMSES_REMOTE = {
     SVC_DELETE_COMMAND: SCH_DELETE_COMMAND,
     SVC_ADD_COMMAND: SCH_ADD_COMMAND,
     SVC_LEARN_COMMAND: SCH_LEARN_COMMAND,
     SVC_SEND_COMMAND: SCH_SEND_COMMAND,
+    SVC_GET_FAN_PARAM: SCH_GET_FAN_PARAM,
+    SVC_SET_FAN_PARAM: SCH_SET_FAN_PARAM,
 }
+
+# Service schemas for number platform
+SVCS_RAMSES_FAN_PARAM = {
+    SVC_GET_FAN_PARAM: SCH_GET_FAN_PARAM,
+    SVC_GET_ALL_FAN_PARAMS: SCH_GET_ALL_FAN_PARAMS,
+    SVC_SET_FAN_PARAM: SCH_SET_FAN_PARAM,
+}
+
+SCH_UPDATE_PARAMETERS = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): cv.string,
+    }
+)

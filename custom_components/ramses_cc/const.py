@@ -13,6 +13,7 @@ STORAGE_KEY: Final = DOMAIN
 # Dispatcher signals
 SIGNAL_NEW_DEVICES: Final = f"{DOMAIN}_new_devices_" + "{}"
 SIGNAL_UPDATE: Final = f"{DOMAIN}_update"
+SIGNAL_PARAM_SUPPORT_CHANGED: Final = f"{DOMAIN}_param_support_changed"
 
 # Config
 CONF_ADVANCED_FEATURES: Final = "advanced_features"
@@ -44,6 +45,7 @@ ATTR_DURATION: Final = "duration"
 ATTR_FAN_RATE: Final = "fan_rate"
 ATTR_FAULT_LOG: Final = "fault_log"
 ATTR_HEAT_DEMAND: Final = "heat_demand"
+ATTR_PARAM_ID: Final = "parameter_id"
 ATTR_HUMIDITY: Final = "relative_humidity"
 ATTR_INDOOR_HUMIDITY: Final = "indoor_humidity"
 ATTR_LATEST_EVENT: Final = "latest_event"
