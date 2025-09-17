@@ -408,7 +408,7 @@ SCH_SET_ZONE_MODE = cv.make_entity_service_schema(
 
 SCH_SET_ZONE_MODE_EXTRA = (
     vol.Schema(  # original Entity Service action validation schema
-        # vol.Msg(  # TODO turn on if good checks are working 8-2025
+        # vol.Msg(  # TODO turn msg on if checks are working 10-2025
         vol.Any(
             {  # A
                 vol.Required(ATTR_MODE): vol.In([ZoneMode.SCHEDULE]),
