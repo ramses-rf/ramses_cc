@@ -423,10 +423,11 @@ class RamsesZone(RamsesEntity, ClimateEntity):
 
     @callback
     def set_preset_mode(self, preset_mode: str) -> None:
-        """Set the preset mode; if 'None', revert to following the schedule."""
+        """Set the preset mode to one of None, Permanent, Temporary.
+        If 'None', revert to following the schedule."""
         self.async_set_zone_mode(
             mode=PRESET_HA_TO_ZONE[preset_mode],
-            setpoint=self.target_temperature if preset_mode == "permanent" else None,
+            setpoint=self.target_temperature if preset_mode != PRESET_NONE else None,
         )
 
     @callback
@@ -499,7 +500,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
 
         # strict, non-entity schema check
         checked_entry = SCH_SET_ZONE_MODE_EXTRA(entry)
-        # default `duration` of 1 hour updated by schema default, so can't use original
+        # default `duration` of 1 hour is updated by SCH_ default, so can't use original
 
         if until is None and "duration" in checked_entry:
             until = datetime.now() + checked_entry["duration"]  # move duration to until
