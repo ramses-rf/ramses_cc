@@ -428,7 +428,9 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         self.async_set_zone_mode(
             mode=PRESET_HA_TO_ZONE[preset_mode],
             setpoint=self.target_temperature if preset_mode != PRESET_NONE else None,
-            duration=timedelta(hours=1) if preset_mode == PRESET_TEMPORARY else None,  # why 1H?
+            duration=timedelta(hours=1)
+            if preset_mode == PRESET_TEMPORARY
+            else None,  # why 1H?
         )
 
     @callback
