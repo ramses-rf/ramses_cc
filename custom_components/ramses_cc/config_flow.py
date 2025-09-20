@@ -571,6 +571,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
             store = Store(self.hass, STORAGE_VERSION, STORAGE_KEY)
             stored_data: dict[str, Any] = await store.async_load() or {}
+
             if SZ_CLIENT_STATE in stored_data:
                 if user_input["clear_schema"]:
                     stored_data[SZ_CLIENT_STATE].pop(SZ_SCHEMA)
