@@ -34,7 +34,7 @@ from ramses_rf.system import Evohome, System, Zone
 from ramses_tx.address import pkt_addrs
 from ramses_tx.command import Command
 from ramses_tx.const import Code
-from ramses_tx.exceptions import PacketAddrSetInvalid, TransportSourceInvalid
+from ramses_tx.exceptions import PacketAddrSetInvalid  # , TransportSourceInvalid
 from ramses_tx.schemas import (
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST,
