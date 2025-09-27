@@ -557,6 +557,63 @@
             }
         },
 
+        "get_fan_param": {
+            "name": "FAN Parameter opvragen",
+            "description": "Vraag de huidige waarde op van een specifieke instelling (2411) van een FAN-apparaat.",
+            "fields": {
+                "device_id": {
+                    "name": "Apparaat ID",
+                    "description": "Voer een (FAN) apparaat ID in, in formaat XX:XXXXXX"
+                },
+                "param_id": {
+                    "name": "Parameter ID",
+                    "description": "De parameter identifier om op te vragen. Voer een geldige parameter ID in (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4E, 52, 54, 75, 95)"
+                },
+                "from_id": {
+                    "name": "Bron Apparaat ID",
+                    "description": "Optioneel bron apparaat ID voor het verzoek (standaard is gebonden REM of HGI gateway). Voer een apparaat ID in, in formaat XX:XXXXXX"
+                }
+            }
+        },
+
+        "set_fan_param": {
+            "name": "FAN Parameter instellen",
+            "description": "Stel de waarde in van een specifieke instelling (2411) op een FAN-apparaat.",
+            "fields": {
+                "device_id": {
+                    "name": "Apparaat ID",
+                    "description": "Voer een (FAN) apparaat ID in, in formaat XX:XXXXXX"
+                },
+                "param_id": {
+                    "name": "Parameter ID",
+                    "description": "De parameter identifier om in te stellen. Voer een geldige parameter ID in (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4E, 52, 54, 75, 95)"
+                },
+                "value": {
+                    "name": "Waarde",
+                    "description": "De waarde om in te stellen voor de parameter (bereik hangt af van parameter type). Voorbeelden: Sensor gevoeligheid (52): 0-25, Comfort temperatuur (75): 5-35°C, Ventilator snelheid (31): 0-100%"
+                },
+                "from_id": {
+                    "name": "Bron Apparaat ID",
+                    "description": "Optioneel bron apparaat ID voor het verzoek (standaard is gebonden REM of HGI gateway). Voer een apparaat ID in, in formaat XX:XXXXXX"
+                }
+            }
+        },
+
+        "update_fan_params": {
+            "name": "FAN Parameters bijwerken",
+            "description": "Vraag alle beschikbare instellingen (2411) op van een FAN. Dit werkt alle parameter entiteiten bij voor het apparaat.",
+            "fields": {
+                "device_id": {
+                    "name": "Apparaat ID",
+                    "description": "De unieke identifier van het FAN-apparaat om op te vragen. Voer een apparaat ID in, in formaat XX:XXXXXX"
+                },
+                "from_id": {
+                    "name": "Bron Apparaat ID",
+                    "description": "Optioneel bron apparaat ID voor het verzoek (standaard is gebonden REM of HGI gateway). Voer een apparaat ID in, in formaat XX:XXXXXX"
+                }
+            }
+        },
+
         "send_command": {
             "name": "Verstuur Afstandsbediening-commando",
             "description": "Verstuurt een RAMSES commando alsof afkomstig van een afstandsbediening. Dit is een makkelijke actie voor HA's eigen `send_command` actie. Het apparaat moet in de `known_list` als `faked` staan en als schakelaar zijn gekoppeld aan een fan/ventilatie-unit.",
