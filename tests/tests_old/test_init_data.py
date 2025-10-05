@@ -84,7 +84,9 @@ async def _test_common(hass: HomeAssistant, entry: ConfigEntry, rf: VirtualRf) -
     assert len(gwy.devices) == NUM_DEVS_SETUP
     assert gwy.config.disable_discovery is True
 
-    await cast_packets_to_rf(rf, f"{TEST_DIR}/system_1.log", gwy=gwy)
+    await cast_packets_to_rf(
+        rf, f"{TEST_DIR}/system_1.log", gwy=gwy
+    )  # <<< issue 249 happens here
     assert len(gwy.devices) == NUM_DEVS_AFTER  # adjust when adding sensors etc
 
     assert len(hass.services.async_services_for_domain(DOMAIN)) == NUM_SVCS_AFTER
@@ -95,11 +97,11 @@ async def _test_common(hass: HomeAssistant, entry: ConfigEntry, rf: VirtualRf) -
     await broker.async_update()
     await hass.async_block_till_done()
 
-    # for x in broker._entities:  # debug issue 278
+    # for x in broker._entities:  # debug issue 278, 249
     #     if x not in EXPECTED_ENTITIES:
     #         print("_test_common extra: " + str(x))
     assert not [x for x in broker._entities if x not in EXPECTED_ENTITIES]  # extras
-    # for x in EXPECTED_ENTITIES:  # debug issue 278
+    # for x in EXPECTED_ENTITIES:  # debug issue 278, 249
     #     if x not in broker._entities:
     #         print("_test_common missing: " + str(x))
     assert not [x for x in EXPECTED_ENTITIES if x not in broker._entities]  # missing
@@ -162,6 +164,7 @@ async def test_services_entry_(
 
     #
     try:
+        pass
         await _test_common(hass, entry, rf)
         # await _test_names(hass, entry, rf)
     finally:

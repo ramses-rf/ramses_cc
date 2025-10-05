@@ -2,13 +2,13 @@
 2024-01-01T00:00:01.001000 045 RP --- 01:145038 18:006402 --:------ 000C 006 000F0035D5B1  # {'domain_id': 'FC', 'zone_type': '0F', 'device_role': 'appliance_control', 'devices': ['13:120241']}
 2024-01-01T00:00:01.002000 045 RP --- 01:145038 18:006402 --:------ 000C 006 000E0035D5B2  # {'domain_id': 'FA', 'zone_type': '0E', 'device_role': 'hotwater_valve',    'devices': ['13:120242']}
 2024-01-01T00:00:01.003000 045 RP --- 01:145038 18:006402 --:------ 000C 006 010E7FFFFFFF  # {'domain_id': 'F9', 'zone_type': '0E', 'device_role': 'heating_valve',     'devices': []}
-2024-01-01T00:00:01.004000 045 RP --- 01:145038 18:006402 --:------ 000C 006 000D001CB763  # {'domain_id': 'FA', 'zone_type': '0D', 'device_role': 'dhw_sensor',        'devices': ['07:046947']}
+2024-01-01T00:00:01.004000 045 RP --- 01:145038 18:006402 --:------ 000C 006 000D001CB763  # {'domain_id': 'FA', 'zone_type': '0D', 'device_role': 'dhw_sensor',        'devices': ['07:046947']}  # this line causes issue, with the next 2 sets
 
 2024-01-01T00:00:02.001000 045 RP --- 01:145038 18:006402 --:------ 000C 006 020400896853  # {'zone_idx':  '02', 'zone_type': '04', 'device_role': 'zone_sensor',  'devices': ['34:092243']}
-2024-01-01T00:00:02.002000 045 RP --- 01:145038 18:006402 --:------ 000C 006 02080010DAF5  # {'zone_idx':  '02', 'zone_type': '08', 'device_role': 'rad_actuator', 'devices': ['04:056053']}
+2024-01-01T00:00:02.002000 045 RP --- 01:145038 18:006402 --:------ 000C 006 02080010DAF5  # {'zone_idx':  '02', 'zone_type': '08', 'device_role': 'rad_actuator', 'devices': ['04:056053']}  # ...and this set is in together with the next set:
 
 2024-01-01T00:00:02.003000 045 RP --- 01:145038 18:006402 --:------ 000C 006 0A04005A23FD  # {'zone_idx':  '0A', 'zone_type': '04', 'device_role': 'zone_sensor',  'devices': ['22:140285']}
-2024-01-01T00:00:02.004000 045 RP --- 01:145038 18:006402 --:------ 000C 006 0A080012E29A  # {'zone_idx':  '0A', 'zone_type': '08', 'device_role': 'rad_actuator', 'devices': ['04:189082']}
+2024-01-01T00:00:02.004000 045 RP --- 01:145038 18:006402 --:------ 000C 006 0A080012E29A  # {'zone_idx':  '0A', 'zone_type': '08', 'device_role': 'rad_actuator', 'devices': ['04:189082']} # this line together with the one before causes non-existing via_device error
 
 2024-01-01T00:00:03.001000 045 RP --- 01:145038 18:006402 --:------ 0004 022 02004B69746368656E00000000000000000000000000  # {'zone_idx': '02', 'name': 'Kitchen'}
 2024-01-01T00:00:03.002000 045 RP --- 01:145038 18:006402 --:------ 0004 022 0A004F66666963650000000000000000000000000000  # {'zone_idx': '04', 'name': 'Office'}
