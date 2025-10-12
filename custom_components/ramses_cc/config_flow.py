@@ -40,6 +40,7 @@ from ramses_tx.schemas import (
     SZ_ROTATE_BACKUPS,
     SZ_ROTATE_BYTES,
     SZ_SERIAL_PORT,
+    SZ_SQLITE_INDEX,
 )
 
 from .const import (
@@ -247,7 +248,10 @@ class BaseRamsesFlow(FlowHandler):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Gateway config step."""
-        managed_keys = (SZ_ENFORCE_KNOWN_LIST,)
+        managed_keys = (
+            SZ_ENFORCE_KNOWN_LIST,
+            SZ_SQLITE_INDEX,  # temporary 0.52.x dev option
+        )
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
         self.get_options()  # not available during init
@@ -344,6 +348,9 @@ class BaseRamsesFlow(FlowHandler):
             if not errors:
                 self.options[CONF_SCHEMA] = user_input.get(CONF_SCHEMA, {})
                 self.options[SZ_KNOWN_LIST] = user_input.get(SZ_KNOWN_LIST, {})
+                self.options[CONF_RAMSES_RF][SZ_ENFORCE_KNOWN_LIST] = user_input[
+                    SZ_ENFORCE_KNOWN_LIST
+                ]
                 self.options[CONF_RAMSES_RF][SZ_ENFORCE_KNOWN_LIST] = user_input[
                     SZ_ENFORCE_KNOWN_LIST
                 ]

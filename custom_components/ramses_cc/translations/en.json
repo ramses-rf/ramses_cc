@@ -42,11 +42,14 @@
                 "title": "Gateway configuration",
                 "data": {
                     "scan_interval": "Scan interval",
-                    "ramses_rf": "Advanced ramses_rf gateway configuration"
+                    "ramses_rf": "Advanced ramses_rf gateway configuration",
+                    "sqlite_index": "Use SQLite MessageIndex"
                 },
                 "data_description": {
                     "scan_interval": "How often to poll for changes in state. Values below 60 or above 180 are not recommended.",
-                    "ramses_rf": "Not required for typical use."
+                    "ramses_rf": "Not required for typical use.",
+                    "sqlite_index": "Experimental! under development. May miss messages or log errors"
+
                 }
             },
             "schema": {
@@ -130,11 +133,15 @@
                 "title": "Gateway configuration",
                 "data": {
                     "scan_interval": "Scan interval",
-                    "ramses_rf": "Advanced ramses_rf gateway configuration"
+                    "ramses_rf": "Advanced ramses_rf gateway configuration",
+                    "sqlite_index": "Use SQLite MessageIndex"
+
                 },
                 "data_description": {
                     "scan_interval": "How often to poll for changes in state. Values below 60 or above 180 are not recommended.",
-                    "ramses_rf": "Not required for typical use."
+                    "ramses_rf": "Not required for typical use.",
+                    "sqlite_index": "Experimental! under development. May miss messages or log errors"
+
                 }
             },
             "schema": {
