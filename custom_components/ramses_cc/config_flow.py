@@ -355,7 +355,7 @@ class BaseRamsesFlow(FlowHandler):
         """System schema step."""
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
-        self.get_options()  # not available during init
+        self.get_options()  # was not available during init
 
         if user_input is not None:
             suggested_values = user_input

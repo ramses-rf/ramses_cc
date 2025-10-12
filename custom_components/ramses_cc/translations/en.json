@@ -133,15 +133,11 @@
                 "title": "Gateway configuration",
                 "data": {
                     "scan_interval": "Scan interval",
-                    "ramses_rf": "Advanced ramses_rf gateway configuration",
-                    "sqlite_index": "Use SQLite MessageIndex"
-
+                    "ramses_rf": "Advanced ramses_rf gateway configuration"
                 },
                 "data_description": {
                     "scan_interval": "How often to poll for changes in state. Values below 60 or above 180 are not recommended.",
-                    "ramses_rf": "Not required for typical use.",
-                    "sqlite_index": "Experimental! under development. May miss messages or log errors"
-
+                    "ramses_rf": "Not required for typical use."
                 }
             },
             "schema": {
@@ -150,12 +146,14 @@
                 "data": {
                     "schema": "System schema(s)",
                     "known_list": "Known device IDs",
-                    "enforce_known_list": "Accept packets from known devices IDs only"
+                    "enforce_known_list": "Accept packets from known devices IDs only",
+                    "sqlite_index": "Use SQLite MessageIndex"
                 },
                 "data_description": {
                     "schema": "A mapping of system device IDs to their respective schemas. This should be kept minimal and only contain devices that are not automatically discovered.",
                     "known_list": "A mapping of known device IDs and optionally their traits.",
-                    "enforce_known_list": "Recommended once you have entered all your device IDs as the RAMSES II protocol does not include error correction and corrupt device IDs are common. After activating, clear the discovered system schemas cache before restarting."
+                    "enforce_known_list": "Recommended once you have entered all your device IDs as the RAMSES II protocol does not include error correction and corrupt device IDs are common. After activating, clear the discovered system schemas cache before restarting.",
+                    "sqlite_index": "Experimental! under development. May miss messages or log errors"
                 }
             },
             "advanced_features": {

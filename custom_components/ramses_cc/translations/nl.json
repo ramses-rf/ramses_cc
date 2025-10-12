@@ -42,13 +42,11 @@
                 "title": "Gateway-configuratie",
                 "data": {
                     "scan_interval": "Scan-interval",
-                    "ramses_rf": "Geavanceerde instellingen ramses_rf gateway",
-                    "sqlite_index": "Gebruik SQLite MessageIndex"
+                    "ramses_rf": "Geavanceerde instellingen ramses_rf gateway"
                 },
                 "data_description": {
                     "scan_interval": "Hoe vaak opvragen (pollen) voor wijzigingen? Advies: waarde tussen 60 en 180 s.",
-                    "ramses_rf": "Voor standaardgebruik niet vereist.",
-                    "sqlite_index": "Experimenteel/in ontwikkeling! Kan berichten missen en fouten loggen"
+                    "ramses_rf": "Voor standaardgebruik niet vereist."
                 }
             },
             "schema": {
@@ -57,12 +55,14 @@
                 "data": {
                     "schema": "Systeemschema(s)",
                     "known_list": "Erkende device_id's",
-                    "enforce_known_list": "Accepteer alleen berichten van erkende device ID's"
+                    "enforce_known_list": "Accepteer alleen berichten van erkende device ID's",
+                    "sqlite_index": "Gebruik SQLite MessageIndex"
                 },
                 "data_description": {
                     "schema": "Een mapping van systeem device-ID's naar hun schema's. Houd dit eenvoudig en vermeld alleen devices die niet automatisch verschijnen.",
                     "known_list": "Een mapping van erkende device-ID's en (optioneel) hun kenmerken.",
-                    "enforce_known_list": "Aanbevolen om in te schakelen zodra alle device_id's zijn ingevuld. Het RAMSES II-protocol biedt namelijk geen foutcorrectie en corrupte device_id's komen vaak voor. Wis wel 1x de systeem-cache nadat je deze optie activeert."
+                    "enforce_known_list": "Aanbevolen om in te schakelen zodra alle device_id's zijn ingevuld. Het RAMSES II-protocol biedt namelijk geen foutcorrectie en corrupte device_id's komen vaak voor. Wis wel 1x de systeem-cache nadat je deze optie activeert.",
+                    "sqlite_index": "Experimenteel in ontwikkeling! Kan berichten missen en fouten loggen"
                 }
             },
             "advanced_features": {
@@ -132,13 +132,11 @@
                 "title": "Gateway-configuratie",
                 "data": {
                     "scan_interval": "Scan-interval",
-                    "ramses_rf": "Geavanceerde ramses_rf gateway-configuratie",
-                    "sqlite_index": "Gebruik SQLite MessageIndex"
+                    "ramses_rf": "Geavanceerde ramses_rf gateway-configuratie"
                 },
                 "data_description": {
                     "scan_interval": "Hoe vaak opvragen (pollen) voor wijzigingen? Advies: waarde tussen 60 en 180s.",
-                    "ramses_rf": "Voor standaardgebruik niet vereist.",
-                    "sqlite_index": "Experimenteel/in ontwikkeling! Kan berichten missen en fouten loggen"
+                    "ramses_rf": "Voor standaardgebruik niet vereist."
                 }
             },
             "schema": {
@@ -147,12 +145,14 @@
                 "data": {
                     "schema": "Systeemschema('s)",
                     "known_list": "Erkende device_id's",
-                    "enforce_known_list": "Accepteer alleen berichten van erkende device ID's"
+                    "enforce_known_list": "Accepteer alleen berichten van erkende device ID's",
+                    "sqlite_index": "Gebruik SQLite MessageIndex"
                 },
                 "data_description": {
                     "schema": "Een mapping van systeem device-ID's naar hun schema's. Houd dit eenvoudig en vermeld alleen devices die niet automatisch verschijnen.",
                     "known_list": "Een mapping van erkende device-ID's en (optioneel) hun kenmerken.",
-                    "enforce_known_list": "Aanbevolen zodra alle device-ID's zijn ingevuld, omdat het RAMSES II-protocol geen foutcorrectie biedt en corrupte device-ID's vaak voorkomen."
+                    "enforce_known_list": "Aanbevolen zodra alle device-ID's zijn ingevuld, omdat het RAMSES II-protocol geen foutcorrectie biedt en corrupte device-ID's vaak voorkomen.",
+                    "sqlite_index": "Experimenteel in ontwikkeling! Kan berichten missen en fouten loggen"
                 }
             },
             "advanced_features": {
