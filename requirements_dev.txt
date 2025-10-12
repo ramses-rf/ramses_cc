@@ -7,7 +7,7 @@
 
   aiousbwatcher         >= 1.1.1                 # as per: manifest.json latest: 1.1.1
   pyserial-asyncio-fast >= 0.14                  # as per: manifest.json latest: 0.16
-  ramses_rf             == 0.51.8                # as per: manifest.json latest:
+  ramses_rf             == 0.51.9                # as per: manifest.json latest:
 
 
 
