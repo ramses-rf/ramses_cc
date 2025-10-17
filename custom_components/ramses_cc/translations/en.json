@@ -48,7 +48,7 @@
                 "data_description": {
                     "scan_interval": "How often to poll for changes in state. Values below 60 or above 180 are not recommended.",
                     "ramses_rf": "Not required for typical use.",
-                    "sqlite_index": "Experimental! under development. May miss messages or log errors"
+                  "sqlite_index": "Under development! May miss messages or log errors. (restart required)"
 
                 }
             },
