@@ -40,6 +40,7 @@ from ramses_tx.schemas import (
     SZ_ROTATE_BACKUPS,
     SZ_ROTATE_BYTES,
     SZ_SERIAL_PORT,
+    SZ_SQLITE_INDEX,
 )
 
 from .const import (
@@ -247,7 +248,10 @@ class BaseRamsesFlow(FlowHandler):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Gateway config step."""
-        managed_keys = (SZ_ENFORCE_KNOWN_LIST,)
+        managed_keys = (
+            SZ_ENFORCE_KNOWN_LIST,
+            SZ_SQLITE_INDEX,  # temporary 0.52.x dev option
+        )
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
         self.get_options()  # not available during init
@@ -322,7 +326,7 @@ class BaseRamsesFlow(FlowHandler):
         """System schema step."""
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
-        self.get_options()  # not available during init
+        self.get_options()  # was not available during init
 
         if user_input is not None:
             suggested_values = user_input
@@ -347,6 +351,9 @@ class BaseRamsesFlow(FlowHandler):
                 self.options[CONF_RAMSES_RF][SZ_ENFORCE_KNOWN_LIST] = user_input[
                     SZ_ENFORCE_KNOWN_LIST
                 ]
+                self.options[CONF_RAMSES_RF][SZ_SQLITE_INDEX] = user_input[
+                    SZ_SQLITE_INDEX  # temporary 0.52.x dev option
+                ]
                 if self._initial_setup:
                     return await self.async_step_advanced_features()
                 return self._async_save()
@@ -356,6 +363,9 @@ class BaseRamsesFlow(FlowHandler):
                 SZ_KNOWN_LIST: self.options.get(SZ_KNOWN_LIST),
                 SZ_ENFORCE_KNOWN_LIST: self.options[CONF_RAMSES_RF].get(
                     SZ_ENFORCE_KNOWN_LIST
+                ),
+                SZ_SQLITE_INDEX: self.options[CONF_RAMSES_RF].get(
+                    SZ_SQLITE_INDEX  # temporary 0.52.x dev option
                 ),
             }
 
@@ -374,6 +384,11 @@ class BaseRamsesFlow(FlowHandler):
                 description={
                     "suggested_value": suggested_values.get(SZ_ENFORCE_KNOWN_LIST)
                 },
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                SZ_SQLITE_INDEX,  # temporary 0.52.x dev option
+                default=False,
+                description={"suggested_value": suggested_values.get(SZ_SQLITE_INDEX)},
             ): selector.BooleanSelector(),
         }
 
