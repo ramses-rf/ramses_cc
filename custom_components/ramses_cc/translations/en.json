@@ -153,7 +153,7 @@
                     "schema": "A mapping of system device IDs to their respective schemas. This should be kept minimal and only contain devices that are not automatically discovered.",
                     "known_list": "A mapping of known device IDs and optionally their traits.",
                     "enforce_known_list": "Recommended once you have entered all your device IDs as the RAMSES II protocol does not include error correction and corrupt device IDs are common. After activating, clear the discovered system schemas cache before restarting.",
-                    "sqlite_index": "Experimental! under development. May miss messages or log errors"
+                    "sqlite_index": "Under development! May miss messages or log errors. (restart required)"
                 }
             },
             "advanced_features": {
