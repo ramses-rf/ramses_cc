@@ -548,6 +548,24 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         super().__init__(broker, device, entity_description)
 
         self.entity_id = ENTITY_ID_FORMAT.format(device.id)
+        self._device = device
+        self._bound_rem = None
+
+    async def async_added_to_hass(self) -> None:
+        """Called when entity is added to Home Assistant."""
+        await super().async_added_to_hass()
+        # If your device already has a bound REM:
+        self._bound_rem = self._device.get_bound_rem()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional info about the HVAC."""
+        data = {}
+        # Use cached bound_rem or fetch fresh one if not yet set
+        bound_rem = self._bound_rem or self._device.get_bound_rem()
+        if bound_rem:
+            data["bound_rem"] = bound_rem  # already a string ID
+        return data
 
     @property
     def current_humidity(self) -> int | None:
