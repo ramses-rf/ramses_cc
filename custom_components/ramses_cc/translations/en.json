@@ -42,11 +42,11 @@
                 "title": "Gateway configuration",
                 "data": {
                     "scan_interval": "Scan interval",
-                    "ramses_rf": "Advanced ramses_rf gateway configuration",
+                    "ramses_rf": "Advanced ramses_rf gateway configuration"
                 },
                 "data_description": {
                     "scan_interval": "How often to poll for changes in state. Values below 60 or above 180 are not recommended.",
-                    "ramses_rf": "Not required for typical use.",
+                    "ramses_rf": "Not required for typical use."
                 }
             },
             "schema": {
