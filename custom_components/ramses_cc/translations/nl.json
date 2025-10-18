@@ -152,7 +152,7 @@
                     "schema": "Een mapping van systeem device-ID's naar hun schema's. Houd dit eenvoudig en vermeld alleen devices die niet automatisch verschijnen.",
                     "known_list": "Een mapping van erkende device-ID's en (optioneel) hun kenmerken.",
                     "enforce_known_list": "Aanbevolen zodra alle device-ID's zijn ingevuld, omdat het RAMSES II-protocol geen foutcorrectie biedt en corrupte device-ID's vaak voorkomen.",
-                  "sqlite_index": "In ontwikkeling! Kan berichten missen en fouten loggen. (herstart vereist)"
+                    "sqlite_index": "In ontwikkeling! Kan berichten missen en fouten loggen. (herstart vereist)"
                 }
             },
             "advanced_features": {
