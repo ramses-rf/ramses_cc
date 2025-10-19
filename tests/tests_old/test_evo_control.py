@@ -58,11 +58,13 @@ async def instantiate_entities(
             port_name=None, input_file=f, config={"disable_discovery": True}
         )
         await gwy.start()
-        await gwy.stop()  # have to stop MessageIndex thread, aka: gwy._zzz.stop()
+        await gwy.stop()  # have to stop MessageIndex thread, aka: gwy.msg_db.stop()
 
     broker: RamsesBroker = MockRamsesBroker(hass)
 
     # climate entities (TCS, zones)
+    print("EBR DEBUG Zones")
+    print(gwy.systems)
     rf_climates = [s for s in gwy.systems if isinstance(s, Evohome)]
     rf_climates += [z for s in gwy.systems for z in s.zones if isinstance(s, Evohome)]
 

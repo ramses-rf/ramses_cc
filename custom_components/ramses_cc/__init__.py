@@ -341,6 +341,8 @@ class RamsesEntity(Entity):
                 for k, v in self.entity_description.ramses_cc_extra_attributes.items()
                 if hasattr(self._device, v)
             }
+        print("EBR debug extra_state_attributes")
+        print(attrs)
         return attrs
 
     async def async_added_to_hass(self) -> None:
