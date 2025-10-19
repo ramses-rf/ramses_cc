@@ -128,7 +128,7 @@ async def test_namespace(hass: HomeAssistant) -> None:
     # evo_control uses: the working_schema
     schema = binary.extra_state_attributes["working_schema"]
     assert schema["stored_hotwater"] == SCHEMA["stored_hotwater"]
-    # turn off to debug EBR assert schema["zones"] == SCHEMA["zones"]
+    assert schema["zones"] == SCHEMA["zones"]  # EBR missing zone name
 
     #
     # evo_control uses: binary_sensor.${i}_battery_low
