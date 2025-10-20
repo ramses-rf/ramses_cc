@@ -587,8 +587,8 @@ class RamsesBroker:
         :param device: The device to update in the registry
         :type device: RamsesRFEntity
         """
-        if hasattr(device, "_name") and device._name:
-            name = device._name  # only used for Zones _0004?
+        if hasattr(device, "name") and device.name:
+            name = device.name  # only used for Zones _0004?
         elif isinstance(device, System):
             name = f"Controller {device.id}"
         elif device._SLUG:
