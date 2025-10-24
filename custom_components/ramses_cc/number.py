@@ -176,7 +176,9 @@ async def async_setup_entry(
                     await entity._request_parameter_value()
 
     # Register the callback with the broker
-    broker.async_register_platform(platform, add_devices)
+    broker.async_register_platform(platform, add_devices)  # looks circular
+    # TODO(wi): mypy Expected type '(Entity) -> None',
+    # TODO got '(devices: list[Entity | RamsesNumberParam]) -> Coroutine[Any, Any, None]' instead
 
     # Load any existing devices that were discovered before platform registration
     if hasattr(broker, "devices") and broker.devices:
@@ -210,6 +212,9 @@ async def async_setup_entry(
             await add_devices(fan_devices)
 
 
+# TODO(wi): fix sphinx error in this class:
+# AttributeError: type object 'RamsesNumberBase' has no attribute '_RamsesNumberBase__attr_entity_category'
+# skipping in sphinx_apidoc because of errors. BTW: same error as class RamsesWaterHeater in water_heater.py
 class RamsesNumberBase(RamsesEntity, NumberEntity):
     """Base class for all RAMSES number entities.
 
@@ -225,11 +230,14 @@ class RamsesNumberBase(RamsesEntity, NumberEntity):
     :vartype _attr_entity_category: str
     """
 
+    # TODO(wi): fix sphinx error in this class:
+    # AttributeError: type object 'RamsesNumberBase' has no attribute '_RamsesNumberBase__attr_entity_category'
+
     entity_description: RamsesNumberEntityDescription
     _attr_should_poll = (
         False  # Disable polling by default, can be overridden by subclasses
     )
-    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_category: EntityCategory = EntityCategory.CONFIG
     _is_pending: bool = False
     _pending_value: float | None = None
 
@@ -1005,6 +1013,7 @@ async def async_create_parameter_entities(
         unique_id = f"{device_id}_param_{param_id.lower()}"
 
         # If the entity is already in the HA entity registry, don't create it.
+        # TODO(wi): we have getOrCreate() for that ?
         # HA will restore it from the registry, and we'll pick it up there.
         if unique_id in existing_entities:
             entity_id = existing_entities[unique_id]
@@ -1019,6 +1028,8 @@ async def async_create_parameter_entities(
             # Set the entity key to just the parameter ID - the RamsesNumberParam will handle the full ID
             if not description.key:
                 description.key = f"param_{param_id.lower()}"
+                # sphinx error caused here?
+                # TODO(wi): 'RamsesNumberEntityDescription' object attribute 'key' is read-only
 
             entity = description.ramses_cc_class(broker, device, description)
             entities.append(entity)

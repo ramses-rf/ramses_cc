@@ -21,7 +21,7 @@ repos:
           - --py311-plus
           - --force
           - --keep-updates
-        files: ^(custom_components|tests)/.+\.py$
+        files: ^(custom_components|tests|docs)/.+\.py$
 
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1

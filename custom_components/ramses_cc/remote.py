@@ -92,11 +92,15 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Delete commands from the database.
 
-        service: remote.delete_command
-        data:
-          command: boost
-        target:
-          entity_id: remote.device_id
+        Usage:
+
+        .. code-block::
+
+            service: remote.delete_command
+            data:
+              command: boost
+            target:
+              entity_id: remote.device_id
         """
 
         # HACK to make ramses_cc call work as per HA service call
@@ -116,12 +120,16 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Learn a command from a device (remote) and add to the database.
 
-        service: remote.learn_command
-        data:
-          command: boost
-          timeout: 3
-        target:
-          entity_id: remote.device_id
+        Usage:
+
+        .. code-block::
+
+            service: remote.learn_command
+            data:
+              command: boost
+              timeout: 3
+            target:
+              entity_id: remote.device_id
         """
 
         # HACK to make ramses_cc call work as per HA service call
@@ -172,13 +180,17 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Send commands from a device (remote).
 
-        service: remote.send_command
-        data:
-          command: boost
-          delay_secs: 0.05
-          num_repeats: 3
-        target:
-          entity_id: remote.device_id
+        Usage:
+
+        .. code-block::
+
+            service: remote.send_command
+            data:
+              command: boost
+              delay_secs: 0.05
+              num_repeats: 3
+            target:
+              entity_id: remote.device_id
         """
 
         # HACK to make ramses_cc call work as per HA service call
@@ -213,12 +225,16 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Directly add (or replace) a command without RF learning.
 
-        service: remote.add_command
-        data:
-          command: boost
-          packet_string: "RQ --- 29:162275 30:123456 --:------ 22F1 003 000030"
-        target:
-          entity_id: remote.device_id
+        Usage:
+
+        .. code-block::
+
+            service: remote.add_command
+            data:
+              command: boost
+              packet_string: "RQ --- 29:162275 30:123456 --:------ 22F1 003 000030"
+            target:
+              entity_id: remote.device_id
         """
 
         command = [command] if isinstance(command, str) else list(command)
