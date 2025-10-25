@@ -361,7 +361,7 @@ class RamsesBroker:
         _LOGGER.debug("Platform unload completed with result: %s", result)
         return result
 
-    async def _async_create_parameter_entities(self, device: RamsesRFEntity) -> None:
+    def _create_parameter_entities(self, device: RamsesRFEntity) -> None:
         """Create parameter entities for a device that supports 2411 parameters.
 
         This method creates Home Assistant number entities for all 2411 parameters
@@ -384,11 +384,11 @@ class RamsesBroker:
             )
             return
 
-        from .number import async_create_parameter_entities
+        from .number import create_parameter_entities
 
-        entities = await async_create_parameter_entities(self, device)
+        entities = create_parameter_entities(self, device)
         _LOGGER.debug(
-            "async_create_parameter_entities returned %d entities for %s",
+            "create_parameter_entities returned %d entities for %s",
             len(entities),
             device_id,
         )
@@ -508,7 +508,7 @@ class RamsesBroker:
                         device.id,
                     )
                     # Create parameter entities after first message is received
-                    await self._async_create_parameter_entities(device)
+                    self._create_parameter_entities(device)
                     # Request all parameters after creating entities (non-blocking if fails)
                     call: dict[str, Any] = {
                         "device_id": device.id,
@@ -559,7 +559,7 @@ class RamsesBroker:
                         "Device %s already initialized, creating parameter entities and requesting parameters",
                         device.id,
                     )
-                    await self._async_create_parameter_entities(device)
+                    self._create_parameter_entities(device)
                     async_dispatcher_send(
                         self.hass,
                         SIGNAL_NEW_DEVICES.format("number"),

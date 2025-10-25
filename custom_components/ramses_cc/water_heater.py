@@ -69,7 +69,24 @@ async def async_setup_entry(
 
 
 class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
-    """Representation of a Rames DHW controller."""
+    """Representation of a Rames DHW controller.
+
+    This class provides control over RAMSES domestic hot water (DHW) zones,
+    including temperature control and operating mode management.
+
+    :cvar _attr_icon: Icon to display in the UI
+    :vartype _attr_icon: str
+    :cvar _attr_max_temp: Maximum allowed temperature setpoint
+    :vartype _attr_max_temp: float
+    :cvar _attr_min_temp: Minimum allowed temperature setpoint
+    :vartype _attr_min_temp: float
+    :cvar _attr_operation_list: List of available operation modes
+    :vartype _attr_operation_list: list[str]
+    :cvar _attr_supported_features: Bitmask of supported water heater features
+    :vartype _attr_supported_features: int
+    :cvar _attr_temperature_unit: Temperature unit for the water heater
+    :vartype _attr_temperature_unit: UnitOfTemperature
+    """
 
     _device: DhwZone
 
