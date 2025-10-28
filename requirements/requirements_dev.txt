@@ -7,7 +7,7 @@
 
   aiousbwatcher         >= 1.1.1                 # as per: manifest.json latest: 1.1.1
   pyserial-asyncio-fast >= 0.14                  # as per: manifest.json latest: 0.16
-  ramses-rf             == 0.52.1                # as per: manifest.json latest:
+  ramses-rf             == 0.52.2                # as per: manifest.json latest:
 
 # libraries required for development (lint/type/test)...
 # - pip list | grep -E 'pre-commit|ruff|mypy|types-|voluptuous'
