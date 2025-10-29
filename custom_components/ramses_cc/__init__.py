@@ -41,11 +41,17 @@ from .const import (
 from .schemas import (
     SCH_BIND_DEVICE,
     SCH_DOMAIN_CONFIG,
+    SCH_GET_FAN_PARAM,
     SCH_NO_SVC_PARAMS,
     SCH_SEND_PACKET,
+    SCH_SET_FAN_PARAM,
+    SCH_UPDATE_FAN_PARAMS,
     SVC_BIND_DEVICE,
     SVC_FORCE_UPDATE,
+    SVC_GET_FAN_PARAM,
     SVC_SEND_PACKET,
+    SVC_SET_FAN_PARAM,
+    SVC_UPDATE_FAN_PARAMS,
     SVCS_RAMSES_CLIMATE,
     SVCS_RAMSES_REMOTE,
     SVCS_RAMSES_SENSOR,
@@ -63,12 +69,13 @@ CONFIG_SCHEMA = vol.All(
     cv.deprecated(DOMAIN, raise_if_present=False),
     vol.Schema({DOMAIN: SCH_DOMAIN_CONFIG}, extra=vol.ALLOW_EXTRA),
 )
-
-PLATFORMS: Final[Platform] = (
+# seems not being used ...
+PLATFORMS: Final[tuple[Platform, ...]] = (
     Platform.BINARY_SENSOR,
     Platform.CLIMATE,
-    Platform.SENSOR,
+    Platform.NUMBER,
     Platform.REMOTE,
+    Platform.SENSOR,
     Platform.WATER_HEATER,
 )
 
@@ -135,41 +142,55 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.debug("Setting up entry %s...", entry.entry_id)
 
-    broker = RamsesBroker(hass, entry)  # KeyError: 'serial_port'
+    # Check if this entry is already set up
+    if entry.entry_id in hass.data[DOMAIN]:
+        _LOGGER.debug("Entry %s is already set up", entry.entry_id)
+        return True
+
+    broker = RamsesBroker(hass, entry)
 
     try:
+        # Store the broker in hass.data before setting it up
+        hass.data[DOMAIN][entry.entry_id] = broker
         await broker.async_setup()
     except exc.TransportSourceInvalid as err:  # not TransportSerialError
         _LOGGER.error("Unrecoverable problem with the serial port: %s", err)
+        hass.data[DOMAIN].pop(entry.entry_id, None)  # Clean up if setup fails
         return False
     except exc.TransportError as err:
         msg = f"There is a problem with the serial port: {err} (check config)"
         _LOGGER.warning(
             "Failed to set up entry %s (will retry): %s", entry.entry_id, msg
         )
-        raise ConfigEntryNotReady(msg) from err  # TODO: when to give up?
+        hass.data[DOMAIN].pop(entry.entry_id, None)  # Clean up if setup fails
+        raise ConfigEntryNotReady(msg) from err
 
-    # Setup is complete and config is valid, so start polling
-    hass.data[DOMAIN][entry.entry_id] = broker
+    # Start the broker after successful setup
     await broker.async_start()
 
+    _LOGGER.debug("Registering domain services and events")
     async_register_domain_services(hass, entry, broker)
     async_register_domain_events(hass, entry, broker)
+    _LOGGER.debug("Finished registering domain services and events")
 
     entry.async_on_unload(entry.add_update_listener(async_update_listener))
 
     _LOGGER.debug("Successfully set up entry %s", entry.entry_id)
+
     return True
 
 
 async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
-    hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
+    _LOGGER.debug("Config entry %s updated, reloading integration...", entry.entry_id)
+
+    # Just reload the entry, which will handle unloading and setting up again
+    # instead of fire and forget with async_create_task
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-
     broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
     if not await broker.async_unload_platforms():
         return False
@@ -239,6 +260,18 @@ def async_register_domain_services(
     async def async_send_packet(call: ServiceCall) -> None:
         await broker.async_send_packet(call)
 
+    @verify_domain_control(DOMAIN)
+    async def async_get_fan_param(call: ServiceCall) -> None:
+        await broker.async_get_fan_param(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_set_fan_param(call: ServiceCall) -> None:
+        await broker.async_set_fan_param(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_update_fan_params(call: ServiceCall) -> None:
+        await broker._async_run_fan_param_sequence(call)
+
     hass.services.async_register(
         DOMAIN, SVC_BIND_DEVICE, async_bind_device, schema=SCH_BIND_DEVICE
     )
@@ -246,6 +279,22 @@ def async_register_domain_services(
         DOMAIN, SVC_FORCE_UPDATE, async_force_update, schema=SCH_NO_SVC_PARAMS
     )
 
+    hass.services.async_register(
+        DOMAIN, SVC_SET_FAN_PARAM, async_set_fan_param, schema=SCH_SET_FAN_PARAM
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SVC_UPDATE_FAN_PARAMS,
+        async_update_fan_params,
+        schema=SCH_UPDATE_FAN_PARAMS,
+    )
+
+    hass.services.async_register(
+        DOMAIN, SVC_GET_FAN_PARAM, async_get_fan_param, schema=SCH_GET_FAN_PARAM
+    )
+
+    # Advanced features
     if entry.options.get(CONF_ADVANCED_FEATURES, {}).get(CONF_SEND_PACKET):
         hass.services.async_register(
             DOMAIN, SVC_SEND_PACKET, async_send_packet, schema=SCH_SEND_PACKET
@@ -294,9 +343,19 @@ class RamsesEntity(Entity):
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         self._broker._entities[self.unique_id] = self
+
+        # Listen for general update signal (for backward compatibility)
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass, SIGNAL_UPDATE, self.async_write_ha_state
+            )
+        )
+
+        # Also listen for device-specific update signal
+        device_signal = f"{SIGNAL_UPDATE}_{self._device.id}"
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, device_signal, self.async_write_ha_state
             )
         )
 

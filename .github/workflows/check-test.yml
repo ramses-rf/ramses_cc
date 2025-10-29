@@ -5,7 +5,7 @@ on:
   push:
     branches: [ "master", "stable" ]
     paths: [
-        ".github/workflows/check-test.yml", "requirements_dev.txt",
+        ".github/workflows/check-test.yml", "requirements/requirements_dev.txt",
         "custom_components/**.py",
         "tests/**",
     ]
@@ -13,7 +13,7 @@ on:
   pull_request:
     branches: [ "master", "stable" ]
     paths: [
-        ".github/workflows/check-test.yml", "requirements_dev.txt",
+        ".github/workflows/check-test.yml", "requirements/requirements_dev.txt",
         "custom_components/**.py",
         "tests/**",
     ]
@@ -44,7 +44,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements_test.txt
+          pip install -r requirements/requirements_test.txt
 
       - name: Test with pytest
         env:

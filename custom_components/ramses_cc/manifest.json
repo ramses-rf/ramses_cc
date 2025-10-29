@@ -12,8 +12,8 @@
     "requirements": [
       "aiousbwatcher>=1.1.1",
       "pyserial-asyncio-fast>=0.14",
-      "ramses-rf==0.51.7"
+      "ramses-rf==0.52.1"
     ],
     "single_config_entry": true,
-    "version": "0.51.7"
+    "version": "0.52.1"
   }

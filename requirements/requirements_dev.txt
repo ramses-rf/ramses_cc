@@ -1,5 +1,5 @@
 # Requirements to dev the source code
-# - last checked/updated: 2025-09-22 (c.f. HA 2025.9.3)
+# - last checked/updated: 2025-10-21 (c.f. HA 2025.10.2)
 #
 
 # requirements (dependencies) are in manifest.json
@@ -7,15 +7,13 @@
 
   aiousbwatcher         >= 1.1.1                 # as per: manifest.json latest: 1.1.1
   pyserial-asyncio-fast >= 0.14                  # as per: manifest.json latest: 0.16
-  ramses_rf             == 0.51.6                # as per: manifest.json latest:
-
-
+  ramses-rf             == 0.52.1                # as per: manifest.json latest:
 
 # libraries required for development (lint/type/test)...
 # - pip list | grep -E 'pre-commit|ruff|mypy|types-|voluptuous'
 
 # used for development (linting)
-    pre-commit >= 4.0.1                          # latest: 4.3.0
+    pre-commit >= 4.2.0                          # latest: 4.3.0
     ruff >= 0.13.0                               # latest: 0.13.0 See also: pre-commit-config.yaml
 
 # used for development (typing)

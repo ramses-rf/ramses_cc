@@ -133,7 +133,7 @@ class RamsesSensor(RamsesEntity, SensorEntity):
         entity_description: RamsesEntityDescription,
     ) -> None:
         """Initialize the sensor."""
-        _LOGGER.info("Found %r: %s", device, entity_description.key)
+        _LOGGER.info("Found %s: %s", device.id, entity_description.key)
         super().__init__(broker, device, entity_description)
 
         self.entity_id = ENTITY_ID_FORMAT.format(

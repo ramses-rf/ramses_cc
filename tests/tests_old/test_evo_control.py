@@ -58,7 +58,7 @@ async def instantiate_entities(
             port_name=None, input_file=f, config={"disable_discovery": True}
         )
         await gwy.start()
-        await gwy.stop()  # have to stop MessageIndex thread, aka: gwy._zzz.stop()
+        await gwy.stop()  # have to stop MessageIndex thread, aka: gwy.msg_db.stop()
 
     broker: RamsesBroker = MockRamsesBroker(hass)
 
@@ -239,7 +239,7 @@ async def test_namespace(hass: HomeAssistant) -> None:
 
     heater: WaterHeaterEntity = [e for e in water_heaters if e.entity_id == id][0]
     assert heater.unique_id == f"{CTL_ID}_HW"
-    # assert heater.name == f"{CTL_ID} XXX"  # TODO
+    # assert heater.name == f"{CTL_ID} XXX"  # TODO set name
 
     assert heater.extra_state_attributes["mode"] == {
         "mode": "temporary_override",
