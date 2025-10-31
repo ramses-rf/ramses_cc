@@ -138,10 +138,25 @@ async def async_setup_entry(
         # If we received entities directly (not devices), just add them
         if all(isinstance(d, RamsesNumberParam) for d in devices):
             _LOGGER.debug("Adding %d entities directly", len(devices))
-            async_add_entities(devices)
+            # Filter out entities that are already loaded in the platform
+            entities_to_add = []
+            for entity in devices:
+                entity_id = entity.entity_id
+                # Check if entity already exists in platform
+                if hasattr(platform, "entities") and entity_id in platform.entities:
+                    _LOGGER.debug(
+                        "Entity %s already loaded in platform, skipping", entity_id
+                    )
+                else:
+                    entities_to_add.append(entity)
+
+            if entities_to_add:
+                _LOGGER.debug("Adding %d new entities directly", len(entities_to_add))
+                async_add_entities(entities_to_add)
             return
 
         # Otherwise, process as devices and create entities
+        new_entities = []
         for device in devices:
             if not isinstance(device, RamsesRFEntity):
                 _LOGGER.debug("Skipping non-device item: %s", device)
@@ -151,28 +166,37 @@ async def async_setup_entry(
             # The create_parameter_entities function will handle duplicates
             param_entities = create_parameter_entities(broker, device)
             if param_entities:
-                entities.extend(param_entities)
+                # Filter out entities that are already loaded in the platform
+                for entity in param_entities:
+                    entity_id = entity.entity_id
+                    # Check if entity already exists in platform
+                    if hasattr(platform, "entities") and entity_id in platform.entities:
+                        _LOGGER.debug(
+                            "Entity %s already loaded in platform, skipping", entity_id
+                        )
+                    else:
+                        new_entities.append(entity)
 
             # Future: Add other entity types here
             # if other_entities := await async_create_other_entities(broker, devices):
             #     entities.extend(other_entities)
 
-        if entities:
+        if new_entities:
             _LOGGER.debug(
-                "Adding %d parameter entities to Home Assistant", len(entities)
+                "Adding %d new parameter entities to Home Assistant", len(new_entities)
             )
             # Log entity details for debugging
-            for entity in entities:
+            for entity in new_entities:
                 _LOGGER.debug(
                     "Adding entity: %s (unique_id: %s, device: %s)",
                     entity.entity_id,
                     entity.unique_id,
                     entity._device.id if hasattr(entity, "_device") else "no device",
                 )
-            async_add_entities(entities, update_before_add=True)
+            async_add_entities(new_entities, update_before_add=True)
 
             # After adding entities, request their current values
-            for entity in entities:
+            for entity in new_entities:
                 if hasattr(entity, "_request_parameter_value"):
                     # Schedule the async request without awaiting it here
                     broker.hass.async_create_task(entity._request_parameter_value())
@@ -192,22 +216,10 @@ async def async_setup_entry(
             # Load entities from registry for existing devices
             for device in fan_devices:
                 if hasattr(device, "supports_2411") and device.supports_2411:
-                    # Check if we've already created parameter entities for this device in this session
-                    device_id = normalize_device_id(device.id)
-                    if (
-                        hasattr(broker, "_parameter_entities_created")
-                        and device_id in broker._parameter_entities_created
-                    ):
-                        _LOGGER.debug(
-                            "Parameter entities already created for %s in current session, skipping",
-                            device.id,
-                        )
-                        continue
-
                     _LOGGER.debug(
                         "Loading parameter entities from registry for %s", device.id
                     )
-                    # Force creation of entities that exist in registry but not in platform
+                    # Create parameter entities (create_parameter_entities handles registry duplicates)
                     param_entities = create_parameter_entities(broker, device)
                     if param_entities:
                         entities.extend(param_entities)
@@ -975,17 +987,6 @@ def create_parameter_entities(
         )
         return []
 
-    # Check if we've already created parameter entities for this device in this session
-    if (
-        hasattr(broker, "_parameter_entities_created")
-        and device_id in broker._parameter_entities_created
-    ):
-        _LOGGER.debug(
-            "Parameter entities already created for %s in current session, skipping",
-            device_id,
-        )
-        return []
-
     _LOGGER.info(
         "Creating parameter entities for %s (supports 2411 parameters)", device_id
     )
@@ -1012,8 +1013,7 @@ def create_parameter_entities(
         # No need to modify the frozen dataclass attribute
 
         try:
-            # Use async_get_or_create to properly handle entity registry
-            # This ensures entities are created in the registry and returns the entity entry
+            # Check if entity already exists in registry to avoid duplicate registry entries
             entity_id = ent_reg.async_get_entity_id("number", "ramses_cc", unique_id)
             if entity_id is None:
                 # Entity doesn't exist in registry, create it
@@ -1027,13 +1027,13 @@ def create_parameter_entities(
                 )
             else:
                 _LOGGER.debug(
-                    "Entity %s already exists in registry as %s",
+                    "Entity %s already exists in registry as %s, using existing",
                     unique_id,
                     entity_id,
                 )
 
             # Always create the entity object for the platform
-            # Home Assistant will restore from registry if needed, but platform needs the object
+            # Home Assistant will restore state from registry for existing entities
             entity = description.ramses_cc_class(broker, device, description)
             entities.append(entity)
             _LOGGER.info(

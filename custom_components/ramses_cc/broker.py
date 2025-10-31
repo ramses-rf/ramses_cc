@@ -375,15 +375,7 @@ class RamsesBroker:
               not be called manually. Parameter entities are created only once per
               device per Home Assistant session.
         """
-        # Check if we've already created parameter entities for this device
         device_id = device.id
-        if device_id in self._parameter_entities_created:
-            _LOGGER.debug(
-                "Parameter entities already created for %s, skipping",
-                device_id,
-            )
-            return
-
         from .number import create_parameter_entities
 
         entities = create_parameter_entities(self, device)
@@ -401,8 +393,6 @@ class RamsesBroker:
                 SIGNAL_NEW_DEVICES.format("number"),
                 entities,
             )
-            # Mark this device as having parameter entities created
-            self._parameter_entities_created.add(device_id)
         else:
             _LOGGER.debug("No parameter entities created for %s", device_id)
 
