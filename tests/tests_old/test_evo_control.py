@@ -164,7 +164,7 @@ async def test_namespace(hass: HomeAssistant) -> None:
 
     sensor: SensorEntity = [e for e in sensors if e.entity_id == id][0]
     assert sensor.unique_id == f"{CTL_ID}-heat_demand"
-    # assert sensor.state == 72.0  # PROBLEM
+    assert sensor.state == 72.0
 
     #
     # evo_control uses: sensor.${dhwRelayId}_relay_demand
@@ -220,7 +220,7 @@ async def test_namespace(hass: HomeAssistant) -> None:
                 "setpoint": 5.0,
             }
             assert (
-                True  # climate.current_temperature == 18.16  # PROBLEM
+                climate.current_temperature == 18.16
             )  # equivalent to {"temperatureStatus": isAvailable: true, temperature: 18.16}
 
         else:
