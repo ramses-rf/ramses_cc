@@ -9,6 +9,10 @@
 [tool.pytest.ini_options]
   asyncio_mode = "auto"
 
+  # pytest-cov coverage reporting. open htmlcov/index.html in a browser for details
+  addopts = "--cov=custom_components/ramses_cc --cov-report=term --cov-report=html"
+  # PyCharm might not hit a breakpoint. For debugging, disable -cov by adding:
+  # –no-cov"
 
 #
 ### mypy ############################################################################
