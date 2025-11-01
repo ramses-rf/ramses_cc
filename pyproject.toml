@@ -11,6 +11,7 @@
 
   # pytest-cov coverage reporting. open htmlcov/index.html in a browser for details
   addopts = "--cov=custom_components/ramses_cc --cov-report=term --cov-report=html"
+  # to report missed lines during test writing, add: --cov-report=term-missing
   # PyCharm might not hit a breakpoint. For debugging, disable -cov by adding:
   # –no-cov"
 
