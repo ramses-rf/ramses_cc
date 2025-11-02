@@ -727,7 +727,7 @@ class RamsesBroker:
 
         cmd = Command(call.data["device_info"]) if call.data["device_info"] else None
 
-        _LOGGER.warning(f"Starting binding process for device {device.id}")
+        _LOGGER.warning("Starting binding process for device %s", device.id)
 
         try:
             await device._initiate_binding_process(  # may: BindingFlowFailed
@@ -737,11 +737,11 @@ class RamsesBroker:
             )  # TODO: will need to re-discover schema
 
             _LOGGER.warning(
-                f"Success ! Binding process completed for device {device.id}"
+                "Success! Binding process completed for device %s", device.id
             )
 
         except Exception as e:
-            _LOGGER.error(f"Binding process failed for device {device.id}: {e}")
+            _LOGGER.error("Binding process failed for device %s: %s", device.id, e)
             raise
 
         async_call_later(self.hass, _CALL_LATER_DELAY, self.async_update)
