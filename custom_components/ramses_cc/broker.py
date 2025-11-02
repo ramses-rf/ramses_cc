@@ -727,11 +727,23 @@ class RamsesBroker:
 
         cmd = Command(call.data["device_info"]) if call.data["device_info"] else None
 
-        await device._initiate_binding_process(  # may: BindingFlowFailed
-            list(call.data["offer"].keys()),
-            confirm_code=list(call.data["confirm"].keys()),
-            ratify_cmd=cmd,
-        )  # TODO: will need to re-discover schema
+        _LOGGER.warning(f"Starting binding process for device {device.id}")
+
+        try:
+            await device._initiate_binding_process(  # may: BindingFlowFailed
+                list(call.data["offer"].keys()),
+                confirm_code=list(call.data["confirm"].keys()),
+                ratify_cmd=cmd,
+            )  # TODO: will need to re-discover schema
+
+            _LOGGER.warning(
+                f"Success ! Binding process completed for device {device.id}"
+            )
+
+        except Exception as e:
+            _LOGGER.error(f"Binding process failed for device {device.id}: {e}")
+            raise
+
         async_call_later(self.hass, _CALL_LATER_DELAY, self.async_update)
 
     async def async_force_update(self, _: ServiceCall) -> None:
