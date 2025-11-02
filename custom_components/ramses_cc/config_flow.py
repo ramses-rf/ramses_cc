@@ -35,6 +35,7 @@ from ramses_tx.schemas import (
     SZ_ENFORCE_KNOWN_LIST,
     SZ_FILE_NAME,
     SZ_KNOWN_LIST,
+    SZ_LOG_ALL_MQTT,
     SZ_PACKET_LOG,
     SZ_PORT_NAME,
     SZ_ROTATE_BACKUPS,
@@ -250,6 +251,7 @@ class BaseRamsesFlow(FlowHandler):
         """Gateway config step."""
         managed_keys = (
             SZ_ENFORCE_KNOWN_LIST,
+            SZ_LOG_ALL_MQTT,
             SZ_SQLITE_INDEX,  # temporary 0.52.x dev option
         )
         errors: dict[str, str] = {}
@@ -351,6 +353,9 @@ class BaseRamsesFlow(FlowHandler):
                 self.options[CONF_RAMSES_RF][SZ_ENFORCE_KNOWN_LIST] = user_input[
                     SZ_ENFORCE_KNOWN_LIST
                 ]
+                self.options[CONF_RAMSES_RF][SZ_LOG_ALL_MQTT] = user_input[
+                    SZ_LOG_ALL_MQTT
+                ]
                 self.options[CONF_RAMSES_RF][SZ_SQLITE_INDEX] = user_input[
                     SZ_SQLITE_INDEX  # temporary 0.52.x dev option
                 ]
@@ -364,6 +369,7 @@ class BaseRamsesFlow(FlowHandler):
                 SZ_ENFORCE_KNOWN_LIST: self.options[CONF_RAMSES_RF].get(
                     SZ_ENFORCE_KNOWN_LIST
                 ),
+                SZ_LOG_ALL_MQTT: self.options[CONF_RAMSES_RF].get(SZ_LOG_ALL_MQTT),
                 SZ_SQLITE_INDEX: self.options[CONF_RAMSES_RF].get(
                     SZ_SQLITE_INDEX  # temporary 0.52.x dev option
                 ),
@@ -384,6 +390,11 @@ class BaseRamsesFlow(FlowHandler):
                 description={
                     "suggested_value": suggested_values.get(SZ_ENFORCE_KNOWN_LIST)
                 },
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                SZ_LOG_ALL_MQTT,
+                default=False,
+                description={"suggested_value": suggested_values.get(SZ_LOG_ALL_MQTT)},
             ): selector.BooleanSelector(),
             vol.Optional(
                 SZ_SQLITE_INDEX,  # temporary 0.52.x dev option

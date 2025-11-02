@@ -56,13 +56,15 @@
                     "schema": "Systeemschema(s)",
                     "known_list": "Erkende device_id's",
                     "enforce_known_list": "Accepteer alleen berichten van erkende device ID's",
+                    "log_all_mqtt": "Log alle MQTT-topics",
                     "sqlite_index": "Gebruik SQLite MessageIndex"
                 },
                 "data_description": {
                     "schema": "Een mapping van systeem device-ID's naar hun schema's. Houd dit eenvoudig en vermeld alleen devices die niet automatisch verschijnen.",
                     "known_list": "Een mapping van erkende device-ID's en (optioneel) hun kenmerken.",
                     "enforce_known_list": "Aanbevolen om in te schakelen zodra alle device_id's zijn ingevuld. Het RAMSES II-protocol biedt namelijk geen foutcorrectie en corrupte device_id's komen vaak voor. Wis wel 1x de systeem-cache nadat je deze optie activeert.",
-                    "sqlite_index": "In ontwikkeling! Kan berichten missen en fouten loggen. (herstart vereist)"
+                    "log_all_mqtt": "Toon alle topics van de MQTT broker in de systeemconsole.",
+                    "sqlite_index": "In ontwikkeling! Kan berichten missen en fouten geven met Evohome. (herstart vereist)"
                 }
             },
             "advanced_features": {

@@ -13,5 +13,5 @@
 
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest
-
-  pytest_homeassistant_custom_component >= 0.13.286
+  pytest-cov==7.0.0
+  pytest_homeassistant_custom_component >= 0.13.289

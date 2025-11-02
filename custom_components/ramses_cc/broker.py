@@ -34,7 +34,7 @@ from ramses_rf.system import Evohome, System, Zone
 from ramses_tx.address import pkt_addrs
 from ramses_tx.command import Command
 from ramses_tx.const import Code, DevType
-from ramses_tx.exceptions import PacketAddrSetInvalid
+from ramses_tx.exceptions import PacketAddrSetInvalid  # , TransportSourceInvalid
 from ramses_tx.ramses import _2411_PARAMS_SCHEMA
 from ramses_tx.schemas import (
     SZ_BOUND_TO,
@@ -591,10 +591,29 @@ class RamsesBroker:
         else:
             model = device._SLUG
 
+        device_registry = dr.async_get(self.hass)  # need it earlier to catch via-device
+
+        # See issue 249: non-existing 'via_device' in tests/tests_old/test_init_data.py
         if isinstance(device, Zone) and device.tcs:
+            _LOGGER.info(f"ZONE {model} via_device SET to {device.tcs}")
             via_device = (DOMAIN, device.tcs.id)
         elif isinstance(device, Child) and device._parent:
+            _LOGGER.info(f"CHILD {model} via_device SET to {device._parent}")
+            # try:
+            #     # check for issue 249, not allowed after HA 2025.12
+            #     # see core/homeassistant/helpers/device_registry.py L968
+            #     _LOGGER.debug(f"Parent {device._parent} has id: {device._parent.id}")
+            #     via = device_registry.async_get(device._parent.id)
+            #     if via is None:
+            #         _LOGGER.info(
+            #             f"Parent device {device._parent} does not exist. Removing via"
+            #         )
+            #         via_device = None
+            #     else:
             via_device = (DOMAIN, device._parent.id)
+            # except TransportSourceInvalid:
+            #     _LOGGER.info(f"Parent {device._parent} HAS NO ID")
+            #     via_device = None
         else:
             via_device = None
 
@@ -608,10 +627,9 @@ class RamsesBroker:
         )
 
         if self._device_info.get(device.id) == device_info:
-            return
+            return  # this device was already added to registry
         self._device_info[device.id] = device_info
 
-        device_registry = dr.async_get(self.hass)
         device_registry.async_get_or_create(
             config_entry_id=self.entry.entry_id, **device_info
         )

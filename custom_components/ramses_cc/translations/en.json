@@ -56,13 +56,15 @@
                     "schema": "System schema(s)",
                     "known_list": "Known device IDs",
                     "enforce_known_list": "Accept packets from known devices IDs only",
+                    "log_all_mqtt": "Log all MQTT traffic",
                     "sqlite_index": "Use SQLite MessageIndex"
                 },
                 "data_description": {
                     "schema": "A mapping of system device IDs to their respective schemas. This should be kept minimal and only contain devices that are not automatically discovered.",
                     "known_list": "A mapping of known device IDs and optionally their traits.",
                     "enforce_known_list": "Recommended once you have entered all your device IDs as the RAMSES II protocol does not include error correction and corrupt device IDs are common.",
-                    "sqlite_index": "Under development! May miss messages or log errors. (restart required)"
+                    "log_all_mqtt": "Show all subscribed topics from MQTT broker in system console.",
+                    "sqlite_index": "Under development! Missing messages or errors with Evohome (restart required)"
                 }
             },
             "advanced_features": {

@@ -393,7 +393,7 @@ class VirtualRf(VirtualRfBase):
         """Dump frames as if from a sending port (for mocking)."""
 
         async def no_data_left_to_send() -> None:
-            """Wait until there all pending data is read."""
+            """Wait until all pending data is read."""
             while self._selector.select(timeout=0):
                 await asyncio.sleep(0.001)
 
