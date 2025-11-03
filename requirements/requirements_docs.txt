@@ -7,7 +7,7 @@
 # used for generating docs
 # (Note: markdown-it-py==3.x for myst-parser 4.0.1)
     furo==2025.9.25
-    markdown-it-py==3.0.0
+    markdown-it-py==4.0.0
     myst-parser==4.0.1
     Sphinx==8.2.3
     sphinxcontrib-mermaid==1.0.0
