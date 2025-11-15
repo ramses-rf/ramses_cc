@@ -272,6 +272,45 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         _LOGGER.debug("Turning on REM device %s", self._device.id)
         pass
 
+    # the 2411 fan_param services, copied literally from climate.py (no REM update_all service)
+
+    @callback
+    async def async_get_fan_param(self, param_id: str = "", from_id: str = "") -> None:
+        """Handle 'get_fan_param' service call.
+
+        :param param_id: The parameter ID of the entity to find
+        :type param_id: str
+        :param from_id: Source device ID (defaults to controller)
+        :type from_id: str
+        """
+        call: dict[str, Any] = {
+            "device_id": self.entity_id,
+            "param_id": param_id,
+            "from_id": from_id,
+        }
+        await self._broker.async_get_fan_param(call)
+
+    @callback
+    async def async_set_fan_param(
+        self, param_id: str = "", value: int = -1, from_id: str = ""
+    ) -> None:
+        """Handle 'set_fan_param' service call.
+
+        :param param_id: The parameter ID of the entity to find
+        :type param_id: str
+        :param value: The value to set (type depends on parameter)
+        :type value: int
+        :param from_id: Source device ID (defaults to controller)
+        :type from_id: str
+        """
+        call: dict[str, Any] = {
+            "device_id": self.entity_id,
+            "param_id": param_id,
+            "value": value,
+            "from_id": from_id,
+        }
+        await self._broker.async_set_fan_param(call)
+
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesRemoteEntityDescription(RamsesEntityDescription, RemoteEntityDescription):

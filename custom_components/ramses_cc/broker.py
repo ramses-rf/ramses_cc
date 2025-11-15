@@ -816,7 +816,10 @@ class RamsesBroker:
         await self.client.async_send_cmd(cmd)
         async_call_later(self.hass, _CALL_LATER_DELAY, self.async_update)
 
-    def _find_param_entity(self, device_id: str, param_id: str) -> Any | None:
+    # fan_param (2411) private and service methods.
+    # Called from climate.py and remote.py as service @callback, or directly with dict (only)
+
+    def _find_param_entity(self, device_id: str, param_id: str) -> RamsesEntity | None:
         """Find a parameter entity by device ID and parameter ID.
 
         Helper Method that searches for a number entity corresponding to a specific
@@ -866,22 +869,20 @@ class RamsesBroker:
         _LOGGER.debug("Entity %s not found in registry.", target_entity_id)
         return None
 
-    def _get_param_id(self, call: ServiceCall | dict[str, Any]) -> str:
+    def _get_param_id(self, call: dict[str, Any]) -> str:
         """Get and validate parameter ID from service call data.
 
         Helper method that extracts and validates the parameter ID with consistent
-        error handling and logging. Supports both ServiceCall objects and plain
-        dictionaries as input.
+        error handling and logging.
 
-        :param call: Service call data or dictionary containing parameter info
-        :type call: ServiceCall | dict[str, Any]
+        :param call: Dict containing parameter info
+        :type call: dict[str, Any]
         :return: The validated parameter ID as uppercase 2-digit hex string
         :rtype: str
         :raises ValueError: If parameter ID is missing, empty, or invalid format
         :raises ValueError: If parameter ID is not exactly 2 hexadecimal digits
         """
-        # Handle both ServiceCall and direct dict inputs
-        data: dict[str, Any] = call.data if hasattr(call, "data") else call
+        data: dict[str, Any] = call
 
         # Extract parameter ID
         param_id: str | None = data.get("param_id")
@@ -906,33 +907,28 @@ class RamsesBroker:
 
         return param_id
 
-    def _get_device_and_from_id(
-        self, call: ServiceCall | dict[str, Any]
-    ) -> tuple[str, str, str]:
+    def _get_device_and_from_id(self, call: dict[str, Any]) -> tuple[str, str, str]:
         """Get device_id and from_id with validation and fallback logic.
 
         Combined helper method that extracts device_id and determines from_id
         with fallback logic: explicit from_id -> bound device -> HGI gateway.
 
-        :param call: Service call data or dict
-        :type call: ServiceCall | dict[str, Any]
+        :param call: Dict containing device and parameter info
+        :type call: dict[str, Any]
         :return: Tuple of (original_device_id, normalized_device_id, from_id)
         :rtype: tuple[str, str, str]
         :raises ValueError: If device_id is missing/invalid or no valid source device
         """
-        # Handle both ServiceCall and direct dict inputs
-        data: dict[str, Any] = call.data if hasattr(call, "data") else call
+        data: dict[str, Any] = call
 
         # Extract and validate device_id
-        # try to use HA entity_id, returns:
-        # target:
-        #    entity_id: climate.29_099029
-        device_id = data.get("device_id")  # needs refactor here
-        if not device_id:  # keep for direct dict? redundant from HA
+        device_id = data.get("device_id")
+
+        if not device_id:
             _LOGGER.error("Missing required parameter: device_id")
             return "", "", ""  # Return empty strings to indicate validation failure
 
-        # Normalize device_id to string format  # not required for HA Service Calls using Target
+        # Normalize device_id to string format
         if isinstance(device_id, list):
             original_device_id = str(device_id[0]) if device_id else None
         elif not isinstance(device_id, str):
@@ -944,15 +940,19 @@ class RamsesBroker:
             _LOGGER.error("device_id cannot be empty")
             return "", "", ""  # Return empty strings to indicate validation failure
 
-        # Return both original (for device comms) and normalized (for entity lookup)
-        normalized_device_id = original_device_id.replace(":", "_").lower()
+        # Keep original (for device comms) and add normalized id (for entity lookup)
+        try:
+            split_device_id = original_device_id.split(".")[1]  # seen: remote.12:345678
+        except IndexError:
+            split_device_id = original_device_id
+        normalized_device_id = split_device_id.replace(":", "_").lower()
 
         # Get from_id with fallback logic (same as _get_from_id)
         from_id = data.get("from_id")
         if from_id:
             return original_device_id, normalized_device_id, str(from_id)
 
-        # Try to get device for bound device lookup (for set operations)
+        # Try to get device for bound device lookup (for set_fan_param operations)
         try:
             device = self._get_device(original_device_id)
             if device and hasattr(device, "get_bound_rem"):
@@ -980,28 +980,29 @@ class RamsesBroker:
         )
         return "", "", ""  # Return empty strings to indicate no valid source
 
-    async def async_get_fan_param(self, call: ServiceCall | dict[str, Any]) -> None:
-        """Handle 'get_fan_param' service call (or direct dict).
+    async def async_get_fan_param(self, call: dict[str, Any]) -> None:
+        """Handle 'get_fan_param' dict.
 
         This sends a parameter read request to the specified fan device.
         Fire and Forget, The response from the fan will be processed by the device's
         normal message handling.
         It can also be called from other methods using a dict.
 
-        :param call: Service call data containing device and parameter info
-        :type call: dict[str, Any] | ServiceCall
+        :param call: Dict containing device and parameter info
+        :type call: dict[str, Any]
         :raises ValueError: If required parameters are missing or invalid
         :raises ValueError: If device is not found or not a FAN device
         :raises ValueError: If parameter ID is not a valid 2-digit hex value
 
-        The call data should contain:
-            - device_id (str): Target device ID (required, supports colon/underscore formats)
-            - param_id (str): Parameter ID to read (required, 2 hex digits)
-            - from_id (str, optional): Source device ID (defaults to HGI)
+        The call dict should contain:
+            - device_id (str): Target device ID (supports colon/underscore formats)
+            - param_id (str): Parameter ID to read (2 hex digits)
+        and optionally:
+            - from_id (str): Source device ID (defaults to HGI)
+            - fan_id (str): from third party code?
         """
         try:
-            # Handle both ServiceCall and direct dict inputs
-            data: dict[str, Any] = call.data if hasattr(call, "data") else call
+            data: dict[str, Any] = call
 
             # Extract id's
             original_device_id, normalized_device_id, from_id = (
@@ -1012,8 +1013,9 @@ class RamsesBroker:
             # Check if we got valid source device info
             if not all([original_device_id, normalized_device_id, from_id]):
                 _LOGGER.warning(
-                    "Cannot get parameter: No valid source device available. "
-                    "Need either: explicit from_id, bound REM/DIS device, or HGI gateway."
+                    "Cannot get parameter: No valid source device available from %s. "
+                    "Need either: explicit from_id, bound REM/DIS device, or HGI gateway.",
+                    data,
                 )
                 return
 
@@ -1049,28 +1051,26 @@ class RamsesBroker:
                 asyncio.create_task(entity._clear_pending_after_timeout(0))
             raise
 
-    def get_all_fan_params(self, call: ServiceCall | dict[str, Any]) -> None:
+    def get_all_fan_params(self, call: dict[str, Any]) -> None:
         """Wrapper for _async_run_fan_param_sequence.
         Create a task to run the fan parameter sequence without blocking HA.
         This allows for the sequence to run in the background while HA remains responsive.
 
-        :param call: Service call data or dictionary containing device info
-        :type call: dict[str, Any] | ServiceCall
+        :param call: Dict containing device info
+        :type call: dict[str, Any]
         :raises ValueError: If device_id is not provided or device not found
         :raises ValueError: If device is not a FAN device
         :raises RuntimeError: If communication with device fails
 
-        The call data should contain:
+        The call dict should contain:
             - device_id (str): Target device ID (required, supports colon/underscore formats)
-            - from_id (str, optional): Source device ID (defaults to Bound Rem or HGI)
-
+        and optionally:
+            - from_id (str): Source device ID (defaults to Bound Rem or HGI)
         """
         data = call.data if hasattr(call, "data") else call
         self.hass.loop.create_task(self._async_run_fan_param_sequence(data))
 
-    async def _async_run_fan_param_sequence(
-        self, call: ServiceCall | dict[str, Any]
-    ) -> None:
+    async def _async_run_fan_param_sequence(self, call: dict[str, Any]) -> None:
         """Handle 'update_fan_params' service call (or direct dict).
 
         This service sends parameter read requests (RQ) for each parameter defined
@@ -1078,31 +1078,20 @@ class RamsesBroker:
         sent sequentially with a small delay to avoid overwhelming the device.
         It can also be called from other methods using a dict.
 
-        :param call: Service call data or dictionary containing device info
-        :type call: dict[str, Any] | ServiceCall
+        :param call: Dict containing device info
+        :type call: dict[str, Any]
         :raises ValueError: If device_id is not provided or device not found
         :raises ValueError: If device is not a FAN device
         :raises RuntimeError: If communication with device fails
 
-        The call data should contain:
-            - device_id (str): Target device ID (required, supports colon/underscore formats)
-            - from_id (str, optional): Source device ID (defaults to Bound Rem or HGI)
+        The call dict should contain:
+            - device_id (str): Target device ID (supports colon/underscore formats)
+        and optionally:
+            - from_id (str): Source device ID (defaults to Bound Rem or HGI)
 
-        note: This method is called by get_all_fan_params and should not be called directly.
+        note: This method is called by get_all_fan_params() and should not be called directly.
         """
-        # Handle both ServiceCall objects and plain dictionaries
-        if hasattr(call, "data"):
-            # ServiceCall.data might be a ReadOnlyDict or other mapping, convert to regular dict
-            try:
-                data = dict(call.data) if hasattr(call.data, "items") else call.data
-            except (TypeError, ValueError):
-                # If conversion fails, try alternative extraction methods
-                if hasattr(call.data, "items"):
-                    data = {k: v for k, v in call.data.items()}
-                else:
-                    data = call.data
-        else:
-            data = call
+        data: dict[str, Any] = call
 
         try:
             # Get the list of parameters to request
@@ -1131,28 +1120,29 @@ class RamsesBroker:
             # Don't re-raise the exception - handle it gracefully like other methods
             return
 
-    async def async_set_fan_param(self, call: ServiceCall | dict[str, Any]) -> None:
+    async def async_set_fan_param(self, call: dict[str, Any]) -> None:
         """Handle 'set_fan_param' service call (or direct dict).
 
         This service sends a parameter write request (WR) to the specified FAN device to
         set a parameter value. Fire and Forget - The request is sent asynchronously and
         the response will be processed by the device's normal packet handling.
 
-        :param call: Service call data or dictionary containing device info
-        :type call: dict[str, Any] | ServiceCall
+        :param call: Dictionary containing device info
+        :type call: dict[str, Any]
         :raises ValueError: If required parameters are missing or invalid
         :raises ValueError: If parameter ID is not a valid 2-digit hex value
         :raises ValueError: If device is not found or not a FAN device
         :raises RuntimeError: If communication with device fails or times out
 
-        The call data should contain:
-            - device_id (str): Target FAN device ID (required, supports colon/underscore formats)
-            - param_id (str): Parameter ID to write (required, 2 hex digits)
-            - value: The value to set (required, type depends on parameter)
-            - from_id (str, optional): Source device ID (defaults to HGI)
+        The call dict should contain:
+            - device_id (str): Target device ID (supports colon/underscore formats)
+            - param_id (str): Parameter ID to write (2 hex digits)
+            - value (int): The value to set (type depends on parameter), -1 if not provided
+        and optionally:
+            - from_id (str): Source device ID (defaults to HGI)
+            - fan_id (str): from third party code?
         """
-        data: dict[str, Any] = call.data if hasattr(call, "data") else call
-
+        data: dict[str, Any] = call
         _LOGGER.debug("Processing set_fan_param service call with data: %s", data)
 
         try:
@@ -1164,8 +1154,9 @@ class RamsesBroker:
             # Check if we got valid source device info
             if not all([original_device_id, normalized_device_id, from_id]):
                 _LOGGER.warning(
-                    "Cannot set parameter: No valid source device available. "
-                    "Need either: explicit from_id, bound REM/DIS device, or HGI gateway."
+                    "Cannot set parameter: No valid source device available from %s. "
+                    "Need either: explicit from_id, bound REM/DIS device, or HGI gateway.",
+                    data,
                 )
                 return
 
@@ -1173,7 +1164,7 @@ class RamsesBroker:
 
             # Get and validate value
             value = data.get("value")
-            if value is None:
+            if value is None or value == -1:
                 raise ValueError("Missing required parameter: value")
 
             # Check if fan_id is provided - if so, use it as the target device
