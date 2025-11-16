@@ -994,8 +994,7 @@ class RamsesBroker:
             - device_id (str): Target device ID (supports colon/underscore formats)
             - param_id (str): Parameter ID to read (2 hex digits)
         and optionally:
-            - from_id (str): Source device ID (defaults to HGI)
-            - fan_id (str): from third party code?
+            - from_id (str): Source device ID (defaults to bound_REM)
         """
         try:
             data: dict[str, Any] = call
@@ -1010,20 +1009,17 @@ class RamsesBroker:
             if not all([original_device_id, normalized_device_id, from_id]):
                 _LOGGER.warning(
                     "Cannot get parameter: No valid source device available from %s. "
-                    "Need either: explicit from_id, bound REM/DIS device, or HGI gateway.",
+                    "Need either: explicit from_id, or a REM/DIS device that was 'bound' in the configuration.",
                     data,
                 )
                 return
-
-            # Check if fan_id is provided - if so, use it as the target device
-            target_device_id = data.get("fan_id", original_device_id)
 
             # Find the corresponding entity and set it to pending
             entity = self._find_param_entity(normalized_device_id, param_id)
             if entity and hasattr(entity, "set_pending"):
                 entity.set_pending()
 
-            cmd = Command.get_fan_param(target_device_id, param_id, src_id=from_id)
+            cmd = Command.get_fan_param(original_device_id, param_id, src_id=from_id)
             _LOGGER.debug("Sending command: %s", cmd)
 
             # Send the command directly using the gateway
@@ -1083,7 +1079,7 @@ class RamsesBroker:
         The call dict should contain:
             - device_id (str): Target device ID (supports colon/underscore formats)
         and optionally:
-            - from_id (str): Source device ID (defaults to Bound Rem or HGI)
+            - from_id (str): Source device ID (defaults to Bound REM/DIS)
 
         note: This method is called by get_all_fan_params() and should not be called directly.
         """
@@ -1135,8 +1131,7 @@ class RamsesBroker:
             - param_id (str): Parameter ID to write (2 hex digits)
             - value (int): The value to set (type depends on parameter), -1 if not provided
         and optionally:
-            - from_id (str): Source device ID (defaults to HGI)
-            - fan_id (str): from third party code?
+            - from_id (str): Source device ID (defaults to bound REM/DIS)
         """
         data: dict[str, Any] = call
         _LOGGER.debug("Processing set_fan_param service call with data: %s", data)
@@ -1151,7 +1146,7 @@ class RamsesBroker:
             if not all([original_device_id, normalized_device_id, from_id]):
                 _LOGGER.warning(
                     "Cannot set parameter: No valid source device available from %s. "
-                    "Need either: explicit from_id, bound REM/DIS device, or HGI gateway.",
+                    "Need either: explicit from_id, or a REM/DIS device that was 'bound' in the configuration.",
                     data,
                 )
                 return
@@ -1163,15 +1158,12 @@ class RamsesBroker:
             if value is None or value == -1:
                 raise ValueError("Missing required parameter: value")
 
-            # Check if fan_id is provided - if so, use it as the target device
-            target_device_id = data.get("fan_id", original_device_id)
-
             # Log the operation
             _LOGGER.debug(
                 "Setting parameter %s=%s on device %s from %s",
                 param_id,
                 value,
-                target_device_id,
+                original_device_id,
                 from_id,
             )
 
@@ -1182,7 +1174,7 @@ class RamsesBroker:
 
             # Send command
             cmd = Command.set_fan_param(
-                target_device_id, param_id, value, src_id=from_id
+                original_device_id, param_id, value, src_id=from_id
             )
             await self.client.async_send_cmd(cmd)
             await asyncio.sleep(0.2)
