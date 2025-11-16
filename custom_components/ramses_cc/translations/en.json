@@ -229,7 +229,7 @@
                 },
                 "from_id": {
                     "name": "Source Device ID",
-                    "description": "Optional source device ID to use for the request (defaults to Bound REM or HGI gateway). Enter a device ID in format XX:XXXXXX"
+                    "description": "Optional source device ID to use for the request (defaults to Bound REM). Enter a device ID in format XX:XXXXXX"
                 }
             }
         },
@@ -248,7 +248,7 @@
                 },
                 "from_id": {
                     "name": "Source Device ID",
-                    "description": "Optional source device ID to use for the request (defaults to Bound REM or HGI gateway). Enter any device ID in format XX:XXXXXX"
+                    "description": "Optional source device ID to use for the request (defaults to Bound REM). Enter any device ID in format XX:XXXXXX"
                 }
             }
         },
@@ -259,7 +259,7 @@
             "fields": {
                 "from_id": {
                     "name": "Source Device ID",
-                    "description": "Optional source device ID to use for the request (defaults to Bound REM or HGI gateway). Enter any device ID in format XX:XXXXXX"
+                    "description": "Optional source device ID to use for the request (defaults to Bound REM). Enter any device ID in format XX:XXXXXX"
                 }
             }
         },

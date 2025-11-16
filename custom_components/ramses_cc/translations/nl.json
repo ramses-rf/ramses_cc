@@ -229,7 +229,7 @@
                 },
                 "from_id": {
                     "name": "Bronapparaat-ID",
-                    "description": "Optioneel bronapparaat-ID voor het verzoek (standaard is gebonden REM of HGI gateway). Vul een apparaat_ID in als XX:XXXXXX"
+                    "description": "Optioneel bronapparaat-ID voor het verzoek (laat leeg voor 'bound' REM). Vul een apparaat_ID in als XX:XXXXXX"
                 }
             }
         },
@@ -248,7 +248,7 @@
                 },
                 "from_id": {
                     "name": "Bronapparaat-ID",
-                    "description": "Optioneel: bronapparaat-ID voor het verzoek (laat leeg voor gebonden REM of HGI gateway). Vul elk apparaat-ID in als XX:XXXXXX"
+                    "description": "Optioneel: bronapparaat-ID voor het verzoek (laat leeg voor 'bound' REM). Vul elk apparaat-ID in als XX:XXXXXX"
                 }
             }
         },
@@ -259,7 +259,7 @@
             "fields": {
                 "from_id": {
                     "name": "Bronapparaat-ID",
-                    "description": "Optioneel: bronapparaat-ID voor het verzoek (laat leeg voor gebonden REM of HGI gateway). Vul een apparaat-ID in als XX:XXXXXX"
+                    "description": "Optioneel: bronapparaat-ID voor het verzoek (laat leeg voor 'bound' REM). Vul een apparaat-ID in als XX:XXXXXX"
                 }
             }
         },
