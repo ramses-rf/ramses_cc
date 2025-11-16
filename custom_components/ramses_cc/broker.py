@@ -907,38 +907,34 @@ class RamsesBroker:
 
         return param_id
 
-    def _get_device_and_from_id(self, call: dict[str, Any]) -> tuple[str, str, str]:
+    def _get_device_and_from_id(
+        self, call: dict[str, Any] | ServiceCall
+    ) -> tuple[str, str, str]:
         """Get device_id and from_id with validation and fallback logic.
 
         Combined helper method that extracts device_id and determines from_id
-        with fallback logic: explicit from_id -> bound device -> HGI gateway.
+        with fallback logic: explicit from_id -> bound device.
+        Now supports both target-based (new) and device_id-based (old) service calls.
 
-        :param call: Dict containing device and parameter info
-        :type call: dict[str, Any]
+        :param call: ServiceCall or dict containing device and parameter info
+        :type call: ServiceCall | dict[str, Any]
         :return: Tuple of (original_device_id, normalized_device_id, from_id)
         :rtype: tuple[str, str, str]
         :raises ValueError: If device_id is missing/invalid or no valid source device
         """
-        data: dict[str, Any] = call
+        # Handle ServiceCall objects (new format) or dict (old format)
+        data = call.data if hasattr(call, "data") else call
 
-        # Extract and validate device_id
-        device_id = data.get("device_id")
-
-        if not device_id:
-            _LOGGER.error("Missing required parameter: device_id")
-            return "", "", ""  # Return empty strings to indicate validation failure
-
-        # Normalize device_id to string format
-        if isinstance(device_id, list):
-            original_device_id = str(device_id[0]) if device_id else None
-        elif not isinstance(device_id, str):
-            original_device_id = str(device_id)
-        else:
-            original_device_id = device_id
+        # Extract device_id using the comprehensive extraction method
+        try:
+            original_device_id = self._extract_device_id_from_target(call)
+        except ValueError as ex:
+            _LOGGER.error("Failed to extract device_id: %s", ex)
+            return "", "", ""
 
         if not original_device_id:
-            _LOGGER.error("device_id cannot be empty")
-            return "", "", ""  # Return empty strings to indicate validation failure
+            _LOGGER.error("device_id is empty")
+            return "", "", ""
 
         # Keep original (for device comms) and add normalized id (for entity lookup)
         normalized_device_id = original_device_id.replace(":", "_").lower()
@@ -976,6 +972,73 @@ class RamsesBroker:
         )
         return "", "", ""  # Return empty strings to indicate no valid source
 
+    def _extract_device_id_from_target(self, call: ServiceCall | dict[str, Any]) -> str:
+        """Extract device_id from service call target (new format) or data (old format).
+
+        This method provides backward compatibility by supporting both:
+        - New format: device_id extracted from target entities
+        - Old format: device_id from call.data["device_id"]
+
+        :param call: Service call object or dict containing target/data
+        :type call: ServiceCall | dict[str, Any]
+        :return: The extracted device_id as a string
+        :rtype: str
+        :raises ValueError: If no device_id can be extracted
+        """
+        # Handle ServiceCall objects (new format)
+        if hasattr(call, "target") and hasattr(call.target, "entities"):
+            # New target-based format - extract device_id from target entities
+            entity_ids = call.target.entities
+            if not entity_ids:
+                raise ValueError("No target entities provided")
+
+            # For now, use the first entity (services typically target one entity)
+            entity_id = list(entity_ids)[0]
+
+            # Look up the entity to get the device_id
+            ent_reg = er.async_get(self.hass)
+            entity_entry = ent_reg.async_get(entity_id)
+
+            if not entity_entry:
+                raise ValueError(f"Target entity {entity_id} not found in registry")
+
+            # Extract device_id from entity identifiers
+            # Entities have identifiers like (DOMAIN, device_id)
+            for identifier in entity_entry.identifiers:
+                if identifier[0] == DOMAIN:
+                    device_id = identifier[1]
+                    _LOGGER.debug(
+                        "Extracted device_id %s from target entity %s",
+                        device_id,
+                        entity_id,
+                    )
+                    return device_id
+
+            raise ValueError(f"No device_id found in entity {entity_id} identifiers")
+
+        # Handle dict format (old format) or ServiceCall.data
+        elif hasattr(call, "data"):
+            data = call.data
+        else:
+            data = call
+
+        # Old format - extract device_id from data
+        device_id = data.get("device_id")
+        if not device_id:
+            raise ValueError("Missing required parameter: device_id")
+
+        # Normalize device_id to string format
+        if isinstance(device_id, list):
+            device_id = str(device_id[0]) if device_id else None
+        elif not isinstance(device_id, str):
+            device_id = str(device_id)
+
+        if not device_id:
+            raise ValueError("device_id cannot be empty")
+
+        _LOGGER.debug("Using legacy device_id extraction: %s", device_id)
+        return device_id
+
     async def async_get_fan_param(self, call: dict[str, Any]) -> None:
         """Handle 'get_fan_param' dict.
 
@@ -997,22 +1060,27 @@ class RamsesBroker:
             - from_id (str): Source device ID (defaults to bound_REM)
         """
         try:
-            data: dict[str, Any] = call
+            # Get data dict for parameter extraction
+            data: dict[str, Any] = call.data if hasattr(call, "data") else call
 
-            # Extract id's
+            # Use comprehensive device_id and from_id extraction
             original_device_id, normalized_device_id, from_id = (
                 self._get_device_and_from_id(data)
             )
-            param_id = self._get_param_id(data)
 
-            # Check if we got valid source device info
-            if not all([original_device_id, normalized_device_id, from_id]):
+            if not original_device_id:
+                _LOGGER.error("Could not extract device_id from service call")
+                return
+
+            if not from_id:
                 _LOGGER.warning(
-                    "Cannot get parameter: No valid source device available from %s. "
-                    "Need either: explicit from_id, or a REM/DIS device that was 'bound' in the configuration.",
-                    data,
+                    "No source device ID available for %s. "
+                    "FAN parameter operations require a bound REM/DIS device or explicit from_id.",
+                    original_device_id,
                 )
                 return
+
+            param_id = self._get_param_id(data)
 
             # Find the corresponding entity and set it to pending
             entity = self._find_param_entity(normalized_device_id, param_id)
@@ -1133,21 +1201,24 @@ class RamsesBroker:
         and optionally:
             - from_id (str): Source device ID (defaults to bound REM/DIS)
         """
-        data: dict[str, Any] = call
-        _LOGGER.debug("Processing set_fan_param service call with data: %s", data)
-
         try:
-            # Extract id's
+            # Get data dict for parameter extraction
+            data: dict[str, Any] = call.data if hasattr(call, "data") else call
+
+            # Use comprehensive device_id and from_id extraction
             original_device_id, normalized_device_id, from_id = (
                 self._get_device_and_from_id(data)
             )
 
-            # Check if we got valid source device info
-            if not all([original_device_id, normalized_device_id, from_id]):
+            if not original_device_id:
+                _LOGGER.error("Could not extract device_id from service call")
+                return
+
+            if not from_id:
                 _LOGGER.warning(
-                    "Cannot set parameter: No valid source device available from %s. "
-                    "Need either: explicit from_id, or a REM/DIS device that was 'bound' in the configuration.",
-                    data,
+                    "No source device ID available for %s. "
+                    "FAN parameter operations require a bound REM/DIS device or explicit from_id.",
+                    original_device_id,
                 )
                 return
 
