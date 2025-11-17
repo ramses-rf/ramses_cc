@@ -479,29 +479,40 @@ SVC_GET_FAN_PARAM: Final = "get_fan_param"
 SVC_SET_FAN_PARAM: Final = "set_fan_param"
 SVC_UPDATE_FAN_PARAMS: Final = "update_fan_params"
 
+_TARGET_FIELDS = {
+    vol.Optional("entity_id"): cv.entity_ids,
+    vol.Optional("device_id"): cv.ensure_list_csv,
+    vol.Optional("area_id"): cv.ensure_list_csv,
+}
+
 SCH_GET_FAN_PARAM = cv.make_entity_service_schema(
     {
+        **_TARGET_FIELDS,
         vol.Required("param_id"): _SCH_PARAM_ID,
         vol.Optional("from_id"): _SCH_DEVICE_ID,
-    },
-    extra=vol.PREVENT_EXTRA,
+    }
 )
 
 SCH_SET_FAN_PARAM = cv.make_entity_service_schema(
     {
+        **_TARGET_FIELDS,
         vol.Required("param_id"): _SCH_PARAM_ID,
         vol.Required("value"): cv.string,
         vol.Optional("from_id"): _SCH_DEVICE_ID,
-    },
-    extra=vol.PREVENT_EXTRA,
+    }
 )
 
 SCH_UPDATE_FAN_PARAMS = cv.make_entity_service_schema(
     {
+        **_TARGET_FIELDS,
         vol.Optional("from_id"): _SCH_DEVICE_ID,
-    },
-    extra=vol.PREVENT_EXTRA,
+    }
 )
+
+SCH_GET_FAN_PARAM_DOMAIN = SCH_GET_FAN_PARAM
+SCH_SET_FAN_PARAM_DOMAIN = SCH_SET_FAN_PARAM
+SCH_UPDATE_FAN_PARAMS_DOMAIN = SCH_UPDATE_FAN_PARAMS
+
 
 # services without their own schema
 SVC_FAKE_ZONE_TEMP: Final = "fake_zone_temp"

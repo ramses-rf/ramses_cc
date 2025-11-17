@@ -617,8 +617,13 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         :param from_id: Source device ID (defaults to controller)
         :type from_id: str
         """
+        _LOGGER.info(
+            "Fan param read via climate entity %s (%s)",
+            self.entity_id,
+            self.__class__.__name__,
+        )
         call: dict[str, Any] = {
-            "device_id": self.device_id,
+            "device_id": self._device.id,
             "param_id": param_id,
             "from_id": from_id,
         }
@@ -637,8 +642,13 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         :param from_id: Source device ID (defaults to controller)
         :type from_id: str
         """
+        _LOGGER.info(
+            "Fan param write via climate entity %s (%s)",
+            self.entity_id,
+            self.__class__.__name__,
+        )
         call: dict[str, Any] = {
-            "device_id": self.device_id,
+            "device_id": self._device.id,
             "param_id": param_id,
             "value": value,
             "from_id": from_id,
@@ -652,8 +662,13 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         :param from_id: Source device ID (defaults to controller)
         :type from_id: str
         """
+        _LOGGER.info(
+            "Fan param update via climate entity %s (%s)",
+            self.entity_id,
+            self.__class__.__name__,
+        )
         call: dict[str, Any] = {
-            "device_id": self.device_id,
+            "device_id": self._device.id,
             "from_id": from_id,
         }
         await self._broker.async_get_fan_param(call)

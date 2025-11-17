@@ -36,6 +36,7 @@ get_fan_param:
         domain:
           - climate
           - remote
+          - number
 
   fields:
     param_id:
@@ -56,6 +57,7 @@ set_fan_param:
         domain:
           - climate
           - remote
+          - number
 
   fields:
     param_id:
@@ -80,6 +82,7 @@ update_fan_params:
       - integration: ramses_cc
         domain:
           - climate
+          - number
 
   fields:
     from_id:

@@ -882,7 +882,7 @@ class RamsesBroker:
         :raises ValueError: If parameter ID is missing, empty, or invalid format
         :raises ValueError: If parameter ID is not exactly 2 hexadecimal digits
         """
-        data: dict[str, Any] = call
+        data = self._normalize_service_call(call)
 
         # Extract parameter ID
         param_id: str | None = data.get("param_id")
@@ -907,6 +907,106 @@ class RamsesBroker:
 
         return param_id
 
+    def _target_to_device_id(self, target: dict[str, Any]) -> str | None:
+        """Translate HA target selectors into a RAMSES device id using registries."""
+
+        if not target:
+            return None
+
+        ent_reg = er.async_get(self.hass)
+        dev_reg = dr.async_get(self.hass)
+
+        def _device_entry_to_ramses_id(
+            device_entry: dr.DeviceEntry | None,
+        ) -> str | None:
+            if not device_entry:
+                return None
+            for domain, dev_id in device_entry.identifiers:
+                if domain == DOMAIN:
+                    return str(dev_id)
+            return None
+
+        resolved_ids: list[str] = []
+
+        entity_ids = target.get("entity_id")
+        if entity_ids:
+            if isinstance(entity_ids, str):
+                entity_ids = [entity_ids]
+            for entity_id in entity_ids:
+                if (
+                    entity_entry := ent_reg.async_get(entity_id)
+                ) and entity_entry.device_id:
+                    device_entry = dev_reg.async_get(entity_entry.device_id)
+                    if device_id := _device_entry_to_ramses_id(device_entry):
+                        resolved_ids.append(device_id)
+
+        if not resolved_ids and (device_ids := target.get("device_id")):
+            if isinstance(device_ids, str):
+                device_ids = [device_ids]
+            for device_id in device_ids:
+                device_entry = dev_reg.async_get(device_id)
+                if resolved := _device_entry_to_ramses_id(device_entry):
+                    resolved_ids.append(resolved)
+
+        if not resolved_ids and (area_ids := target.get("area_id")):
+            if isinstance(area_ids, str):
+                area_ids = [area_ids]
+            for area_id in area_ids:
+                for device_entry in dev_reg.devices.values():
+                    if device_entry.area_id == area_id:
+                        if resolved := _device_entry_to_ramses_id(device_entry):
+                            resolved_ids.append(resolved)
+                if resolved_ids:
+                    break
+
+        return resolved_ids[0] if resolved_ids else None
+
+    def _resolve_device_id(self, data: dict[str, Any]) -> str | None:
+        """Return device_id from either explicit device_id or HA target selector."""
+        device_id = data.get("device_id")
+        if device_id:
+            # Handle list case first
+            if isinstance(device_id, list):
+                if not device_id:  # Empty list
+                    return None
+                # If it's a list with one item, use that
+                if len(device_id) == 1:
+                    device_id = device_id[0]
+                    data["device_id"] = (
+                        device_id  # Update the data with the single value
+                    )
+                else:
+                    # For multiple device IDs, log a warning and use the first one
+                    _LOGGER.warning(
+                        "Multiple device_ids provided, using first one: %s",
+                        device_id[0],
+                    )
+                    device_id = device_id[0]
+                    data["device_id"] = (
+                        device_id  # Update the data with the first value
+                    )
+
+            # Now handle the single device_id case
+            if isinstance(device_id, str):
+                if ":" in device_id or "_" in device_id:
+                    return device_id
+                if resolved := self._target_to_device_id({"device_id": [device_id]}):
+                    data["device_id"] = resolved
+                    return resolved
+            else:
+                # Handle other types (shouldn't normally happen)
+                device_id = str(device_id)
+                data["device_id"] = device_id
+                return device_id
+
+        # Try to get device_id from target
+        target = data.get("target")
+        if target and (resolved := self._target_to_device_id(target)):
+            data["device_id"] = resolved
+            return resolved
+
+        return None
+
     def _get_device_and_from_id(self, call: dict[str, Any]) -> tuple[str, str, str]:
         """Get device_id and from_id with validation and fallback logic.
 
@@ -921,26 +1021,15 @@ class RamsesBroker:
         """
         data: dict[str, Any] = call
 
-        # Extract and validate device_id
-        device_id = data.get("device_id")
+        # Extract and validate device_id - _resolve_device_id now always returns str or None
+        device_id = self._resolve_device_id(data)
 
         if not device_id:
-            _LOGGER.error("Missing required parameter: device_id")
+            _LOGGER.error("Missing or invalid device_id")
             return "", "", ""  # Return empty strings to indicate validation failure
 
-        # Normalize device_id to string format
-        if isinstance(device_id, list):
-            original_device_id = str(device_id[0]) if device_id else None
-        elif not isinstance(device_id, str):
-            original_device_id = str(device_id)
-        else:
-            original_device_id = device_id
-
-        if not original_device_id:
-            _LOGGER.error("device_id cannot be empty")
-            return "", "", ""  # Return empty strings to indicate validation failure
-
-        # Keep original (for device comms) and add normalized id (for entity lookup)
+        # At this point, device_id is guaranteed to be a non-empty string
+        original_device_id = device_id
         normalized_device_id = original_device_id.replace(":", "_").lower()
 
         # Get from_id with fallback logic (same as _get_from_id)
@@ -976,7 +1065,28 @@ class RamsesBroker:
         )
         return "", "", ""  # Return empty strings to indicate no valid source
 
-    async def async_get_fan_param(self, call: dict[str, Any]) -> None:
+    def _normalize_service_call(
+        self, call: dict[str, Any] | ServiceCall
+    ) -> dict[str, Any]:
+        """Return a mutable dict containing service call data and target info."""
+
+        if isinstance(call, dict):
+            data = dict(call)
+        elif hasattr(call, "data"):
+            data = dict(call.data)
+        else:
+            data = dict(call)
+
+        target = getattr(call, "target", None)
+        if target:
+            if hasattr(target, "as_dict"):
+                data["target"] = target.as_dict()
+            elif isinstance(target, dict):
+                data["target"] = target
+
+        return data
+
+    async def async_get_fan_param(self, call: dict[str, Any] | ServiceCall) -> None:
         """Handle 'get_fan_param' dict.
 
         This sends a parameter read request to the specified fan device.
@@ -996,8 +1106,13 @@ class RamsesBroker:
         and optionally:
             - from_id (str): Source device ID (defaults to bound_REM)
         """
+        if not isinstance(call, dict):
+            call = dict(call.data)  # Convert ServiceCall to dict
+
+        _LOGGER.debug("Processing get_fan_param service call with data: %s", call)
+
         try:
-            data: dict[str, Any] = call
+            data = self._normalize_service_call(call)
 
             # Extract id's
             original_device_id, normalized_device_id, from_id = (
@@ -1062,7 +1177,9 @@ class RamsesBroker:
         data = call.data if hasattr(call, "data") else call
         self.hass.loop.create_task(self._async_run_fan_param_sequence(data))
 
-    async def _async_run_fan_param_sequence(self, call: dict[str, Any]) -> None:
+    async def _async_run_fan_param_sequence(
+        self, call: dict[str, Any] | ServiceCall
+    ) -> None:
         """Handle 'update_fan_params' service call (or direct dict).
 
         This service sends parameter read requests (RQ) for each parameter defined
@@ -1083,7 +1200,10 @@ class RamsesBroker:
 
         note: This method is called by get_all_fan_params() and should not be called directly.
         """
-        data: dict[str, Any] = call
+        if not isinstance(call, dict):
+            call = dict(call.data)  # Convert ServiceCall to dict
+
+        _LOGGER.debug("Processing update_fan_params service call with data: %s", call)
 
         try:
             # Get the list of parameters to request
@@ -1092,13 +1212,13 @@ class RamsesBroker:
                 # Create parameter-specific data by copying base data and adding param_id
                 # Handle different types of mapping objects safely
                 try:
-                    param_data = dict(data)
+                    param_data = dict(call)
                 except (TypeError, ValueError):
                     # If dict() fails, try to copy as a regular dict
                     param_data = (
-                        {k: v for k, v in data.items()}
-                        if hasattr(data, "items")
-                        else data
+                        {k: v for k, v in call.items()}
+                        if hasattr(call, "items")
+                        else call
                     )
                 param_data["param_id"] = param_id
                 await self.async_get_fan_param(param_data)
@@ -1112,15 +1232,15 @@ class RamsesBroker:
             # Don't re-raise the exception - handle it gracefully like other methods
             return
 
-    async def async_set_fan_param(self, call: dict[str, Any]) -> None:
+    async def async_set_fan_param(self, call: dict[str, Any] | ServiceCall) -> None:
         """Handle 'set_fan_param' service call (or direct dict).
 
         This service sends a parameter write request (WR) to the specified FAN device to
         set a parameter value. Fire and Forget - The request is sent asynchronously and
         the response will be processed by the device's normal packet handling.
 
-        :param call: Dictionary containing device info
-        :type call: dict[str, Any]
+        :param call: Dictionary containing device info or ServiceCall object
+        :type call: dict[str, Any] | ServiceCall
         :raises ValueError: If required parameters are missing or invalid
         :raises ValueError: If parameter ID is not a valid 2-digit hex value
         :raises ValueError: If device is not found or not a FAN device
@@ -1133,10 +1253,14 @@ class RamsesBroker:
         and optionally:
             - from_id (str): Source device ID (defaults to bound REM/DIS)
         """
-        data: dict[str, Any] = call
-        _LOGGER.debug("Processing set_fan_param service call with data: %s", data)
+        if not isinstance(call, dict):
+            call = dict(call.data)  # Convert ServiceCall to dict
+
+        _LOGGER.debug("Processing set_fan_param service call with data: %s", call)
 
         try:
+            data = self._normalize_service_call(call)
+
             # Extract id's
             original_device_id, normalized_device_id, from_id = (
                 self._get_device_and_from_id(data)

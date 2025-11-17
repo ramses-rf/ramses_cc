@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Final
 import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant import config_entries
 from homeassistant.components.climate import DOMAIN as CLIMATE_ENTITY_DOMAIN
+from homeassistant.components.number import DOMAIN as NUMBER_ENTITY_DOMAIN
 from homeassistant.components.remote import DOMAIN as REMOTE_ENTITY_DOMAIN
 from homeassistant.components.sensor import DOMAIN as SENSOR_ENTITY_DOMAIN
 from homeassistant.components.water_heater import DOMAIN as WATERHEATER_ENTITY_DOMAIN
@@ -41,12 +42,19 @@ from .const import (
 from .schemas import (
     SCH_BIND_DEVICE,
     SCH_DOMAIN_CONFIG,
+    SCH_GET_FAN_PARAM_DOMAIN,
     SCH_NO_SVC_PARAMS,
     SCH_SEND_PACKET,
+    SCH_SET_FAN_PARAM_DOMAIN,
+    SCH_UPDATE_FAN_PARAMS_DOMAIN,
     SVC_BIND_DEVICE,
     SVC_FORCE_UPDATE,
+    SVC_GET_FAN_PARAM,
     SVC_SEND_PACKET,
+    SVC_SET_FAN_PARAM,
+    SVC_UPDATE_FAN_PARAMS,
     SVCS_RAMSES_CLIMATE,
+    SVCS_RAMSES_FAN_PARAM,
     SVCS_RAMSES_REMOTE,
     SVCS_RAMSES_SENSOR,
     SVCS_RAMSES_WATER_HEATER,
@@ -91,42 +99,28 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     # register all platform services during async_setup, since 2025.10, see
     # https://developers.home-assistant.io/blog/2025/09/25/entity-services-api-changes
-    for k, v in SVCS_RAMSES_CLIMATE.items():
-        service.async_register_platform_entity_service(
-            hass,
-            DOMAIN,
-            k,
-            entity_domain=CLIMATE_ENTITY_DOMAIN,
-            schema=v,
-            func=f"async_{k}",
-        )
-    for k, v in SVCS_RAMSES_REMOTE.items():
-        service.async_register_platform_entity_service(
-            hass,
-            DOMAIN,
-            k,
-            entity_domain=REMOTE_ENTITY_DOMAIN,
-            schema=v,
-            func=f"async_{k}",
-        )
-    for k, v in SVCS_RAMSES_SENSOR.items():
-        service.async_register_platform_entity_service(
-            hass,
-            DOMAIN,
-            k,
-            entity_domain=SENSOR_ENTITY_DOMAIN,
-            schema=v,
-            func=f"async_{k}",
-        )
-    for k, v in SVCS_RAMSES_WATER_HEATER.items():
-        service.async_register_platform_entity_service(
-            hass,
-            DOMAIN,
-            k,
-            entity_domain=WATERHEATER_ENTITY_DOMAIN,
-            schema=v,
-            func=f"async_{k}",
-        )
+    for entity_domain, services in (
+        (CLIMATE_ENTITY_DOMAIN, SVCS_RAMSES_CLIMATE),
+        (REMOTE_ENTITY_DOMAIN, SVCS_RAMSES_REMOTE),
+        (SENSOR_ENTITY_DOMAIN, SVCS_RAMSES_SENSOR),
+        (WATERHEATER_ENTITY_DOMAIN, SVCS_RAMSES_WATER_HEATER),
+        (NUMBER_ENTITY_DOMAIN, SVCS_RAMSES_FAN_PARAM),
+    ):
+        for key, schema in services.items():
+            _LOGGER.debug(
+                "Registering %s entity service %s with schema %s",
+                entity_domain,
+                key,
+                schema,
+            )
+            service.async_register_platform_entity_service(
+                hass,
+                DOMAIN,
+                key,
+                entity_domain=entity_domain,
+                schema=schema,
+                func=f"async_{key}",
+            )
 
     return True
 
@@ -254,17 +248,17 @@ def async_register_domain_services(
     async def async_send_packet(call: ServiceCall) -> None:
         await broker.async_send_packet(call)
 
-    # @verify_domain_control(DOMAIN)
-    # async def async_get_fan_param(call: ServiceCall) -> None:
-    #     await broker.async_get_fan_param(call)
-    #
-    # @verify_domain_control(DOMAIN)
-    # async def async_set_fan_param(call: ServiceCall) -> None:
-    #     await broker.async_set_fan_param(call)
-    #
-    # @verify_domain_control(DOMAIN)
-    # async def async_update_fan_params(call: ServiceCall) -> None:
-    #     await broker._async_run_fan_param_sequence(call)
+    @verify_domain_control(DOMAIN)
+    async def async_get_fan_param(call: ServiceCall) -> None:
+        await broker.async_get_fan_param(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_set_fan_param(call: ServiceCall) -> None:
+        await broker.async_set_fan_param(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_update_fan_params(call: ServiceCall) -> None:
+        await broker._async_run_fan_param_sequence(call)
 
     hass.services.async_register(
         DOMAIN, SVC_BIND_DEVICE, async_bind_device, schema=SCH_BIND_DEVICE
@@ -273,21 +267,18 @@ def async_register_domain_services(
         DOMAIN, SVC_FORCE_UPDATE, async_force_update, schema=SCH_NO_SVC_PARAMS
     )
 
-    # next are registered as part of async_setup SVCS_RAMSES_CLIMATE.items()
-    # hass.services.async_register(
-    #     DOMAIN, SVC_SET_FAN_PARAM, async_set_fan_param, schema=SCH_SET_FAN_PARAM
-    # )
-    #
-    # hass.services.async_register(
-    #     DOMAIN,
-    #     SVC_UPDATE_FAN_PARAMS,
-    #     async_update_fan_params,
-    #     schema=SCH_UPDATE_FAN_PARAMS,
-    # )
-    #
-    # hass.services.async_register(
-    #     DOMAIN, SVC_GET_FAN_PARAM, async_get_fan_param, schema=SCH_GET_FAN_PARAM
-    # )
+    hass.services.async_register(
+        DOMAIN, SVC_GET_FAN_PARAM, async_get_fan_param, schema=SCH_GET_FAN_PARAM_DOMAIN
+    )
+    hass.services.async_register(
+        DOMAIN, SVC_SET_FAN_PARAM, async_set_fan_param, schema=SCH_SET_FAN_PARAM_DOMAIN
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SVC_UPDATE_FAN_PARAMS,
+        async_update_fan_params,
+        schema=SCH_UPDATE_FAN_PARAMS_DOMAIN,
+    )
 
     # Advanced features
     if entry.options.get(CONF_ADVANCED_FEATURES, {}).get(CONF_SEND_PACKET):
