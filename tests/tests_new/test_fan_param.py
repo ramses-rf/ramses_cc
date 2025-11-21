@@ -43,7 +43,7 @@ class TestFanParameterGet:
     @pytest.fixture(autouse=True)
     async def setup_get_fixture(
         self, hass: HomeAssistant
-    ) -> AsyncGenerator[None, None, None]:
+    ) -> AsyncGenerator[None, None]:  # noqa: UP043
         """Set up test environment for GET operations.
 
         This fixture runs before each test method and sets up:
@@ -227,7 +227,9 @@ class TestFanParameterSet:
     """
 
     @pytest.fixture(autouse=True)
-    async def setup_set_fixture(self, hass: HomeAssistant):
+    async def setup_set_fixture(
+        self, hass: HomeAssistant
+    ) -> AsyncGenerator[None, None]:  # noqa: UP043
         """Set up test environment for SET operations.
 
         This fixture runs before each test method and sets up:
@@ -340,7 +342,9 @@ class TestFanParameterUpdate:
     """
 
     @pytest.fixture(autouse=True)
-    async def setup_update_fixture(self, hass: HomeAssistant):
+    async def setup_update_fixture(
+        self, hass: HomeAssistant
+    ) -> AsyncGenerator[None, None]:  # noqa: UP043
         """Set up test environment for UPDATE operations.
 
         This fixture runs before each test method and sets up:

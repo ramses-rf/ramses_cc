@@ -8,7 +8,9 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.syrupy import HomeAssistantSnapshotExtension
+from pytest_homeassistant_custom_component.syrupy import (  # type: ignore[import-untyped]
+    HomeAssistantSnapshotExtension,
+)
 from syrupy.assertion import SnapshotAssertion
 
 from ..virtual_rf import VirtualRf
