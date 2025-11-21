@@ -29,7 +29,7 @@ from ramses_tx.const import Priority
 
 from . import RamsesEntity, RamsesEntityDescription
 from .broker import RamsesBroker
-from .const import DOMAIN
+from .const import ATTR_DEVICE_ID, DOMAIN
 from .schemas import DEFAULT_DELAY_SECS, DEFAULT_NUM_REPEATS, DEFAULT_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
@@ -271,6 +271,30 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         """
         _LOGGER.debug("Turning on REM device %s", self._device.id)
         pass
+
+    # the 2411 fan_param services, copied literally from climate.py (no REM update_all service)
+
+    @callback
+    async def async_get_fan_param(self, **kwargs: Any) -> None:
+        """Handle 'get_fan_param' service call."""
+        _LOGGER.info(
+            "Fan param read via remote entity %s (%s)",
+            self.entity_id,
+            self.__class__.__name__,
+        )
+        kwargs[ATTR_DEVICE_ID] = self._device.id
+        await self._broker.async_get_fan_param(kwargs)
+
+    @callback
+    async def async_set_fan_param(self, **kwargs: Any) -> None:
+        """Handle 'set_fan_param' service call."""
+        _LOGGER.info(
+            "Fan param write via remote entity %s (%s)",
+            self.entity_id,
+            self.__class__.__name__,
+        )
+        kwargs[ATTR_DEVICE_ID] = self._device.id
+        await self._broker.async_set_fan_param(kwargs)
 
 
 @dataclass(frozen=True, kw_only=True)
