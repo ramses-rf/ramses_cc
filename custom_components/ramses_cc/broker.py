@@ -529,28 +529,24 @@ class RamsesBroker:
                         1.0  # Increment delay for next device (1 second)
                     )
 
-                # Create a closure to capture the delay value
-                def create_delayed_callback(
-                    callback_func: Callable[[], Coroutine[Any, Any, None]],
-                    delay_seconds: float,
-                ) -> Callable[[], Coroutine[Any, Any, None]]:
-                    async def delayed_callback() -> None:
-                        if delay_seconds > 0:
-                            _LOGGER.debug(
-                                "Delaying parameter request for FAN %s by %s seconds to prevent startup flooding",
-                                device.id,
-                                delay_seconds,
-                            )
-                            await asyncio.sleep(delay_seconds)
-                        await callback_func()
+                # Create a proper async wrapper that returns None as expected
+                async def _async_delayed_callback() -> None:
+                    """Async wrapper that handles the delay and callback execution."""
+                    if startup_delay > 0:
+                        _LOGGER.debug(
+                            "Delaying parameter request for FAN %s by %s seconds to prevent startup flooding",
+                            device.id,
+                            startup_delay,
+                        )
+                        await asyncio.sleep(startup_delay)
 
-                    return delayed_callback
+                    await on_fan_first_message()
 
-                device.set_initialized_callback(
-                    lambda: self.hass.async_create_task(
-                        create_delayed_callback(on_fan_first_message, startup_delay)
-                    )
-                )
+                def _sync_callback() -> None:
+                    """Sync wrapper that creates the async task and returns None."""
+                    self.hass.async_create_task(_async_delayed_callback())
+
+                device.set_initialized_callback(_sync_callback)
 
             # Set up parameter update callback
             if hasattr(device, "set_param_update_callback"):
