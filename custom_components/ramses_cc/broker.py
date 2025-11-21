@@ -115,6 +115,13 @@ class RamsesBroker:
         self._dhws: list[Zone] = []
         self._parameter_entities_created: set[str] = set()
 
+        # Startup delay counter for FAN device parameter requests to prevent RF flooding
+        # Also used to coordinate with ramses_extras startup timing
+        self._fan_startup_delay = 0.0
+
+        # Track whether ramses_extras has finished its initial startup
+        self._ramses_extras_ready = False
+
         self._sem = Semaphore(value=1)
 
         # Initialize platforms dictionary to store platform references
@@ -513,8 +520,36 @@ class RamsesBroker:
                             ex,
                         )
 
+                # Add startup delay to stagger parameter requests across multiple FAN devices
+                # This prevents RF protocol flooding during system startup
+                startup_delay = 0.0
+                if hasattr(self, "_fan_startup_delay"):
+                    startup_delay = self._fan_startup_delay
+                    self._fan_startup_delay += (
+                        1.0  # Increment delay for next device (1 second)
+                    )
+
+                # Create a closure to capture the delay value
+                def create_delayed_callback(
+                    callback_func: Callable[[], Coroutine[Any, Any, None]],
+                    delay_seconds: float,
+                ) -> Callable[[], Coroutine[Any, Any, None]]:
+                    async def delayed_callback() -> None:
+                        if delay_seconds > 0:
+                            _LOGGER.debug(
+                                "Delaying parameter request for FAN %s by %s seconds to prevent startup flooding",
+                                device.id,
+                                delay_seconds,
+                            )
+                            await asyncio.sleep(delay_seconds)
+                        await callback_func()
+
+                    return delayed_callback
+
                 device.set_initialized_callback(
-                    lambda: self.hass.async_create_task(on_fan_first_message())
+                    lambda: self.hass.async_create_task(
+                        create_delayed_callback(on_fan_first_message, startup_delay)
+                    )
                 )
 
             # Set up parameter update callback
@@ -559,7 +594,27 @@ class RamsesBroker:
                     "device_id": device.id,
                 }
                 try:
-                    self.get_all_fan_params(call)
+                    # Apply startup delay to stagger parameter requests during system startup
+                    # This prevents RF protocol flooding when multiple devices are already initialized
+                    startup_delay = 0.0
+                    if hasattr(self, "_fan_startup_delay"):
+                        startup_delay = self._fan_startup_delay
+                        self._fan_startup_delay += (
+                            1.0  # Increment delay for next device (1 second)
+                        )
+
+                    if startup_delay > 0:
+                        _LOGGER.debug(
+                            "Delaying parameter request for already-initialized FAN %s by %s seconds to prevent startup flooding",
+                            device.id,
+                            startup_delay,
+                        )
+                        # Create a task with delay
+                        self.hass.async_create_task(
+                            self._delayed_get_all_fan_params(call, startup_delay)
+                        )
+                    else:
+                        self.get_all_fan_params(call)
                 except Exception as ex:
                     _LOGGER.warning(
                         "Failed to request parameters for device %s during setup: %s. "
@@ -1129,6 +1184,32 @@ class RamsesBroker:
         except Exception as ex:
             _LOGGER.error("Failed to get fan parameters for device: %s", ex)
             # Don't re-raise the exception - handle it gracefully like other methods
+
+    async def _delayed_get_all_fan_params(
+        self, call: dict[str, Any], delay_seconds: float
+    ) -> None:
+        """Run get_all_fan_params with a delay to prevent startup flooding.
+
+        :param call: Service call data or dictionary containing device info
+        :type call: dict[str, Any]
+        :param delay_seconds: Delay in seconds before executing the parameter requests
+        :type delay_seconds: float
+        """
+        if delay_seconds > 0:
+            _LOGGER.debug(
+                "Delaying fan parameter requests by %s seconds to prevent startup flooding",
+                delay_seconds,
+            )
+            await asyncio.sleep(delay_seconds)
+
+        try:
+            self.get_all_fan_params(call)
+        except Exception as ex:
+            _LOGGER.warning(
+                "Failed to request parameters during delayed startup: %s. "
+                "Entities will still work for received parameter updates.",
+                ex,
+            )
             return
 
     async def async_set_fan_param(self, call: ServiceCall | dict[str, Any]) -> None:
