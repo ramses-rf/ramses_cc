@@ -718,6 +718,41 @@ class RamsesNumberParam(RamsesNumberBase):
 
         self.hass.async_create_task(self._clear_pending_after_timeout(30))
 
+    @callback
+    async def async_get_fan_param(self, param_id: str = "", from_id: str = "") -> None:
+        """Expose fan parameter read service for number entities."""
+
+        call: dict[str, Any] = {
+            "device_id": self._device.id,
+            "param_id": param_id,
+            "from_id": from_id,
+        }
+        await self._broker.async_get_fan_param(call)
+
+    @callback
+    async def async_set_fan_param(
+        self, param_id: str = "", value: int | float = -1, from_id: str = ""
+    ) -> None:
+        """Expose fan parameter write service for number entities."""
+
+        call: dict[str, Any] = {
+            "device_id": self._device.id,
+            "param_id": param_id,
+            "value": value,
+            "from_id": from_id,
+        }
+        await self._broker.async_set_fan_param(call)
+
+    @callback
+    async def async_update_fan_params(self, from_id: str = "") -> None:
+        """Expose bulk update (RQ sweep) for fan parameters."""
+
+        call: dict[str, Any] = {
+            "device_id": self._device.id,
+            "from_id": from_id,
+        }
+        await self._broker._async_run_fan_param_sequence(call)
+
     def _is_boost_mode_param(self) -> bool:
         """Check if this is a boost mode parameter (ID 95).
 
@@ -785,14 +820,9 @@ class RamsesNumberParam(RamsesNumberBase):
             if self._is_boost_mode_param():
                 display_value = round(float(value), 1)
                 self.set_pending(display_value)
-                await self.hass.services.async_call(
-                    DOMAIN,
-                    "set_fan_param",
-                    {
-                        "device_id": self._device.id,
-                        "param_id": self._normalized_param_id,
-                        "value": float(value),
-                    },
+                await self.async_set_fan_param(
+                    param_id=self._normalized_param_id,
+                    value=float(value),
                 )
                 return
 
@@ -811,14 +841,9 @@ class RamsesNumberParam(RamsesNumberBase):
             # Set pending state with the display value
             self.set_pending(display_value)
 
-            await self.hass.services.async_call(
-                DOMAIN,
-                "set_fan_param",
-                {
-                    "device_id": self._device.id,
-                    "param_id": self._normalized_param_id,
-                    "value": float(value),
-                },
+            await self.async_set_fan_param(
+                param_id=self._normalized_param_id,
+                value=float(value),
             )
         except Exception as ex:
             _LOGGER.error(
