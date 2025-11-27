@@ -340,9 +340,9 @@ class RamsesBroker:
             await self._platform_setup_tasks[platform]
             _LOGGER.debug("Platform setup completed for %s", platform)
             return True
-        except Exception as ex:
+        except Exception as err:
             _LOGGER.error(
-                "Error setting up %s platform: %s", platform, str(ex), exc_info=True
+                "Error setting up %s platform: %s", platform, str(err), exc_info=True
             )
             return False
 
@@ -505,12 +505,12 @@ class RamsesBroker:
                     }
                     try:
                         self.get_all_fan_params(call)
-                    except Exception as ex:
+                    except Exception as err:
                         _LOGGER.warning(
                             "Failed to request parameters for device %s during startup: %s. "
                             "Entities will still work for received parameter updates.",
                             device.id,
-                            ex,
+                            err,
                         )
 
                 device.set_initialized_callback(
@@ -560,12 +560,12 @@ class RamsesBroker:
                 }
                 try:
                     self.get_all_fan_params(call)
-                except Exception as ex:
+                except Exception as err:
                     _LOGGER.warning(
                         "Failed to request parameters for device %s during setup: %s. "
                         "Entities will still work for received parameter updates.",
                         device.id,
-                        ex,
+                        err,
                     )
 
     def _update_device(self, device: RamsesRFEntity) -> None:
@@ -1034,12 +1034,12 @@ class RamsesBroker:
             # Clear pending state after timeout (non-blocking)
             if entity and hasattr(entity, "_clear_pending_after_timeout"):
                 asyncio.create_task(entity._clear_pending_after_timeout(30))
-        except ValueError as ex:
+        except ValueError as err:
             # Log validation errors but don't re-raise them for edge cases
-            _LOGGER.error("Failed to get fan parameter: %s", ex)
+            _LOGGER.error("Failed to get fan parameter: %s", err)
             return
-        except Exception as ex:
-            _LOGGER.error("Failed to get fan parameter: %s", ex, exc_info=True)
+        except Exception as err:
+            _LOGGER.error("Failed to get fan parameter: %s", err, exc_info=True)
             # Clear pending state on error
             if (
                 "entity" in locals()
@@ -1126,8 +1126,8 @@ class RamsesBroker:
                 # This prevents overwhelming the device and protocol buffer
                 if idx < len(_2411_PARAMS_SCHEMA) - 1:
                     await asyncio.sleep(0.5)  # 500ms between requests
-        except Exception as ex:
-            _LOGGER.error("Failed to get fan parameters for device: %s", ex)
+        except Exception as err:
+            _LOGGER.error("Failed to get fan parameters for device: %s", err)
             # Don't re-raise the exception - handle it gracefully like other methods
             return
 
@@ -1204,10 +1204,10 @@ class RamsesBroker:
             if entity and hasattr(entity, "_clear_pending_after_timeout"):
                 asyncio.create_task(entity._clear_pending_after_timeout(30))
 
-        except ValueError as ex:
+        except ValueError as err:
             # Log validation errors but don't re-raise them
-            _LOGGER.error("Failed to set fan parameter: %s", ex)
+            _LOGGER.error("Failed to set fan parameter: %s", err)
             return
-        except Exception as ex:
-            _LOGGER.error("Failed to set fan parameter: %s", ex, exc_info=True)
+        except Exception as err:
+            _LOGGER.error("Failed to set fan parameter: %s", err, exc_info=True)
             raise

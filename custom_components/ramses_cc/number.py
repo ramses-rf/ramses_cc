@@ -296,8 +296,8 @@ class RamsesNumberBase(RamsesEntity, NumberEntity):
                     timeout,
                 )
                 self.clear_pending()
-        except Exception as ex:
-            _LOGGER.debug("Error in pending clear task: %s", ex, exc_info=True)
+        except Exception as err:
+            _LOGGER.debug("Error in pending clear task: %s", err, exc_info=True)
 
     def __init__(
         self,
@@ -820,13 +820,13 @@ class RamsesNumberParam(RamsesNumberBase):
                     "value": float(value),
                 },
             )
-        except Exception as ex:
+        except Exception as err:
             _LOGGER.error(
                 "%s: Error setting parameter %s to %s: %s",
                 self.unique_id,
                 self._normalized_param_id,
                 value,
-                ex,
+                err,
                 exc_info=True,
             )
             raise
