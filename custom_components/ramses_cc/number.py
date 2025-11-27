@@ -76,7 +76,7 @@ from ramses_tx import (
 
 from . import RamsesEntity, RamsesEntityDescription
 from .broker import RamsesBroker
-from .const import DOMAIN
+from .const import ATTR_DEVICE_ID, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -456,72 +456,6 @@ class RamsesNumberParam(RamsesNumberBase):
         param_id = getattr(self.entity_description, "ramses_rf_attr", None)
         return str(param_id).upper() if param_id else None
 
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is about to be added to Home Assistant.
-
-        This method is called when the entity is being added to Home Assistant.
-        It performs the following operations:
-
-        1. Calls the parent class's async_added_to_hass method
-        2. Sets up an event listener for parameter updates
-
-        Note: Parameter values are requested by the broker's
-        get_all_fan_params method in a controlled manner to prevent
-        flooding the RF protocol.
-
-        :return: None
-        :rtype: None
-        """
-        await super().async_added_to_hass()
-
-        # Listen for parameter update events
-        self.async_on_remove(
-            self.hass.bus.async_listen(
-                "ramses_cc.fan_param_updated", self._async_param_updated
-            )
-        )
-
-    @callback
-    def _async_param_updated(self, event: dict[str, Any]) -> None:
-        """Handle parameter updates from the device.
-
-        This callback is triggered when a fan parameter update event is received.
-        It processes the update and updates the entity's state if the parameter
-        matches this entity's parameter ID.
-
-        :param event: The event data containing the parameter update
-        :type event: dict[str, Any]
-        :return: None
-        :rtype: None
-        """
-        # Get the parameter ID we're interested in
-        our_param_id = getattr(self.entity_description, "ramses_rf_attr", "")
-        if not our_param_id:
-            return
-
-        # Extract data from event
-        event_data = event.data if hasattr(event, "data") else event
-
-        # Only process if this is our parameter
-        if (
-            str(event_data.get("device_id", "")).lower() == str(self._device.id).lower()
-            and str(event_data.get("param_id", "")).lower() == str(our_param_id).lower()
-        ):
-            new_value = event_data.get("value")
-
-            param_id = str(our_param_id).upper()
-            self._param_native_value[param_id] = new_value
-            _LOGGER.debug(
-                "Parameter %s updated for device %s: %s (stored as: %s, full dict: %s)",
-                our_param_id,
-                self._device.id,
-                new_value,
-                self._param_native_value.get(param_id),
-                self._param_native_value,
-            )
-
-            self.clear_pending()
-
     def __init__(
         self,
         broker: RamsesBroker,
@@ -643,6 +577,72 @@ class RamsesNumberParam(RamsesNumberBase):
             param_id,
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is about to be added to Home Assistant.
+
+        This method is called when the entity is being added to Home Assistant.
+        It performs the following operations:
+
+        1. Calls the parent class's async_added_to_hass method
+        2. Sets up an event listener for parameter updates
+
+        Note: Parameter values are requested by the broker's
+        get_all_fan_params method in a controlled manner to prevent
+        flooding the RF protocol.
+
+        :return: None
+        :rtype: None
+        """
+        await super().async_added_to_hass()
+
+        # Listen for parameter update events
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "ramses_cc.fan_param_updated", self._async_param_updated
+            )
+        )
+
+    @callback
+    def _async_param_updated(self, event: dict[str, Any]) -> None:
+        """Handle parameter updates from the device.
+
+        This callback is triggered when a fan parameter update event is received.
+        It processes the update and updates the entity's state if the parameter
+        matches this entity's parameter ID.
+
+        :param event: The event data containing the parameter update
+        :type event: dict[str, Any]
+        :return: None
+        :rtype: None
+        """
+        # Get the parameter ID we're interested in
+        our_param_id = getattr(self.entity_description, "ramses_rf_attr", "")
+        if not our_param_id:
+            return
+
+        # Extract data from event
+        event_data = event.data if hasattr(event, "data") else event
+
+        # Only process if this is our parameter
+        if (
+            str(event_data.get("device_id", "")).lower() == str(self._device.id).lower()
+            and str(event_data.get("param_id", "")).lower() == str(our_param_id).lower()
+        ):
+            new_value = event_data.get("value")
+
+            param_id = str(our_param_id).upper()
+            self._param_native_value[param_id] = new_value
+            _LOGGER.debug(
+                "Parameter %s updated for device %s: %s (stored as: %s, full dict: %s)",
+                our_param_id,
+                self._device.id,
+                new_value,
+                self._param_native_value.get(param_id),
+                self._param_native_value,
+            )
+
+            self.clear_pending()
+
     @property
     def available(self) -> bool:
         """Determine if the entity is available.
@@ -718,6 +718,26 @@ class RamsesNumberParam(RamsesNumberBase):
 
         self.hass.async_create_task(self._clear_pending_after_timeout(30))
 
+    # the 2411 fan_param services, copied from climate.py
+
+    @callback
+    async def async_get_fan_param(self, **kwargs: Any) -> None:
+        """Handle 'get_fan_param' service call."""
+        kwargs[ATTR_DEVICE_ID] = self._device.id
+        await self._broker.async_get_fan_param(kwargs)
+
+    @callback
+    async def async_set_fan_param(self, **kwargs: Any) -> None:
+        """Handle 'set_fan_param' service call."""
+        kwargs[ATTR_DEVICE_ID] = self._device.id
+        await self._broker.async_set_fan_param(kwargs)
+
+    @callback
+    async def async_update_fan_params(self, **kwargs: Any) -> None:
+        """Handle 'update_fan_params' service call."""
+        kwargs[ATTR_DEVICE_ID] = self._device.id
+        self._broker.get_all_fan_params(kwargs)  # don't await
+
     def _is_boost_mode_param(self) -> bool:
         """Check if this is a boost mode parameter (ID 95).
 
@@ -785,14 +805,9 @@ class RamsesNumberParam(RamsesNumberBase):
             if self._is_boost_mode_param():
                 display_value = round(float(value), 1)
                 self.set_pending(display_value)
-                await self.hass.services.async_call(
-                    DOMAIN,
-                    "set_fan_param",
-                    {
-                        "device_id": self._device.id,
-                        "param_id": self._normalized_param_id,
-                        "value": float(value),
-                    },
+                await self.async_set_fan_param(
+                    param_id=self._normalized_param_id,
+                    value=float(value),
                 )
                 return
 
@@ -811,14 +826,9 @@ class RamsesNumberParam(RamsesNumberBase):
             # Set pending state with the display value
             self.set_pending(display_value)
 
-            await self.hass.services.async_call(
-                DOMAIN,
-                "set_fan_param",
-                {
-                    "device_id": self._device.id,
-                    "param_id": self._normalized_param_id,
-                    "value": float(value),
-                },
+            await self.async_set_fan_param(
+                param_id=self._normalized_param_id,
+                value=float(value),
             )
         except Exception as err:
             _LOGGER.error(
