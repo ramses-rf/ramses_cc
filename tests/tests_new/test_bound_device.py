@@ -5,6 +5,7 @@ for fan parameter operations, ensuring that only REM and DIS devices can be boun
 """
 
 # import logging
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,7 +33,9 @@ class TestBoundDeviceFunctionality:
     """
 
     @pytest.fixture(autouse=True)
-    async def setup_bound_device_fixture(self, hass: HomeAssistant):
+    async def setup_bound_device_fixture(
+        self, hass: HomeAssistant
+    ) -> AsyncGenerator[None, None]:  # noqa: UP043
         """Set up test environment for bound device operations.
 
         This fixture runs before each test method and sets up:
