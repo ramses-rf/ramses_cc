@@ -606,6 +606,73 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         """Return the current preset mode, e.g., home, away, temp."""
         return PRESET_NONE
 
+    # the 2411 fan_param services, copied literally to remote.py
+
+    @callback
+    async def async_get_fan_param(self, param_id: str = "", from_id: str = "") -> None:
+        """Handle 'get_fan_param' service call.
+
+        :param param_id: The parameter ID of the entity to find
+        :type param_id: str
+        :param from_id: Source device ID (defaults to controller)
+        :type from_id: str
+        """
+        _LOGGER.info(
+            "Fan param read via climate entity %s (%s)",
+            self.entity_id,
+            self.__class__.__name__,
+        )
+        call: dict[str, Any] = {
+            "device_id": self._device.id,
+            "param_id": param_id,
+            "from_id": from_id,
+        }
+        await self._broker.async_get_fan_param(call)
+
+    @callback
+    async def async_set_fan_param(
+        self, param_id: str = "", value: int = -1, from_id: str = ""
+    ) -> None:
+        """Handle 'set_fan_param' service call.
+
+        :param param_id: The parameter ID of the entity to find
+        :type param_id: str
+        :param value: The value to set (type depends on parameter)
+        :type value: int
+        :param from_id: Source device ID (defaults to controller)
+        :type from_id: str
+        """
+        _LOGGER.info(
+            "Fan param write via climate entity %s (%s)",
+            self.entity_id,
+            self.__class__.__name__,
+        )
+        call: dict[str, Any] = {
+            "device_id": self._device.id,
+            "param_id": param_id,
+            "value": value,
+            "from_id": from_id,
+        }
+        await self._broker.async_set_fan_param(call)
+
+    @callback
+    async def async_update_fan_params(self, from_id: str = "") -> None:
+        """Handle 'update_fan_params' service call.
+
+        :param from_id: Source device ID (defaults to controller)
+        :type from_id: str
+        """
+        _LOGGER.info(
+            "Fan param update via climate entity %s (%s)",
+            self.entity_id,
+            self.__class__.__name__,
+        )
+        call: dict[str, Any] = {
+            "device_id": self._device.id,
+            "from_id": from_id,
+        }
+        await self._broker.async_get_fan_param(call)
+
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesClimateEntityDescription(RamsesEntityDescription, ClimateEntityDescription):
