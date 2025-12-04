@@ -4,6 +4,8 @@ This module contains comprehensive tests for both get_fan_param and set_fan_para
 services in the Ramses RF integration (ramses_cc on github). It verifies the basic
 functionality of sending fan parameter commands and handling various edge cases
 for both read and write operations.
+
+TODO: add tests routing a service call via a (mocked) device
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant  # , ServiceCall
 
 from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.schemas import SVC_SET_FAN_PARAM
@@ -82,7 +84,7 @@ class TestFanParameterGet:
 
     @pytest.mark.asyncio
     async def test_basic_fan_param_request(self, hass: HomeAssistant) -> None:
-        """Test basic fan parameter request with all required parameters.
+        """Test basic fan parameter request with all required parameters directly on broker.
 
         Verifies that:
         1. The command is constructed with correct parameters
@@ -95,7 +97,10 @@ class TestFanParameterGet:
             "param_id": TEST_PARAM_ID,
             "from_id": TEST_FROM_ID,
         }
-        call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        call = (
+            service_data  # broker only receives dict, call is routed via climate/remote
+        )
 
         # Act - Call the method under test
         await self.broker.async_get_fan_param(call)
@@ -122,7 +127,10 @@ class TestFanParameterGet:
         """
         # Setup service call without device_id
         service_data = {"param_id": TEST_PARAM_ID, "from_id": TEST_FROM_ID}
-        call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        call = (
+            service_data  # broker only receives dict, call is routed via climate/remote
+        )
 
         # Clear any existing log captures
         caplog.clear()
@@ -154,7 +162,10 @@ class TestFanParameterGet:
         """
         # Setup service call without param_id
         service_data = {"device_id": TEST_DEVICE_ID, "from_id": TEST_FROM_ID}
-        call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        call = (
+            service_data  # broker only receives dict, call is routed via climate/remote
+        )
 
         # Clear any existing log captures
         caplog.clear()
@@ -191,7 +202,10 @@ class TestFanParameterGet:
             "param_id": TEST_PARAM_ID,
             "from_id": TEST_FROM_ID,
         }
-        call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        call = (
+            service_data  # broker only receives dict, call is routed via climate/remote
+        )
 
         # Act - Call the method under test
         await self.broker.async_get_fan_param(call)
@@ -280,7 +294,10 @@ class TestFanParameterSet:
             "value": TEST_VALUE,
             "from_id": TEST_FROM_ID,
         }
-        call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+        call = (
+            service_data  # broker only receives dict, call is routed via climate/remote
+        )
 
         # Act - Call the method under test
         await self.broker.async_set_fan_param(call)
@@ -314,7 +331,10 @@ class TestFanParameterSet:
             "value": TEST_VALUE,
             "from_id": TEST_FROM_ID,
         }
-        call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+        call = (
+            service_data  # broker only receives dict, call is routed via climate/remote
+        )
 
         # Act - Call the method under test
         await self.broker.async_set_fan_param(call)
@@ -391,7 +411,10 @@ class TestFanParameterUpdate:
             "device_id": TEST_DEVICE_ID,
             "from_id": TEST_FROM_ID,
         }
-        call = ServiceCall(hass, "ramses_cc", "update_fan_params", service_data)
+        # call = ServiceCall(hass, "ramses_cc", "update_fan_params", service_data)
+        call = (
+            service_data  # broker only receives dict, call is routed via climate/remote
+        )
 
         # Act - Call the method under test
         await self.broker._async_run_fan_param_sequence(call)

@@ -2,13 +2,15 @@
 
 This test file verifies that bound REM/DIS devices are properly used as source devices
 for fan parameter operations, ensuring that only REM and DIS devices can be bound to fans.
+
+TODO: add tests routing a service call via a (mocked) device
 """
 
 # import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant  # , ServiceCall
 
 from custom_components.ramses_cc.broker import RamsesBroker
 
@@ -101,7 +103,8 @@ class TestBoundDeviceFunctionality:
             "value": TEST_VALUE,
             "from_id": explicit_from_id,
         }
-        call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+        call = service_data
 
         # Act - Call the method under test
         await self.broker.async_set_fan_param(call)
@@ -134,7 +137,8 @@ class TestBoundDeviceFunctionality:
             "param_id": TEST_PARAM_ID,
             "from_id": explicit_from_id,
         }
-        call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+        call = service_data
 
         # Act - Call the method under test
         await self.broker.async_get_fan_param(call)
@@ -170,7 +174,8 @@ class TestBoundDeviceFunctionality:
             "value": TEST_VALUE,
             "from_id": explicit_from_id,
         }
-        call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+        # call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+        call = service_data
 
         # Act - Call the method under test
         await self.broker.async_set_fan_param(call)
