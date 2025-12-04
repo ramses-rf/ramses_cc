@@ -29,14 +29,14 @@ force_update:
 
 # FAN parameter service calls (HVAC devices)
 
-get_fan_param:
+get_fan_clim_param:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - climate
+
   fields:
-    device_id:
-      description: "Enter a (FAN) device ID in format XX:XXXXXX"
-      example: '"32:123456"'
-      required: true
-      selector:
-        text:
     param_id:
       example: '"31"'
       required: true
@@ -48,14 +48,28 @@ get_fan_param:
       selector:
         text:
 
-set_fan_param:
+get_fan_rem_param:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - remote
+
   fields:
-    device_id:
-      description: "Enter a (FAN) device ID in format XX:XXXXXX"
-      example: '"32:123456"'
+    param_id:
+      example: '"31"'
       required: true
       selector:
         text:
+
+set_fan_clim_param:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - climate
+
+  fields:
     param_id:
       example: '"31"'
       required: true
@@ -72,14 +86,33 @@ set_fan_param:
       selector:
         text:
 
-update_fan_params:
+set_fan_rem_param:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - remote
+
   fields:
-    device_id:
-      description: "The unique identifier of the FAN device to query. Enter any device ID in format XX:XXXXXX"
-      example: '"32:123456"'
+    param_id:
+      example: '"31"'
       required: true
       selector:
         text:
+    value:
+      example: '"5"'
+      required: true
+      selector:
+        text:
+
+update_fan_params:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - climate
+
+  fields:
     from_id:
       example: '"18:123456"'
       required: false

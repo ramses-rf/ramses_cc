@@ -230,7 +230,7 @@
             "description": "Immediately update the system state, without waiting for the next scheduled update."
         },
 
-        "get_fan_param": {
+        "get_fan_clim_param": {
             "name": "Get Fan Parameter",
             "description": "Request the current value of a specific configuration parameter (2411) from a FAN device.",
             "fields": {
@@ -240,12 +240,23 @@
                 },
                 "from_id": {
                     "name": "Source Device ID",
-                    "description": "Optional source device ID to use for the request (defaults to Bound REM or HGI gateway). Enter a device ID in format XX:XXXXXX"
+                    "description": "Optional source device ID to use for the request (defaults to Bound REM). Enter a device ID in format XX:XXXXXX"
                 }
             }
         },
 
-        "set_fan_param": {
+        "get_fan_rem_param": {
+            "name": "Get Fan Parameter via REM",
+            "description": "Request the current value of a specific configuration parameter (2411) from a FAN device via its bound Remote.",
+            "fields": {
+                "param_id": {
+                  "name": "Parameter ID",
+                  "description": "The parameter identifier to read. Enter a valid parameter ID (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
+              }
+            }
+        },
+
+        "set_fan_clim_param": {
             "name": "Set Fan Parameter",
             "description": "Set the value of a specific configuration parameter (2411) on a FAN device.",
             "fields": {
@@ -259,18 +270,33 @@
                 },
                 "from_id": {
                     "name": "Source Device ID",
-                    "description": "Optional source device ID to use for the request (defaults to Bound REM or HGI gateway). Enter any device ID in format XX:XXXXXX"
+                    "description": "Optional source device ID to use for the request (defaults to Bound REM). Enter any device ID in format XX:XXXXXX"
+                }
+            }
+        },
+
+        "set_fan_rem_param": {
+            "name": "Set Fan Parameter via REM",
+            "description": "Set the value of a specific configuration parameter (2411) on a FAN device via its bound Remote.",
+            "fields": {
+                "param_id": {
+                  "name": "Parameter ID",
+                  "description": "The parameter identifier to set. Enter a valid parameter ID (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
+                },
+                "value": {
+                  "name": "Value",
+                  "description": "The value to set for the parameter (range depends on parameter type). Examples: Sensor sensitivity (52): 0-25, Comfort temperature (75): 5-35°C, Fan speed (31): 0-100%"
                 }
             }
         },
 
         "update_fan_params": {
             "name": "Update Fan Parameters",
-            "description": "Request all available configuration parameters (2411) from a FAN. This will update all parameter entities for the device.",
+            "description": "Request all available configuration parameters (2411) from a FAN. Will update all parameter entities for the device.",
             "fields": {
                 "from_id": {
                     "name": "Source Device ID",
-                    "description": "Optional source device ID to use for the request (defaults to Bound REM or HGI gateway). Enter any device ID in format XX:XXXXXX"
+                    "description": "Optional source device ID to use for the request (defaults to Bound REM). Enter any device ID in format XX:XXXXXX"
                 }
             }
         },

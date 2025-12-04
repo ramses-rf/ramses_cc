@@ -456,72 +456,6 @@ class RamsesNumberParam(RamsesNumberBase):
         param_id = getattr(self.entity_description, "ramses_rf_attr", None)
         return str(param_id).upper() if param_id else None
 
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is about to be added to Home Assistant.
-
-        This method is called when the entity is being added to Home Assistant.
-        It performs the following operations:
-
-        1. Calls the parent class's async_added_to_hass method
-        2. Sets up an event listener for parameter updates
-
-        Note: Parameter values are requested by the broker's
-        get_all_fan_params method in a controlled manner to prevent
-        flooding the RF protocol.
-
-        :return: None
-        :rtype: None
-        """
-        await super().async_added_to_hass()
-
-        # Listen for parameter update events
-        self.async_on_remove(
-            self.hass.bus.async_listen(
-                "ramses_cc.fan_param_updated", self._async_param_updated
-            )
-        )
-
-    @callback
-    def _async_param_updated(self, event: dict[str, Any]) -> None:
-        """Handle parameter updates from the device.
-
-        This callback is triggered when a fan parameter update event is received.
-        It processes the update and updates the entity's state if the parameter
-        matches this entity's parameter ID.
-
-        :param event: The event data containing the parameter update
-        :type event: dict[str, Any]
-        :return: None
-        :rtype: None
-        """
-        # Get the parameter ID we're interested in
-        our_param_id = getattr(self.entity_description, "ramses_rf_attr", "")
-        if not our_param_id:
-            return
-
-        # Extract data from event
-        event_data = event.data if hasattr(event, "data") else event
-
-        # Only process if this is our parameter
-        if (
-            str(event_data.get("device_id", "")).lower() == str(self._device.id).lower()
-            and str(event_data.get("param_id", "")).lower() == str(our_param_id).lower()
-        ):
-            new_value = event_data.get("value")
-
-            param_id = str(our_param_id).upper()
-            self._param_native_value[param_id] = new_value
-            _LOGGER.debug(
-                "Parameter %s updated for device %s: %s (stored as: %s, full dict: %s)",
-                our_param_id,
-                self._device.id,
-                new_value,
-                self._param_native_value.get(param_id),
-                self._param_native_value,
-            )
-
-            self.clear_pending()
-
     def __init__(
         self,
         broker: RamsesBroker,
@@ -642,6 +576,72 @@ class RamsesNumberParam(RamsesNumberBase):
             self._is_percentage,
             param_id,
         )
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is about to be added to Home Assistant.
+
+        This method is called when the entity is being added to Home Assistant.
+        It performs the following operations:
+
+        1. Calls the parent class's async_added_to_hass method
+        2. Sets up an event listener for parameter updates
+
+        Note: Parameter values are requested by the broker's
+        get_all_fan_params method in a controlled manner to prevent
+        flooding the RF protocol.
+
+        :return: None
+        :rtype: None
+        """
+        await super().async_added_to_hass()
+
+        # Listen for parameter update events
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "ramses_cc.fan_param_updated", self._async_param_updated
+            )
+        )
+
+    @callback
+    def _async_param_updated(self, event: dict[str, Any]) -> None:
+        """Handle parameter updates from the device.
+
+        This callback is triggered when a fan parameter update event is received.
+        It processes the update and updates the entity's state if the parameter
+        matches this entity's parameter ID.
+
+        :param event: The event data containing the parameter update
+        :type event: dict[str, Any]
+        :return: None
+        :rtype: None
+        """
+        # Get the parameter ID we're interested in
+        our_param_id = getattr(self.entity_description, "ramses_rf_attr", "")
+        if not our_param_id:
+            return
+
+        # Extract data from event
+        event_data = event.data if hasattr(event, "data") else event
+
+        # Only process if this is our parameter
+        if (
+            str(event_data.get("device_id", "")).lower() == str(self._device.id).lower()
+            and str(event_data.get("param_id", "")).lower() == str(our_param_id).lower()
+        ):
+            new_value = event_data.get("value")
+
+            param_id = str(our_param_id).upper()
+            self._param_native_value[param_id] = new_value
+            _LOGGER.debug(
+                "Parameter %s updated for device %s: %s (stored as: %s, full dict: %s)",
+                our_param_id,
+                self._device.id,
+                new_value,
+                self._param_native_value.get(param_id),
+                self._param_native_value,
+            )
+
+            self.clear_pending()
 
     @property
     def available(self) -> bool:

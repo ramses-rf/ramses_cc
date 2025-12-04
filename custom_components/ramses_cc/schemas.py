@@ -474,6 +474,70 @@ SCH_GET_SYSTEM_FAULTS = cv.make_entity_service_schema(
     }
 )
 
+# Service schema for getting and setting hvac fan parameters (using ramses_rf implementation)
+SVC_GET_FAN_PARAM: Final = "get_fan_param"
+SVC_GET_FAN_CLIM_PARAM: Final = "get_fan_clim_param"
+SVC_GET_FAN_REM_PARAM: Final = "get_fan_rem_param"
+SVC_SET_FAN_PARAM: Final = "set_fan_param"
+SVC_SET_FAN_CLIM_PARAM: Final = "set_fan_clim_param"
+SVC_SET_FAN_REM_PARAM: Final = "set_fan_rem_param"
+SVC_UPDATE_FAN_PARAMS: Final = "update_fan_params"
+
+_TARGET_FIELDS = {
+    vol.Optional("entity_id"): cv.entity_ids,
+    vol.Optional("device_id"): cv.ensure_list_csv,
+    vol.Optional("area_id"): cv.ensure_list_csv,
+}
+
+SCH_GET_FAN_PARAM = cv.make_entity_service_schema(
+    {
+        **_TARGET_FIELDS,
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_GET_FAN_REM_PARAM = cv.make_entity_service_schema(
+    {
+        **_TARGET_FIELDS,
+        vol.Required("param_id"): _SCH_PARAM_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_SET_FAN_PARAM = cv.make_entity_service_schema(
+    {
+        **_TARGET_FIELDS,
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Required("value"): cv.string,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_SET_FAN_REM_PARAM = cv.make_entity_service_schema(
+    {
+        **_TARGET_FIELDS,
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Required("value"): cv.string,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_UPDATE_FAN_PARAMS = cv.make_entity_service_schema(
+    {
+        **_TARGET_FIELDS,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_GET_FAN_PARAM_DOMAIN = SCH_GET_FAN_PARAM
+SCH_SET_FAN_PARAM_DOMAIN = SCH_SET_FAN_PARAM
+SCH_UPDATE_FAN_PARAMS_DOMAIN = SCH_UPDATE_FAN_PARAMS
+
+
 # services without their own schema
 SVC_FAKE_ZONE_TEMP: Final = "fake_zone_temp"
 SVC_GET_ZONE_SCHEDULE: Final = "get_zone_schedule"
@@ -492,6 +556,9 @@ SVCS_RAMSES_CLIMATE = {
     SVC_GET_ZONE_SCHEDULE: SCH_NO_ENTITY_SVC_PARAMS,
     SVC_SET_ZONE_SCHEDULE: SCH_SET_ZONE_SCHEDULE,
     SVC_GET_SYSTEM_FAULTS: SCH_GET_SYSTEM_FAULTS,
+    SVC_GET_FAN_CLIM_PARAM: SCH_GET_FAN_PARAM,  # UI fan_param actions
+    SVC_SET_FAN_CLIM_PARAM: SCH_SET_FAN_PARAM,
+    SVC_UPDATE_FAN_PARAMS: SCH_UPDATE_FAN_PARAMS,
 }
 
 # services for water_heater platform
@@ -663,54 +730,16 @@ SCH_DELETE_COMMAND = cv.make_entity_service_schema(
     },
 )
 
-# Service schema for getting and setting fan parameters (using ramses_rf implementation)
-SVC_GET_FAN_PARAM: Final = "get_fan_param"
-SVC_SET_FAN_PARAM: Final = "set_fan_param"
-SVC_UPDATE_FAN_PARAMS: Final = "update_fan_params"
-
-# Schema for_fan_param services
-_SCH_VALUE = cv.string
-
-
-SCH_GET_FAN_PARAM = cv.make_entity_service_schema(
-    {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
-        vol.Required("param_id"): _SCH_PARAM_ID,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
-    },
-    extra=vol.PREVENT_EXTRA,
-)
-
-SCH_SET_FAN_PARAM = cv.make_entity_service_schema(
-    {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
-        vol.Required("param_id"): _SCH_PARAM_ID,
-        vol.Required("value"): _SCH_VALUE,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
-    },
-    extra=vol.PREVENT_EXTRA,
-)
-
 SVCS_RAMSES_REMOTE = {
     SVC_DELETE_COMMAND: SCH_DELETE_COMMAND,
     SVC_ADD_COMMAND: SCH_ADD_COMMAND,
     SVC_LEARN_COMMAND: SCH_LEARN_COMMAND,
     SVC_SEND_COMMAND: SCH_SEND_COMMAND,
-    SVC_GET_FAN_PARAM: SCH_GET_FAN_PARAM,
-    SVC_SET_FAN_PARAM: SCH_SET_FAN_PARAM,
+    SVC_GET_FAN_REM_PARAM: SCH_GET_FAN_REM_PARAM,
+    SVC_SET_FAN_REM_PARAM: SCH_SET_FAN_REM_PARAM,
 }
 
-SCH_UPDATE_FAN_PARAMS = vol.Schema(
-    {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
-    },
-    extra=vol.PREVENT_EXTRA,
-)
-
 # Service schemas for number platform
-SVCS_RAMSES_FAN_PARAM = {
-    SVC_GET_FAN_PARAM: SCH_GET_FAN_PARAM,
-    SVC_UPDATE_FAN_PARAMS: SCH_UPDATE_FAN_PARAMS,
+SVCS_RAMSES_NUMBER = {
     SVC_SET_FAN_PARAM: SCH_SET_FAN_PARAM,
 }
