@@ -273,7 +273,6 @@ class BaseRamsesFlow(FlowHandler):
         """Ramses configure serial port step."""
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
-        self.get_options()  # not available during init
 
         if user_input is not None:
             suggested_values = deepcopy(dict(user_input))
