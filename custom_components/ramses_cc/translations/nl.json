@@ -124,7 +124,7 @@
                 }
             },
             "choose_serial_port": {
-                "title": "Selecteer een seriële poort",
+                "title": "Selecteer de seriële poort",
                 "data": {
                     "port_name": "Pad naar serieel apparaat"
                 }
@@ -137,7 +137,7 @@
                 },
                 "data_description": {
                     "port_name": "Bijv. '/dev/cu.modem2', 'COM6' of 'mqtt://user:pwd@homeassistant.local:1883'",
-                    "serial_port": "Voor standaardgebruik niet vereist."
+                    "serial_port": "Voor standaardgebruik niet vereist, behalve voor nanoCUL: 'baudrate: 57600'"
                 }
             },
             "config": {

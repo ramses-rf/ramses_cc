@@ -137,7 +137,7 @@
                 },
                 "data_description": {
                     "port_name": "Examples: '/dev/cu.modem2', 'COM6' (Windows) or 'mqtt://user:pwd@homeassistant.local:1883'",
-                    "serial_port": "Not required for typical use."
+                    "serial_port": "Not required for typical use, except nanoCUL to set 'baudrate: 57600'."
                 }
             },
             "config": {

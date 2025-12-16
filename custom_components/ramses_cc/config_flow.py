@@ -61,8 +61,8 @@ from .schemas import SCH_GLOBAL_TRAITS_DICT
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_MANUAL_PATH: Final = "Enter Manually"
-CONF_MQTT_PATH: Final = "MQTT Broker"
+CONF_MANUAL_PATH: Final = "Enter Manually..."  # TODO i18n this string
+CONF_MQTT_PATH: Final = "MQTT Broker..."
 
 
 def get_usb_ports() -> dict[str, str]:
@@ -133,10 +133,10 @@ class BaseRamsesFlow(FlowHandler):
         if user_input is not None:
             port_name = user_input[SZ_PORT_NAME]
 
-            if port_name == CONF_MANUAL_PATH:
-                self._manual_serial_port = True
-            elif port_name == CONF_MQTT_PATH:
+            if port_name == CONF_MQTT_PATH:
                 return await self.async_step_mqtt_config()
+            elif port_name == CONF_MANUAL_PATH:
+                self._manual_serial_port = True
             else:
                 self.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = user_input[SZ_PORT_NAME]
                 _LOGGER.debug(
@@ -152,8 +152,8 @@ class BaseRamsesFlow(FlowHandler):
         #    return await self.async_step_configure_serial_port()
 
         # Always add these options now
-        ports[CONF_MANUAL_PATH] = CONF_MANUAL_PATH
         ports[CONF_MQTT_PATH] = CONF_MQTT_PATH
+        ports[CONF_MANUAL_PATH] = CONF_MANUAL_PATH
 
         port_name = self.options[SZ_SERIAL_PORT].get(SZ_PORT_NAME)
         if port_name is None:
