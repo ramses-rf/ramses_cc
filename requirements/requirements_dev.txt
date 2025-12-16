@@ -6,7 +6,6 @@
 # - pip list | grep -E 'ramses|serial'
 
   aiousbwatcher         >= 1.1.1                 # as per: manifest.json latest: 1.1.1
-  pycares               < 5.0.0                  # as per: manifest.json (pinned for compatibility)
   pyserial-asyncio-fast >= 0.16                  # as per: manifest.json latest: 0.16
   ramses-rf             == 0.52.4                # as per: manifest.json latest:
 
