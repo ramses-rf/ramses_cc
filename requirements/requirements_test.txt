@@ -15,3 +15,4 @@
 # - pytest
   # coverage >= 7.10.6 included in next item
   pytest_homeassistant_custom_component >= 0.13.297
+  pycares == 4.11.0  #  (pinned for compatibility of ha_cc; pycares 5.x not yet compatible with aiodns)
