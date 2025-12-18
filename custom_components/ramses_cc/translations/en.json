@@ -294,6 +294,10 @@
             "name": "Set Fan Parameter (device)",
             "description": "Set the value of a specific configuration parameter (2411) on a FAN device. Provide either a RAMSES device_id (XX:XXXXXX) or select a device target in the UI.",
             "fields": {
+                "device": {
+                    "name": "Target device",
+                    "description": "Optional Home Assistant device selection for the target FAN device. If omitted, provide a RAMSES device_id."
+                },
                 "device_id": {
                     "name": "Target device_id",
                     "description": "Optional RAMSES device ID in format XX:XXXXXX. If omitted, select a target device in the UI."

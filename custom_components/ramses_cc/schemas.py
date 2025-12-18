@@ -487,6 +487,7 @@ _TARGET_FIELDS = {
     vol.Optional("entity_id"): cv.entity_ids,
     vol.Optional("device_id"): cv.ensure_list_csv,
     vol.Optional("area_id"): cv.ensure_list_csv,
+    vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
 }
 
 SCH_GET_FAN_PARAM = cv.make_entity_service_schema(
@@ -534,7 +535,16 @@ SCH_UPDATE_FAN_PARAMS = cv.make_entity_service_schema(
 )
 
 SCH_GET_FAN_PARAM_DOMAIN = SCH_GET_FAN_PARAM
-SCH_SET_FAN_PARAM_DOMAIN = SCH_SET_FAN_PARAM
+SCH_SET_FAN_PARAM_DOMAIN = vol.Schema(
+    {
+        vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
+        vol.Optional("device_id"): vol.Any(None, cv.string),
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Required("value"): cv.string,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
 SCH_UPDATE_FAN_PARAMS_DOMAIN = SCH_UPDATE_FAN_PARAMS
 
 

@@ -17,8 +17,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import device_registry as dr
+from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
+    MockConfigEntry,
+)
 
 from custom_components.ramses_cc.broker import RamsesBroker
+from custom_components.ramses_cc.const import DOMAIN
 from custom_components.ramses_cc.schemas import SVC_SET_FAN_PARAM
 
 # Test constants
@@ -297,6 +302,36 @@ class TestFanParameterSet:
 
         # Verify command was sent via the client
         self.mock_client.async_send_cmd.assert_awaited_once_with(self.mock_cmd)
+
+    @pytest.mark.asyncio
+    async def test_set_fan_param_with_ha_device_selector(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test")
+        entry.add_to_hass(hass)
+        dev_reg = dr.async_get(hass)
+        device_entry = dev_reg.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, TEST_DEVICE_ID)},
+            name="Test FAN",
+        )
+
+        service_data = {
+            "device": device_entry.id,
+            "param_id": TEST_PARAM_ID,
+            "value": TEST_VALUE,
+            "from_id": TEST_FROM_ID,
+        }
+        call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
+
+        await self.broker.async_set_fan_param(call)
+
+        self.mock_set_fan_param.assert_called_once_with(
+            TEST_DEVICE_ID,
+            TEST_PARAM_ID,
+            TEST_VALUE,
+            src_id=TEST_FROM_ID,
+        )
 
         # @pytest.mark.asyncio
         # async def test_with_fan_id_parameter(self, hass: HomeAssistant) -> None:

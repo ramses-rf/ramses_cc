@@ -106,11 +106,13 @@ set_fan_rem_param:
         text:
 
 set_fan_param:
-  target:
-    device:
-      - integration: ramses_cc
-
   fields:
+    device:
+      required: false
+      selector:
+        device:
+          filter:
+            integration: ramses_cc
     device_id:
       example: '"32:153289"'
       required: false

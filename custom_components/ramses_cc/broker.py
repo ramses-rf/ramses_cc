@@ -1007,6 +1007,25 @@ class RamsesBroker:
                 data["device_id"] = device_id
                 return device_id
 
+        # Support UI device selection via services.yaml device selector field
+        # (a HA device registry id/UUID), while keeping device_id for RAMSES ids.
+        ha_device_id = data.get("device")
+        if ha_device_id:
+            if isinstance(ha_device_id, list):
+                if not ha_device_id:
+                    return None
+                if len(ha_device_id) > 1:
+                    _LOGGER.warning(
+                        "Multiple devices provided, using first one: %s",
+                        ha_device_id[0],
+                    )
+                ha_device_id = ha_device_id[0]
+                data["device"] = ha_device_id
+            if isinstance(ha_device_id, str):
+                if resolved := self._target_to_device_id({"device_id": [ha_device_id]}):
+                    data["device_id"] = resolved
+                    return resolved
+
         # Try to get device_id from target
         target = data.get("target")
         if target and (resolved := self._target_to_device_id(target)):

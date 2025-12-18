@@ -295,6 +295,10 @@
             "name": "Fan-parameter instellen (apparaat)",
             "description": "Stel de waarde van een specifieke instelling (2411) in op een FAN-apparaat. Geef óf een RAMSES device_id (XX:XXXXXX) op, óf selecteer een apparaat in de UI.",
             "fields": {
+                "device": {
+                    "name": "Doelapparaat",
+                    "description": "Optioneel: selecteer het doelapparaat via Home Assistant. Indien leeg: geef een RAMSES device_id op."
+                },
                 "device_id": {
                     "name": "Doel device_id",
                     "description": "Optioneel RAMSES device_id in formaat XX:XXXXXX. Indien leeg: selecteer een doelapparaat in de UI."
