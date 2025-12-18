@@ -1,3 +1,8 @@
+# ruff: noqa: E402
+# WE DISABLE E402 (Module level import not at top of file) BECAUSE:
+# The "Development Hook" logic below must modify `sys.path` BEFORE any other
+# imports run. This ensures that if a local development version of `ramses_rf`
+# exists, Python loads it instead of the system-installed version.
 """Support for Honeywell's RAMSES-II RF protocol, as used by CH/DHW & HVAC.
 
 Requires a Honeywell HGI80 (or compatible) gateway.
@@ -9,6 +14,25 @@ import logging
 import os
 import re
 import sys
+
+# --- DEVELOPMENT HOOK ---
+# If a local copy of ramses_rf exists, use it instead of the system installed version.
+# This allows for testing changes without rebuilding the container.
+
+ENABLE_DEV_HOOK = False  # Set to true to enable the dev hook
+DEV_LIB_PATH = "/config/deps/ramses_rf/src"
+
+if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
+    # Insert at index 0 so it takes precedence over system libraries
+    sys.path.insert(0, DEV_LIB_PATH)
+
+    logging.getLogger(__name__).warning(
+        "SECURITY WARNING: 'ramses_rf' is being loaded from a local development path: %s. "
+        "Do not use this in a production environment unless you understand the risks.",
+        DEV_LIB_PATH,
+    )
+# ------------------------
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
@@ -65,24 +89,6 @@ if TYPE_CHECKING:
 
 
 _LOGGER = logging.getLogger(__name__)
-
-# --- DEVELOPMENT HOOK ---
-# If a local copy of ramses_rf exists, use it instead of the system installed version.
-# This allows for testing changes without rebuilding the container.
-
-ENABLE_DEV_HOOK = False  # Set to true to enable the dev hook
-DEV_LIB_PATH = "/config/deps/ramses_rf/src"
-
-if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
-    # Insert at index 0 so it takes precedence over system libraries
-    sys.path.insert(0, DEV_LIB_PATH)
-
-    _LOGGER.warning(
-        "SECURITY WARNING: 'ramses_rf' is being loaded from a local development path: %s. "
-        "Do not use this in a production environment unless you understand the risks.",
-        DEV_LIB_PATH,
-    )
-# ------------------------
 
 CONFIG_SCHEMA = vol.All(
     cv.deprecated(DOMAIN, raise_if_present=False),
