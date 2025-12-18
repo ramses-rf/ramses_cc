@@ -7,7 +7,7 @@
 
   aiousbwatcher         >= 1.1.1                 # as per: manifest.json latest: 1.1.1
   pyserial-asyncio-fast >= 0.16                  # as per: manifest.json latest: 0.16
-  ramses-rf             == 0.52.4                # as per: manifest.json latest:
+  ramses-rf             == 0.52.5                # as per: manifest.json latest:
   pycares               == 4.9.0                 # pinned for compatibility of ha_cc
                                                  # (pycares 5.x not yet compatible with aiodns)
 
