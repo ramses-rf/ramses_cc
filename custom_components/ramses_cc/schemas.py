@@ -740,6 +740,6 @@ SVCS_RAMSES_REMOTE = {
 }
 
 # Service schemas for number platform
-SVCS_RAMSES_NUMBER = {
-    SVC_SET_FAN_PARAM: SCH_SET_FAN_PARAM,
+SVCS_RAMSES_NUMBER: dict[str, Any] = {
+    # set_fan_param is registered as a broker/domain service (not an entity service)
 }

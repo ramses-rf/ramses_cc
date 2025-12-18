@@ -1118,13 +1118,10 @@ class RamsesBroker:
         and optionally:
             - from_id (str): Source device ID (defaults to bound_REM)
         """
-        if not isinstance(call, dict):
-            call = dict(call.data)  # Convert ServiceCall to dict
-
-        _LOGGER.debug("Processing get_fan_param service call with data: %s", call)
-
         try:
             data = self._normalize_service_call(call)
+
+            _LOGGER.debug("Processing get_fan_param service call with data: %s", data)
 
             # Extract id's
             original_device_id, normalized_device_id, from_id = (
@@ -1170,7 +1167,7 @@ class RamsesBroker:
                 asyncio.create_task(entity._clear_pending_after_timeout(0))
             raise
 
-    def get_all_fan_params(self, call: dict[str, Any]) -> None:
+    def get_all_fan_params(self, call: dict[str, Any] | ServiceCall) -> None:
         """Wrapper for _async_run_fan_param_sequence.
         Create a task to run the fan parameter sequence without blocking HA.
         This allows for the sequence to run in the background while HA remains responsive.
@@ -1186,8 +1183,7 @@ class RamsesBroker:
         and optionally:
             - from_id (str): Source device ID (defaults to Bound Rem or HGI)
         """
-        data = call.data if hasattr(call, "data") else call
-        self.hass.loop.create_task(self._async_run_fan_param_sequence(data))
+        self.hass.loop.create_task(self._async_run_fan_param_sequence(call))
 
     async def _async_run_fan_param_sequence(
         self, call: dict[str, Any] | ServiceCall
@@ -1212,25 +1208,26 @@ class RamsesBroker:
 
         note: This method is called by get_all_fan_params() and should not be called directly.
         """
-        if not isinstance(call, dict):
-            call = dict(call.data)  # Convert ServiceCall to dict
-
-        _LOGGER.debug("Processing update_fan_params service call with data: %s", call)
-
         try:
+            data = self._normalize_service_call(call)
+
+            _LOGGER.debug(
+                "Processing update_fan_params service call with data: %s", data
+            )
+
             # Get the list of parameters to request
             # Add delay between requests to prevent flooding the RF protocol
             for idx, param_id in enumerate(_2411_PARAMS_SCHEMA):
                 # Create parameter-specific data by copying base data and adding param_id
                 # Handle different types of mapping objects safely
                 try:
-                    param_data = dict(call)
+                    param_data = dict(data)
                 except (TypeError, ValueError):
                     # If dict() fails, try to copy as a regular dict
                     param_data = (
-                        {k: v for k, v in call.items()}
-                        if hasattr(call, "items")
-                        else call
+                        {k: v for k, v in data.items()}
+                        if hasattr(data, "items")
+                        else data
                     )
                 param_data["param_id"] = param_id
                 await self.async_get_fan_param(param_data)
@@ -1265,13 +1262,10 @@ class RamsesBroker:
         and optionally:
             - from_id (str): Source device ID (defaults to bound REM/DIS)
         """
-        if not isinstance(call, dict):
-            call = dict(call.data)  # Convert ServiceCall to dict
-
-        _LOGGER.debug("Processing set_fan_param service call with data: %s", call)
-
         try:
             data = self._normalize_service_call(call)
+
+            _LOGGER.debug("Processing set_fan_param service call with data: %s", data)
 
             # Extract id's
             original_device_id, normalized_device_id, from_id = (

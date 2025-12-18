@@ -290,6 +290,29 @@
             }
         },
 
+        "set_fan_param": {
+            "name": "Set Fan Parameter (device)",
+            "description": "Set the value of a specific configuration parameter (2411) on a FAN device. Provide either a RAMSES device_id (XX:XXXXXX) or select a device target in the UI.",
+            "fields": {
+                "device_id": {
+                    "name": "Target device_id",
+                    "description": "Optional RAMSES device ID in format XX:XXXXXX. If omitted, select a target device in the UI."
+                },
+                "param_id": {
+                    "name": "Parameter ID",
+                    "description": "The parameter identifier to set. Enter a valid parameter ID (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
+                },
+                "value": {
+                    "name": "Value",
+                    "description": "The value to set for the parameter (range depends on parameter type). Examples: Sensor sensitivity (52): 0-25, Comfort temperature (75): 5-35°C, Fan speed (31): 0-100%"
+                },
+                "from_id": {
+                    "name": "Source Device ID",
+                    "description": "Optional source device ID to use for the request (defaults to Bound REM). Enter a device ID in format XX:XXXXXX"
+                }
+            }
+        },
+
         "update_fan_params": {
             "name": "Update Fan Parameters",
             "description": "Request all available configuration parameters (2411) from a FAN. Will update all parameter entities for the device.",
