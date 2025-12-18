@@ -6,7 +6,9 @@ Requires a Honeywell HGI80 (or compatible) gateway.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
@@ -64,6 +66,23 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# --- DEVELOPMENT HOOK ---
+# If a local copy of ramses_rf exists, use it instead of the system installed version.
+# This allows for testing changes without rebuilding the container.
+
+ENABLE_DEV_HOOK = False  # Set to true to enable the dev hook
+DEV_LIB_PATH = "/config/deps/ramses_rf/src"
+
+if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
+    # Insert at index 0 so it takes precedence over system libraries
+    sys.path.insert(0, DEV_LIB_PATH)
+
+    _LOGGER.warning(
+        "SECURITY WARNING: 'ramses_rf' is being loaded from a local development path: %s. "
+        "Do not use this in a production environment unless you understand the risks.",
+        DEV_LIB_PATH,
+    )
+# ------------------------
 
 CONFIG_SCHEMA = vol.All(
     cv.deprecated(DOMAIN, raise_if_present=False),
