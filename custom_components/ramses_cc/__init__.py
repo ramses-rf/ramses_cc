@@ -20,7 +20,7 @@ import sys
 # This allows for testing changes without rebuilding the container.
 
 ENABLE_DEV_HOOK = False  # Set to true to enable the dev hook
-DEV_LIB_PATH = "/config/deps/ramses_rf/src"
+DEV_LIB_PATH = "/config/dev-lib/"
 
 if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
     # Insert at index 0 so it takes precedence over system libraries
