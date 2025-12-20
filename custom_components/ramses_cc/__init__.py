@@ -19,7 +19,7 @@ import sys
 # If a local copy of ramses_rf exists, use it instead of the system installed version.
 # This allows for testing changes without rebuilding the container.
 
-ENABLE_DEV_HOOK = False  # Set to true to enable the dev hook
+ENABLE_DEV_HOOK = True  # Set to true to enable the dev hook
 DEV_LIB_PATH = "/config/dev-lib/"
 
 if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
