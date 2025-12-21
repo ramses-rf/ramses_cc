@@ -63,6 +63,7 @@ from .const import (
     SIGNAL_UPDATE,
     STORAGE_KEY,
     STORAGE_VERSION,
+    SZ_ACTIVE_HGI,
     SZ_CLIENT_STATE,
     SZ_PACKETS,
     SZ_REMOTES,
@@ -1404,8 +1405,8 @@ class RamsesMqttBridge:
                     if "18:" in device_id:
                         # Accessing private attribute is necessary for this IoC pattern
                         # to set the "Active HGI"
-                        if not self._transport.get_extra_info("hgi_id"):
-                            self._transport._extra["hgi_id"] = device_id
+                        if not self._transport.get_extra_info(SZ_ACTIVE_HGI):
+                            self._transport._extra[SZ_ACTIVE_HGI] = device_id
                 except IndexError:
                     pass
 
