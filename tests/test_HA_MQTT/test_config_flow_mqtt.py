@@ -11,17 +11,6 @@ from homeassistant.data_entry_flow import FlowResultType
 from custom_components.ramses_cc.const import CONF_MQTT_TOPIC, CONF_MQTT_USE_HA, DOMAIN
 
 
-# Helper functions to mock setup calls with real coroutines
-async def mock_async_setup_true(hass: Any, config: Any) -> bool:
-    """Return True for async_setup."""
-    return True
-
-
-async def mock_async_setup_entry_true(hass: Any, entry: Any) -> bool:
-    """Return True for async_setup_entry."""
-    return True
-
-
 @pytest.mark.asyncio
 async def test_flow_selects_mqtt_ha_success(
     hass: HomeAssistant, enable_custom_integrations: Any
@@ -34,16 +23,12 @@ async def test_flow_selects_mqtt_ha_success(
             "homeassistant.config_entries.ConfigEntries.async_entries",
             return_value=[MagicMock(domain="mqtt")],
         ),
-        # FIX: Use side_effect with a real async function
-        patch(
-            "custom_components.ramses_cc.async_setup", side_effect=mock_async_setup_true
-        ),
-        patch(
-            "custom_components.ramses_cc.async_setup_entry",
-            side_effect=mock_async_setup_entry_true,
-        ),
+        # FIX: Patch the top-level HA setup manager to return True immediately.
+        # This bypasses the actual component initialization (which we don't need for flow tests)
+        # and avoids the Coroutine/Mock TypeErrors.
+        patch("homeassistant.setup.async_setup_component", return_value=True),
     ):
-        # Initialize the flow
+        # Initialise the flow
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
@@ -80,14 +65,8 @@ async def test_flow_mqtt_ha_missing_integration(
         patch(
             "homeassistant.config_entries.ConfigEntries.async_entries", return_value=[]
         ),
-        # FIX: Use side_effect with a real async function
-        patch(
-            "custom_components.ramses_cc.async_setup", side_effect=mock_async_setup_true
-        ),
-        patch(
-            "custom_components.ramses_cc.async_setup_entry",
-            side_effect=mock_async_setup_entry_true,
-        ),
+        # FIX: Patch top-level setup here as well
+        patch("homeassistant.setup.async_setup_component", return_value=True),
     ):
         # Initialize
         result = await hass.config_entries.flow.async_init(
