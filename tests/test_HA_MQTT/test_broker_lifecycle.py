@@ -31,11 +31,12 @@ async def test_broker_waits_for_mqtt_client() -> None:
     ):
         # Setup Mocks
         mock_bridge_instance = mock_bridge_cls.return_value
-
-        # --- FIX: Make async_start an AsyncMock so it can be awaited ---
+        # FIX 1: Make bridge.async_start awaitable
         mock_bridge_instance.async_start = AsyncMock()
 
         mock_gateway_instance = mock_gateway_cls.return_value
+        # FIX 2: Make client.start awaitable (This fixes your current error)
+        mock_gateway_instance.start = AsyncMock()
 
         # KEY: Mock the wait function
         mock_mqtt.async_wait_for_mqtt_client = AsyncMock(return_value=True)
@@ -49,6 +50,9 @@ async def test_broker_waits_for_mqtt_client() -> None:
 
         # Ensure bridge was started AFTER the wait
         mock_bridge_instance.async_start.assert_awaited_once_with(mock_gateway_instance)
+
+        # Ensure the client was started
+        mock_gateway_instance.start.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -68,8 +72,7 @@ async def test_broker_aborts_if_mqtt_fails() -> None:
         patch("custom_components.ramses_cc.broker.mqtt") as mock_mqtt,
     ):
         mock_bridge_instance = mock_bridge_cls.return_value
-
-        # --- FIX: Make async_start an AsyncMock so it has async assertions ---
+        # Make async_start awaitable so we can check it was NOT awaited
         mock_bridge_instance.async_start = AsyncMock()
 
         # KEY: Simulate timeout/failure
