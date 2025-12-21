@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.ramses_cc.broker import RamsesMqttBridge
 from ramses_tx.const import SZ_ACTIVE_HGI
+from ramses_tx.transport import CallbackTransport
 
 
 # Mock Home Assistant ReceiveMessage object
@@ -27,7 +28,7 @@ class TestMqttBridge(unittest.IsolatedAsyncioTestCase):
         with patch(
             "custom_components.ramses_cc.broker.CallbackTransport"
         ) as mock_transport_cls:
-            self.mock_transport = AsyncMock()
+            self.mock_transport = AsyncMock(spec=CallbackTransport)
             self.mock_transport._extra = {}  # Emulate the extra dict
             self.mock_transport.get_extra_info.side_effect = (
                 lambda k: self.mock_transport._extra.get(k)
@@ -36,9 +37,16 @@ class TestMqttBridge(unittest.IsolatedAsyncioTestCase):
 
             self.bridge = RamsesMqttBridge(self.hass, topic_root="RAMSES/TEST")
 
-            # Manually trigger the constructor logic to bind the transport
+            # Mock the Protocol and Gateway for full integration testing
             self.protocol = MagicMock()
+            self.gateway = MagicMock()
+            self.gateway._protocol = self.protocol
+
+            # Manually trigger the constructor logic to bind the transport
             await self.bridge.async_transport_constructor(self.protocol)
+
+            # Link the gateway so circuit breaker tests work
+            await self.bridge.async_start(self.gateway)
 
     async def test_incoming_mqtt_parsing(self) -> None:
         """Verify JSON payloads are unpacked and injected into transport."""
@@ -70,9 +78,8 @@ class TestMqttBridge(unittest.IsolatedAsyncioTestCase):
 
     async def test_outgoing_mqtt_formatting(self) -> None:
         """Verify outgoing frames are wrapped in JSON."""
-        # Mock the Gateway to provide an ID
-        self.bridge._gateway = MagicMock()
-        self.bridge._gateway.gwy_id = "18:123456"
+        # Setup the Gateway ID lookup
+        self.gateway.hgi.id = "18:123456"
 
         # We need to mock mqtt.async_publish inside the bridge module
         with patch("custom_components.ramses_cc.broker.mqtt") as mock_mqtt:
@@ -81,8 +88,7 @@ class TestMqttBridge(unittest.IsolatedAsyncioTestCase):
             await self.bridge._async_mqtt_publish("RQ --- ...")
 
             # Check the arguments passed to HA MQTT publish
-            # Topic should end in /tx
-            # Payload should be JSON {"msg": "..."}
+            # Topic should end in /tx, Payload should be JSON {"msg": "..."}
             mock_mqtt.async_publish.assert_awaited()
             call_args = mock_mqtt.async_publish.call_args
 
@@ -93,11 +99,38 @@ class TestMqttBridge(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(json.loads(payload), {"msg": "RQ --- ..."})
 
     def test_circuit_breaker_logic(self) -> None:
-        """Verify connection status toggles transport reading."""
+        """Verify connection status toggles BOTH transport reading AND protocol writing."""
         # 1. Disconnect
         self.bridge._handle_connection_status(False)
+
+        # Verify Transport (Read Path) is paused
         self.mock_transport.pause_reading.assert_called()
+        # Verify Protocol (Write Path) is paused -- NEW CHECK
+        self.protocol.pause_writing.assert_called()
+
+        self.mock_transport.reset_mock()
+        self.protocol.reset_mock()
 
         # 2. Connect
         self.bridge._handle_connection_status(True)
+
+        # Verify Transport (Read Path) is resumed
         self.mock_transport.resume_reading.assert_called()
+        # Verify Protocol (Write Path) is resumed -- NEW CHECK
+        self.protocol.resume_writing.assert_called()
+
+    async def test_ioc_constructor_arguments(self) -> None:
+        """Verify disable_sending and extra args are passed to the transport."""
+        # Create a new bridge instance to test construction cleanly
+        bridge = RamsesMqttBridge(self.hass, topic_root="RAMSES/TEST")
+
+        # We need to spy on the CallbackTransport class creation
+        with patch("custom_components.ramses_cc.broker.CallbackTransport") as mock_cls:
+            await bridge.async_transport_constructor(
+                self.protocol, disable_sending=True, extra={"test_flag": 123}
+            )
+
+            # Verify the class was instantiated with the right args
+            call_kwargs = mock_cls.call_args[1]
+            self.assertTrue(call_kwargs["disable_sending"])
+            self.assertEqual(call_kwargs["extra"]["test_flag"], 123)
