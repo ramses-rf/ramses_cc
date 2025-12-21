@@ -616,7 +616,7 @@ class BaseRamsesFlow(FlowHandler):
         )
 
 
-class RamsesConfigFlow(ConfigFlow):
+class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow):
     """Config flow for Ramses."""
 
     VERSION = 1
@@ -642,6 +642,18 @@ class RamsesConfigFlow(ConfigFlow):
             step_id="menu",
             menu_options=["serial", "mqtt_ha", "mqtt_direct"],
         )
+
+    async def async_step_serial(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Wrapper to call the base serial port step."""
+        return await self.async_step_choose_serial_port(user_input)
+
+    async def async_step_mqtt_direct(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Wrapper to call the base MQTT config step."""
+        return await self.async_step_mqtt_config(user_input)
 
     async def async_step_mqtt_ha(
         self, user_input: dict[str, Any] | None = None

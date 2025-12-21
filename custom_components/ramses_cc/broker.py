@@ -49,6 +49,8 @@ from ramses_tx.transport import CallbackTransport
 
 from .const import (
     CONF_COMMANDS,
+    CONF_MQTT_TOPIC,
+    CONF_MQTT_USE_HA,
     CONF_RAMSES_RF,
     CONF_SCHEMA,
     DOMAIN,
@@ -63,6 +65,8 @@ from .const import (
 from .schemas import merge_schemas, schema_is_minimal
 
 if TYPE_CHECKING:
+    from homeassistant.components.mqtt import ReceiveMessage
+
     from . import RamsesEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,11 +74,11 @@ _LOGGER = logging.getLogger(__name__)
 # We check for mqtt during config flow, but we handle the import safely here
 try:
     from homeassistant.components import mqtt
-    from homeassistant.components.mqtt import ReceiveMessage
 
     _LOGGER.debug("homeassistant.components.mqtt imported successfully")
 except ImportError:
     mqtt = None
+
     _LOGGER.debug("homeassistant.components.mqtt not imported")
 
 SAVE_STATE_INTERVAL: Final[timedelta] = timedelta(minutes=5)
@@ -119,6 +123,8 @@ class RamsesBroker:
         self._entities: dict[str, RamsesEntity] = {}  # domain entities
 
         self._device_info: dict[str, DeviceInfo] = {}
+
+        self.mqtt_bridge: RamsesMqttBridge | None = None
 
         # Discovered client objects...
         self._devices: list[Device] = []
@@ -181,6 +187,11 @@ class RamsesBroker:
 
         if not self.client:
             self.client = self._create_client(config_schema)
+
+        if self.mqtt_bridge:
+            await self.mqtt_bridge.async_start(self.client)
+            # Add listener to stop bridge when entry unloads
+            self.entry.async_on_unload(self.mqtt_bridge.async_stop)
 
         def cached_packets() -> dict[str, str]:  # dtm_str, packet_as_str
             msg_code_filter = ["313F"]  # ? 1FC9
@@ -252,17 +263,36 @@ class RamsesBroker:
             This method creates a new Gateway instance with the provided configuration
             and sets up the necessary callbacks for device discovery and updates.
         """
-        port_name, port_config = extract_serial_port(self.options[SZ_SERIAL_PORT])
+        # 1. Check if we are using Home Assistant MQTT
+        if self.options.get(CONF_MQTT_USE_HA):
+            _LOGGER.info("Configuring RAMSES_RF to use Home Assistant MQTT")
 
-        return Gateway(
+            topic = self.options.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY")
+            self.mqtt_bridge = RamsesMqttBridge(self.hass, topic)
+
+            # Prepare arguments for Injection
+            port_name = None  # Not used for generic transport
+            port_config = {}
+            transport_constructor = self.mqtt_bridge.async_transport_constructor
+
+        else:
+            # 2. Fallback to Standard Serial / TCP
+            port_name, port_config = extract_serial_port(self.options[SZ_SERIAL_PORT])
+            transport_constructor = None
+
+        # 3. Instantiate Gateway with Injection
+        client = Gateway(
             port_name=port_name,
             loop=self.hass.loop,
             port_config=port_config,
             packet_log=self.options.get(SZ_PACKET_LOG, {}),
             known_list=self.options.get(SZ_KNOWN_LIST, {}),
             config=self.options.get(CONF_RAMSES_RF, {}),
+            transport_constructor=transport_constructor,  # INJECTION HAPPENS HERE
             **schema,
         )
+
+        return client
 
     async def async_save_client_state(self, _: dt | None = None) -> None:
         """Save the current state of the RAMSES client to persistent storage.
