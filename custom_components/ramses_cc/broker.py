@@ -39,7 +39,7 @@ from ramses_rf.schemas import SZ_SCHEMA
 from ramses_rf.system import Evohome, System, Zone
 from ramses_tx.address import pkt_addrs
 from ramses_tx.command import Command
-from ramses_tx.const import Code, DevType
+from ramses_tx.const import SZ_ACTIVE_HGI, Code, DevType
 from ramses_tx.exceptions import PacketAddrSetInvalid  # , TransportSourceInvalid
 from ramses_tx.ramses import _2411_PARAMS_SCHEMA
 from ramses_tx.schemas import (
@@ -63,7 +63,6 @@ from .const import (
     SIGNAL_UPDATE,
     STORAGE_KEY,
     STORAGE_VERSION,
-    SZ_ACTIVE_HGI,
     SZ_CLIENT_STATE,
     SZ_PACKETS,
     SZ_REMOTES,
