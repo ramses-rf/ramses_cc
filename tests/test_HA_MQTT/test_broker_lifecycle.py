@@ -23,7 +23,6 @@ async def test_broker_waits_for_mqtt_client() -> None:
     broker = RamsesBroker(hass, entry)
 
     # 2. Mock Dependencies
-    # We mock the storage load to return empty so setup proceeds
     with (
         patch("custom_components.ramses_cc.broker.Store.async_load", return_value={}),
         patch("custom_components.ramses_cc.broker.RamsesMqttBridge") as mock_bridge_cls,
@@ -32,6 +31,10 @@ async def test_broker_waits_for_mqtt_client() -> None:
     ):
         # Setup Mocks
         mock_bridge_instance = mock_bridge_cls.return_value
+
+        # --- FIX: Make async_start an AsyncMock so it can be awaited ---
+        mock_bridge_instance.async_start = AsyncMock()
+
         mock_gateway_instance = mock_gateway_cls.return_value
 
         # KEY: Mock the wait function
@@ -65,6 +68,9 @@ async def test_broker_aborts_if_mqtt_fails() -> None:
         patch("custom_components.ramses_cc.broker.mqtt") as mock_mqtt,
     ):
         mock_bridge_instance = mock_bridge_cls.return_value
+
+        # --- FIX: Make async_start an AsyncMock so it has async assertions ---
+        mock_bridge_instance.async_start = AsyncMock()
 
         # KEY: Simulate timeout/failure
         mock_mqtt.async_wait_for_mqtt_client = AsyncMock(return_value=False)
