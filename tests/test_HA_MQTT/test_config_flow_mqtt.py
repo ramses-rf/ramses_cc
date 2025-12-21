@@ -1,7 +1,7 @@
 """Test the Ramses CC config flow for MQTT selection."""
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from homeassistant import config_entries
@@ -9,6 +9,17 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.ramses_cc.const import CONF_MQTT_TOPIC, CONF_MQTT_USE_HA, DOMAIN
+
+
+# Helper functions to mock setup calls with real coroutines
+async def mock_async_setup_true(hass: Any, config: Any) -> bool:
+    """Return True for async_setup."""
+    return True
+
+
+async def mock_async_setup_entry_true(hass: Any, entry: Any) -> bool:
+    """Return True for async_setup_entry."""
+    return True
 
 
 @pytest.mark.asyncio
@@ -23,17 +34,15 @@ async def test_flow_selects_mqtt_ha_success(
             "homeassistant.config_entries.ConfigEntries.async_entries",
             return_value=[MagicMock(domain="mqtt")],
         ),
-        # FIX: Use new_callable=AsyncMock so the mock returns a coroutine
+        # FIX: Use side_effect with a real async function
         patch(
-            "custom_components.ramses_cc.async_setup", new_callable=AsyncMock
-        ) as mock_setup,
+            "custom_components.ramses_cc.async_setup", side_effect=mock_async_setup_true
+        ),
         patch(
-            "custom_components.ramses_cc.async_setup_entry", new_callable=AsyncMock
-        ) as mock_setup_entry,
+            "custom_components.ramses_cc.async_setup_entry",
+            side_effect=mock_async_setup_entry_true,
+        ),
     ):
-        mock_setup.return_value = True
-        mock_setup_entry.return_value = True
-
         # Initialize the flow
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -71,17 +80,15 @@ async def test_flow_mqtt_ha_missing_integration(
         patch(
             "homeassistant.config_entries.ConfigEntries.async_entries", return_value=[]
         ),
-        # FIX: Use new_callable=AsyncMock here as well
+        # FIX: Use side_effect with a real async function
         patch(
-            "custom_components.ramses_cc.async_setup", new_callable=AsyncMock
-        ) as mock_setup,
+            "custom_components.ramses_cc.async_setup", side_effect=mock_async_setup_true
+        ),
         patch(
-            "custom_components.ramses_cc.async_setup_entry", new_callable=AsyncMock
-        ) as mock_setup_entry,
+            "custom_components.ramses_cc.async_setup_entry",
+            side_effect=mock_async_setup_entry_true,
+        ),
     ):
-        mock_setup.return_value = True
-        mock_setup_entry.return_value = True
-
         # Initialize
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -95,6 +102,3 @@ async def test_flow_mqtt_ha_missing_integration(
         # 3. Verify Error
         # It should return the menu again (re-show form) but with an error
         assert result["type"] == FlowResultType.MENU
-
-        # Verify specific error key if your implementation uses one
-        # assert result["errors"] == {"base": "mqtt_missing"}
