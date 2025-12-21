@@ -172,3 +172,19 @@ async def test_ioc_constructor_arguments(bridge_env: dict[str, Any]) -> None:
         call_kwargs = mock_cls.call_args[1]
         assert call_kwargs["disable_sending"] is True
         assert call_kwargs["extra"]["test_flag"] == 123
+
+
+@pytest.mark.asyncio
+async def test_incoming_mqtt_malformed_json(bridge_env: dict[str, Any]) -> None:
+    """Verify malformed JSON is handled gracefully (logged, not crashed)."""
+    bridge = bridge_env["bridge"]
+    mock_transport = bridge_env["mock_transport"]
+
+    # Malformed payload (missing closing brace)
+    msg = MockMQTTMessage("RAMSES/TEST/18:123456/rx", '{"msg": "incomplete..."')
+
+    # This should NOT raise an exception
+    bridge._handle_mqtt_message(msg)
+
+    # Verify transport was NOT called
+    mock_transport.receive_frame.assert_not_called()
