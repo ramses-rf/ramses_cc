@@ -1313,7 +1313,11 @@ class RamsesMqttBridge:
         self._status_unsub: Callable[[], None] | None = None
 
     async def async_transport_constructor(
-        self, protocol: Any, **kwargs: Any
+        self,
+        protocol: Any,
+        disable_sending: bool = False,
+        extra: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> CallbackTransport:
         """Factory function injected into ramses_rf to create the transport layer.
 
@@ -1329,7 +1333,8 @@ class RamsesMqttBridge:
         self._transport = CallbackTransport(
             protocol,
             io_writer=self._async_mqtt_publish,
-            extra=kwargs.get("extra"),
+            isable_sending=disable_sending,
+            extra=extra,
         )
         return self._transport
 
