@@ -195,6 +195,15 @@ class RamsesBroker:
             self.client = self._create_client(config_schema)
 
         if self.mqtt_bridge:
+            # Lifecycle Management: Delayed Start
+            # We must ensure the HA MQTT client is fully connected before starting
+            # our bridge. This prevents "Client not connected" errors during boot.
+            if not await mqtt.async_wait_for_mqtt_client(self.hass):
+                _LOGGER.error(
+                    "MQTT integration failed to start. RAMSES RF cannot proceed."
+                )
+                return
+
             await self.mqtt_bridge.async_start(self.client)
             # Add listener to stop bridge when entry unloads
             self.entry.async_on_unload(self.mqtt_bridge.async_stop)
