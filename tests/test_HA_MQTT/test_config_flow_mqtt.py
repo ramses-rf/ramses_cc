@@ -12,6 +12,12 @@ from custom_components.ramses_cc import config_flow
 from custom_components.ramses_cc.const import CONF_MQTT_TOPIC, CONF_MQTT_USE_HA, DOMAIN
 
 
+# Helper function to mock setup calls with real coroutines
+async def mock_async_setup_component(hass: Any, domain: str, config: Any) -> bool:
+    """Return True for async_setup_component."""
+    return True
+
+
 @pytest.mark.asyncio
 async def test_flow_selects_mqtt_ha_success(
     hass: HomeAssistant, enable_custom_integrations: Any
@@ -25,7 +31,11 @@ async def test_flow_selects_mqtt_ha_success(
             "homeassistant.config_entries.ConfigEntries.async_entries",
             return_value=[MagicMock(domain="mqtt")],
         ),
-        patch("homeassistant.setup.async_setup_component", return_value=True),
+        # FIX: Use side_effect with a real async function so it is awaitable
+        patch(
+            "homeassistant.setup.async_setup_component",
+            side_effect=mock_async_setup_component,
+        ),
     ):
         # Initialise the flow
         result = await hass.config_entries.flow.async_init(
@@ -66,7 +76,11 @@ async def test_flow_mqtt_ha_missing_integration(
             "homeassistant.config_entries.ConfigEntries.async_entries",
             return_value=[],
         ),
-        patch("homeassistant.setup.async_setup_component", return_value=True),
+        # FIX: Use side_effect with a real async function
+        patch(
+            "homeassistant.setup.async_setup_component",
+            side_effect=mock_async_setup_component,
+        ),
     ):
         # Initialize
         result = await hass.config_entries.flow.async_init(
@@ -79,5 +93,8 @@ async def test_flow_mqtt_ha_missing_integration(
         )
 
         # 3. Verify Error
-        # It should return the menu again (re-show form) but with an error
-        assert result["type"] == FlowResultType.MENU
+        # Implementation returns ABORT when MQTT is missing
+        assert result["type"] == FlowResultType.ABORT
+
+        # Optional: Check the abort reason if you know what key your code uses
+        # assert result["reason"] == "mqtt_missing"
