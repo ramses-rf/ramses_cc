@@ -8,6 +8,9 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
+# CRITICAL: Force import the config flow to register the handler.
+# This prevents 'UnknownHandler' when we bypass the normal integration setup.
+from custom_components.ramses_cc import config_flow  # noqa: F401
 from custom_components.ramses_cc.const import CONF_MQTT_TOPIC, CONF_MQTT_USE_HA, DOMAIN
 
 
@@ -23,9 +26,8 @@ async def test_flow_selects_mqtt_ha_success(
             "homeassistant.config_entries.ConfigEntries.async_entries",
             return_value=[MagicMock(domain="mqtt")],
         ),
-        # FIX: Patch the top-level HA setup manager to return True immediately.
-        # This bypasses the actual component initialization (which we don't need for flow tests)
-        # and avoids the Coroutine/Mock TypeErrors.
+        # FIX: Patch top-level setup to bypass complex initialization (prevents TypeError).
+        # Since we imported config_flow above, we don't need HA to load the module for us.
         patch("homeassistant.setup.async_setup_component", return_value=True),
     ):
         # Initialise the flow
