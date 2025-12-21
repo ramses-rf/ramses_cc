@@ -23,16 +23,16 @@ async def test_flow_selects_mqtt_ha_success(
             "homeassistant.config_entries.ConfigEntries.async_entries",
             return_value=[MagicMock(domain="mqtt")],
         ),
-        # FIX: Mock the integration setup to prevent "coroutine expected" TypeError
+        # FIX: Use new_callable=AsyncMock so the mock returns a coroutine
         patch(
-            "custom_components.ramses_cc.async_setup", return_value=True
+            "custom_components.ramses_cc.async_setup", new_callable=AsyncMock
         ) as mock_setup,
         patch(
-            "custom_components.ramses_cc.async_setup_entry", return_value=True
+            "custom_components.ramses_cc.async_setup_entry", new_callable=AsyncMock
         ) as mock_setup_entry,
     ):
-        mock_setup.side_effect = AsyncMock(return_value=True)
-        mock_setup_entry.side_effect = AsyncMock(return_value=True)
+        mock_setup.return_value = True
+        mock_setup_entry.return_value = True
 
         # Initialize the flow
         result = await hass.config_entries.flow.async_init(
@@ -71,16 +71,16 @@ async def test_flow_mqtt_ha_missing_integration(
         patch(
             "homeassistant.config_entries.ConfigEntries.async_entries", return_value=[]
         ),
-        # FIX: Mock the integration setup here as well
+        # FIX: Use new_callable=AsyncMock here as well
         patch(
-            "custom_components.ramses_cc.async_setup", return_value=True
+            "custom_components.ramses_cc.async_setup", new_callable=AsyncMock
         ) as mock_setup,
         patch(
-            "custom_components.ramses_cc.async_setup_entry", return_value=True
+            "custom_components.ramses_cc.async_setup_entry", new_callable=AsyncMock
         ) as mock_setup_entry,
     ):
-        mock_setup.side_effect = AsyncMock(return_value=True)
-        mock_setup_entry.side_effect = AsyncMock(return_value=True)
+        mock_setup.return_value = True
+        mock_setup_entry.return_value = True
 
         # Initialize
         result = await hass.config_entries.flow.async_init(
@@ -96,6 +96,5 @@ async def test_flow_mqtt_ha_missing_integration(
         # It should return the menu again (re-show form) but with an error
         assert result["type"] == FlowResultType.MENU
 
-        # Note: If your code uses a specific error key, you can check:
+        # Verify specific error key if your implementation uses one
         # assert result["errors"] == {"base": "mqtt_missing"}
-        # (or similar, depending on your implementation)
