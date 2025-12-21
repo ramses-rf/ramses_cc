@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Callable, Coroutine
 from copy import deepcopy
@@ -13,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Final
 import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL, Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import (
@@ -24,11 +25,11 @@ from homeassistant.helpers.entity_platform import EntityPlatform
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.storage import Store
 
+from ramses_rf import Gateway
 from ramses_rf.device import Fakeable
 from ramses_rf.device.base import Device
 from ramses_rf.device.hvac import HvacRemoteBase, HvacVentilator
 from ramses_rf.entity_base import Child, Entity as RamsesRFEntity
-from ramses_rf.gateway import Gateway
 from ramses_rf.schemas import SZ_SCHEMA
 from ramses_rf.system import Evohome, System, Zone
 from ramses_tx.address import pkt_addrs
@@ -44,6 +45,7 @@ from ramses_tx.schemas import (
     SZ_SERIAL_PORT,
     extract_serial_port,
 )
+from ramses_tx.transport import CallbackTransport
 
 from .const import (
     CONF_COMMANDS,
@@ -64,6 +66,16 @@ if TYPE_CHECKING:
     from . import RamsesEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+# We check for mqtt during config flow, but we handle the import safely here
+try:
+    from homeassistant.components import mqtt
+    from homeassistant.components.mqtt import ReceiveMessage
+
+    _LOGGER.debug("homeassistant.components.mqtt imported successfully")
+except ImportError:
+    mqtt = None
+    _LOGGER.debug("homeassistant.components.mqtt not imported")
 
 SAVE_STATE_INTERVAL: Final[timedelta] = timedelta(minutes=5)
 
@@ -1211,3 +1223,170 @@ class RamsesBroker:
         except Exception as err:
             _LOGGER.error("Failed to set fan parameter: %s", err, exc_info=True)
             raise
+
+
+class RamsesMqttBridge:
+    """The Bridge between Home Assistant MQTT and ramses_rf.
+
+    This class implements the 'Inversion of Control' pattern by providing
+    the transport_constructor and io_writer callbacks required by ramses_rf.
+    """
+
+    def __init__(self, hass: HomeAssistant, topic_root: str) -> None:
+        self._hass = hass
+        self._topic_root = topic_root if topic_root.endswith("/") else f"{topic_root}/"
+
+        # Topics
+        # We listen to everything under the root to catch incoming data
+        self._sub_topic = f"{self._topic_root}#"
+
+        self._transport: CallbackTransport | None = None
+        self._gateway: Gateway | None = None
+
+        self._mqtt_unsub: Callable[[], None] | None = None
+        self._status_unsub: Callable[[], None] | None = None
+
+    async def async_transport_constructor(
+        self, protocol: Any, **kwargs: Any
+    ) -> CallbackTransport:
+        """The factory function injected into ramses_rf."""
+        _LOGGER.debug("RamsesMqttBridge: Initializing CallbackTransport")
+
+        self._transport = CallbackTransport(
+            protocol,
+            io_writer=self._async_mqtt_publish,
+            extra=kwargs.get("extra"),
+        )
+        return self._transport
+
+    async def _async_mqtt_publish(self, frame: str) -> None:
+        """The IO Writer callback: Publishes raw packets to MQTT.
+
+        Format:
+        Topic: RAMSES/GATEWAY/<gateway_id>/tx
+        Payload: {"msg": "..."}
+        """
+        if not self._gateway:
+            _LOGGER.warning("Attempted to publish before Gateway is ready")
+            return
+
+        # Extract Active Gateway ID to build the topic
+        # Default to generic if unknown (shouldn't happen in normal op)
+        gwy_id = self._gateway.gwy_id or "00:000000"
+
+        topic = f"{self._topic_root}{gwy_id}/tx"
+        payload = json.dumps({"msg": frame})
+
+        # Section 6.1: Boundary Logging (Outgoing)
+        _LOGGER.debug(f"MQTT OUT: {topic} -> {payload}")
+
+        try:
+            await mqtt.async_publish(self._hass, topic, payload, qos=0, retain=False)
+        except Exception as err:
+            _LOGGER.error(f"Failed to publish to MQTT: {err}")
+            # We do not raise here to prevent crashing the protocol loop
+
+    @callback
+    def _handle_mqtt_message(self, msg: ReceiveMessage) -> None:
+        """Handle incoming MQTT messages from Home Assistant."""
+        # msg.topic, msg.payload, msg.qos
+
+        # 1. Parsing Logic
+        # Expected Topic: RAMSES/GATEWAY/<device_id>/rx
+        # Expected Payload: JSON {"ts": "...", "msg": "..."}
+
+        try:
+            # Check if this is a 'rx' topic (incoming data)
+            if not msg.topic.endswith("/rx"):
+                return
+
+            payload_str = str(msg.payload)
+            json_data = json.loads(payload_str)
+
+            # Extract generic packet string
+            packet = json_data.get("msg")
+            timestamp = json_data.get("ts")
+
+            if not packet:
+                _LOGGER.debug(f"Ignored invalid JSON payload: {payload_str}")
+                return
+
+            # Section 6.1: Boundary Logging (Incoming)
+            # Detailed logging is handled inside CallbackTransport.receive_frame
+            # but we log connection inference here.
+
+            # 2. Inject into Transport
+            if self._transport:
+                self._transport.receive_frame(packet, dtm=timestamp)
+
+                # 3. Gateway Identification (HACK: IoC Side-effect)
+                # We need to ensure ramses_rf knows which gateway ID is active
+                # derived from the topic structure.
+                # Topic: root/DEVICE_ID/rx
+                try:
+                    parts = msg.topic.split("/")
+                    device_id = parts[-2]
+                    # We inject this into the transport's extra info if not set
+                    # This allows the protocol to identify the HGI
+                    if "18:" in device_id:
+                        # Accessing private attribute is necessary for this IoC pattern
+                        # to set the "Active HGI"
+                        if not self._transport.get_extra_info("hgi_id"):
+                            self._transport._extra["hgi_id"] = device_id
+                except IndexError:
+                    pass
+
+        except json.JSONDecodeError:
+            _LOGGER.warning(f"Received malformed JSON on {msg.topic}: {msg.payload}")
+        except Exception as err:
+            _LOGGER.exception(f"Unexpected error processing MQTT message: {err}")
+
+    async def async_start(self, gateway: Gateway) -> None:
+        """Start the bridge: Subscribe to topics and monitor connection."""
+        self._gateway = gateway
+
+        # 1. Subscribe to MQTT
+        _LOGGER.debug(f"Subscribing to {self._sub_topic}")
+        self._mqtt_unsub = await mqtt.async_subscribe(
+            self._hass, self._sub_topic, self._handle_mqtt_message, qos=0
+        )
+
+        # 2. Setup Circuit Breaker (Connection Status)
+        # We assume the user has configured the standard HA status topic or we use the availability API
+        # Section 4.2: Circuit Breaker
+        self._status_unsub = mqtt.async_subscribe_connection_status(
+            self._hass, self._handle_connection_status
+        )
+
+        # Trigger initial check
+        if mqtt.is_connected(self._hass):
+            self._handle_connection_status(True)
+
+    @callback
+    def _handle_connection_status(self, connected: bool) -> None:
+        """Handle MQTT connection status changes (Circuit Breaker)."""
+        if not self._transport:
+            return
+
+        if connected:
+            _LOGGER.info("MQTT Connected: Resuming ramses_rf transport")
+            self._transport.resume_reading()
+            if self._gateway:
+                self._gateway._protocol.resume_writing()
+        else:
+            _LOGGER.warning("MQTT Disconnected: Pausing ramses_rf transport")
+            self._transport.pause_reading()
+            if self._gateway:
+                self._gateway._protocol.pause_writing()
+
+    async def async_stop(self) -> None:
+        """Stop the bridge and cleanup subscriptions."""
+        if self._mqtt_unsub:
+            self._mqtt_unsub()
+            self._mqtt_unsub = None
+
+        if self._status_unsub:
+            self._status_unsub()
+            self._status_unsub = None
+
+        _LOGGER.info("RamsesMqttBridge stopped")
