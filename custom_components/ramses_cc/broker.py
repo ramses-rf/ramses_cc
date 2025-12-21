@@ -1,4 +1,9 @@
-"""Broker for RAMSES integration."""
+"""Broker for RAMSES integration.
+This module provides the central coordination logic for the RAMSES RF integration.
+It handles the lifecycle of the connection to the RAMSES network (via Serial or MQTT),
+manages the discovery and update of entities, and routes service calls to the
+underlying client library.
+"""
 
 from __future__ import annotations
 
@@ -99,9 +104,12 @@ class RamsesBroker:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the RAMSES broker and its data structures.
 
-        :param hass: Home Assistant instance
+        Initializes the client connection placeholders and internal stores.
+        Actual client startup occurs in :meth:`async_setup`.
+
+        :param hass: The Home Assistant instance.
         :type hass: HomeAssistant
-        :param entry: Configuration entry for this integration
+        :param entry: The configuration entry for this integration.
         :type entry: ConfigEntry
 
         .. note::
@@ -143,14 +151,11 @@ class RamsesBroker:
     async def async_setup(self) -> None:
         """Set up the RAMSES client and load configuration.
 
-        This method:
-        - Loads any cached packets from storage
-        - Creates and configures the RAMSES client
-        - Starts the client connection
-        - Sets up the save state timer
+        This method loads cached packets from storage, creates and configures the
+        RAMSES client (via Serial or MQTT), and establishes the initial connection.
 
-        :raises ValueError: If there's an error in the configuration
-        :raises RuntimeError: If the client fails to start
+        :raises ValueError: If there is a critical error in the configuration schema.
+        :raises RuntimeError: If the client fails to start or connect.
         """
         storage = await self._store.async_load() or {}
         _LOGGER.debug("Storage = %s", storage)
@@ -218,14 +223,11 @@ class RamsesBroker:
         self.entry.async_on_unload(self.client.stop)
 
     async def async_start(self) -> None:
-        """Initialize the update cycle for the RAMSES broker.
+        """Initialize the periodic update cycle for the RAMSES broker.
 
-        This method:
-        - Performs an initial update of all devices
-        - Sets up periodic updates based on the configured scan interval
-        - Sets up periodic state saving
-
-        :raises RuntimeError: If the client is not properly initialized
+        This method performs an initial update of all devices and sets up
+        background tasks for periodic polling and state persistence.
+        It must be called after :meth:`async_setup`.
 
         .. note::
             This is called after async_setup() to start the periodic updates.
@@ -253,11 +255,14 @@ class RamsesBroker:
     ) -> Gateway:
         """Create and configure a new RAMSES client instance.
 
-        :param schema: Configuration schema for the client
+        Instantiates the `Gateway` class, handling the logic to select between
+        Home Assistant MQTT transport or standard Serial/TCP transport based on
+        configuration.
+
+        :param schema: The configuration schema for the client.
         :type schema: dict[str, Any]
-        :return: Configured Gateway instance
+        :returns: A configured Gateway instance ready to be started.
         :rtype: Gateway
-        :raises ValueError: If the configuration is invalid
 
         .. note::
             This method creates a new Gateway instance with the provided configuration
@@ -297,15 +302,16 @@ class RamsesBroker:
     async def async_save_client_state(self, _: dt | None = None) -> None:
         """Save the current state of the RAMSES client to persistent storage.
 
-        :param _: Unused parameter for callback compatibility
+        Persists critical data including the discovered network schema,
+        packet cache, and remote command mappings.
+
+        :param _: Unused parameter, required for compatibility with `async_track_time_interval`.
         :type _: dt | None
 
         .. note::
             This method saves important state information including:
             - Remote command mappings
             - Other client state that needs to persist between restarts
-
-            It's called periodically and on shutdown.
         """
 
         _LOGGER.info("Saving the client state cache (packets, schema)")
@@ -323,11 +329,11 @@ class RamsesBroker:
         )
 
     def _get_device(self, device_id: str) -> Any | None:
-        """Get a device by ID.
+        """Retrieve a device object by its ID.
 
-        :param device_id: The ID of the device to find
+        :param device_id: The unique identifier of the device (e.g., '01:123456').
         :type device_id: str
-        :return: The device if found, None otherwise
+        :returns: The device object if found, otherwise None.
         :rtype: Any | None
         """
         return next((d for d in self._devices if d.id == device_id), None)
@@ -337,11 +343,14 @@ class RamsesBroker:
         platform: EntityPlatform,
         add_new_devices: Callable[[RamsesRFEntity], None],
     ) -> None:
-        """Register a platform that has entities with the broker.
+        """Register a Home Assistant entity platform with the broker.
 
-        :param platform: The platform to register
+        This allows the broker to dispatch new device discovery events to the
+        appropriate platform (e.g., climate, sensor, water_heater).
+
+        :param platform: The entity platform to register.
         :type platform: EntityPlatform
-        :param add_new_devices: Callback function to add new devices to the platform
+        :param add_new_devices: A callback function to add new entities to the platform.
         :type add_new_devices: Callable[[RamsesRFEntity], None]
         """
         platform_str = platform.domain if hasattr(platform, "domain") else platform
@@ -365,11 +374,14 @@ class RamsesBroker:
         )
 
     async def _async_setup_platform(self, platform: str) -> bool:
-        """Set up a platform and return True if successful.
+        """Set up a specific Home Assistant platform.
 
-        :param platform: The platform to set up (e.g., 'climate', 'sensor')
+        Ensures that the config entry setup for a given platform (e.g., 'climate')
+        is forwarded and completed.
+
+        :param platform: The domain of the platform to set up.
         :type platform: str
-        :return: True if the platform was set up successfully, False otherwise
+        :returns: True if the platform was set up successfully, False otherwise.
         :rtype: bool
         """
         if platform not in self._platform_setup_tasks:
@@ -391,7 +403,9 @@ class RamsesBroker:
     async def async_unload_platforms(self) -> bool:
         """Unload all platforms associated with this integration.
 
-        :return: True if all platforms were unloaded successfully, False otherwise
+        Typically called when the integration config entry is being unloaded.
+
+        :returns: True if all platforms were unloaded successfully, False otherwise.
         :rtype: bool
         """
         tasks: list[Coroutine[Any, Any, bool]] = [
@@ -404,18 +418,18 @@ class RamsesBroker:
         return result
 
     def _create_parameter_entities(self, device: RamsesRFEntity) -> None:
-        """Create parameter entities for a device that supports 2411 parameters.
+        """Create parameter entities for a device supporting 2411 parameters.
 
-        This method creates Home Assistant number entities for all 2411 parameters
-        that the device supports. The entities are added to the number platform and
+        Creates Home Assistant `Number` entities for all supported 2411 parameters.
+        These entities are automatically added to the number platform and
         will automatically receive parameter updates via the event system.
 
-        :param device: The FAN device to create parameter entities for
+        :param device: The device (typically a FAN) to create parameter entities for.
         :type device: RamsesRFEntity
-        :raises RuntimeError: If parameter entity creation fails
-        :note: This method is called automatically during device setup and should
-              not be called manually. Parameter entities are created only once per
-              device per Home Assistant session.
+
+        .. note:: This method is called automatically during device setup and should
+        not be called manually. Parameter entities are created only once per
+        device per Home Assistant session.
         """
         device_id = device.id
         from .number import create_parameter_entities
@@ -507,10 +521,10 @@ class RamsesBroker:
     async def _async_setup_fan_device(self, device: Device) -> None:
         """Set up a FAN device and its parameter entities.
 
-        This method is called from async_update() when a FAN device is first discovered.
-        It sets up bound REM/DIS devices, parameter handling, and creates parameter entities.
+        Called during discovery to initialize specific logic for HVAC Ventilators,
+        including parameter handling callbacks and initial data requests.
 
-        :param device: The FAN device to set up
+        :param device: The FAN device to set up.
         :type device: Device
 
         .. note::
@@ -611,12 +625,12 @@ class RamsesBroker:
                     )
 
     def _update_device(self, device: RamsesRFEntity) -> None:
-        """Update device information in the device registry.
+        """Update device information in the Home Assistant device registry.
 
-        This method updates the device registry with the latest information
-        about a device, including its name, model, and relationships.
+        Synchronizes the device's metadata (model, name, via_device relationship)
+        with the HA registry.
 
-        :param device: The device to update in the registry
+        :param device: The device to update.
         :type device: RamsesRFEntity
         """
         if hasattr(device, "name") and device.name:
@@ -679,10 +693,11 @@ class RamsesBroker:
     async def async_update(self, _: dt | None = None) -> None:
         """Retrieve the latest state data from the client library.
 
-        This method is called periodically by Home Assistant's update coordinator
-        to refresh the state of all devices.
+        This method queries the `ramses_rf` library for the current state of devices,
+        identifies new entities, updates the registry, and dispatches signals to
+        notify platforms of changes.
 
-        :param _: Unused parameter for backward compatibility
+        :param _: Unused parameter, required for compatibility with `async_track_time_interval`.
         :type _: dt | None
         """
 
@@ -757,15 +772,15 @@ class RamsesBroker:
         async_dispatcher_send(self.hass, SIGNAL_UPDATE)
 
     async def async_bind_device(self, call: ServiceCall) -> None:
-        """Handle the bind_device service call to bind a device to the system.
+        """Handle the `bind_device` service call.
 
-        This method initiates the binding process for a device, allowing it to be
-        recognized and controlled by the system.
+        Initiates a binding handshake between a device (faked by the gateway)
+        and a controller.
         This method will NOT set the 'bound' trait in config flow (yet).
 
-        :param call: Service call containing binding parameters
+        :param call: The service call object containing binding parameters.
         :type call: ServiceCall
-        :raises LookupError: If the specified device ID is not found
+        :raises LookupError: If the specified device ID cannot be found or faked.
 
         .. note::
             The service call should include:
@@ -807,25 +822,25 @@ class RamsesBroker:
         async_call_later(self.hass, _CALL_LATER_DELAY, self.async_update)
 
     async def async_force_update(self, _: ServiceCall) -> None:
-        """Force an immediate update of all device states.
+        """Handle the `force_update` service call.
 
-        This method triggers a full refresh of all device states by calling
-        async_update(). It's typically used to manually refresh the state
-        of all devices when needed.
+        Triggers an immediate refresh of all device states by calling :meth:`async_update`.
+        It's typically used to manually refresh the state  of all devices when needed.
 
         :param _: Unused service call parameter (for callback compatibility)
         :type _: ServiceCall
-
         """
 
         await self.async_update()
 
     async def async_send_packet(self, call: ServiceCall) -> None:
-        """Create and send a raw command packet via the transport layer.
+        """Handle the `send_packet` service call.
 
-        :param call: Service call containing the packet data
+        Constructs and sends a raw command packet via the active transport layer.
+
+        :param call: The service call object containing packet definition parameters.
         :type call: ServiceCall
-        :raises ValueError: If the packet data is invalid
+        :raises ValueError: If packet construction fails due to invalid parameters.
 
         .. note::
             The service call should include:
@@ -859,7 +874,7 @@ class RamsesBroker:
         async_call_later(self.hass, _CALL_LATER_DELAY, self.async_update)
 
     def _find_param_entity(self, device_id: str, param_id: str) -> Any | None:
-        """Find a parameter entity by device ID and parameter ID.
+        """Find a Home Assistant parameter entity by device and parameter ID.
 
         Helper Method that searches for a number entity corresponding to a specific
         parameter on a device.
@@ -871,8 +886,7 @@ class RamsesBroker:
         :param param_id: The parameter ID of the entity to find
         :type param_id: str
         :return: The found number entity or None if not found
-        :rtype: RamsesNumberParam | None
-        :raises ValueError: If parameter ID is not a valid 2-digit hex value
+        :rtype: Any | None
         """
         # Normalize device ID to use underscores and lowercase for entity ID (same as entity creation)
         safe_device_id = str(device_id).replace(":", "_").lower()
@@ -919,8 +933,7 @@ class RamsesBroker:
         :type call: ServiceCall | dict[str, Any]
         :return: The validated parameter ID as uppercase 2-digit hex string
         :rtype: str
-        :raises ValueError: If parameter ID is missing, empty, or invalid format
-        :raises ValueError: If parameter ID is not exactly 2 hexadecimal digits
+        :raises ValueError: If the parameter ID is missing or invalid.
         """
         # Handle both ServiceCall and direct dict inputs
         data: dict[str, Any] = call.data if hasattr(call, "data") else call
@@ -951,16 +964,18 @@ class RamsesBroker:
     def _get_device_and_from_id(
         self, call: ServiceCall | dict[str, Any]
     ) -> tuple[str, str, str]:
-        """Get device_id and from_id with validation and fallback logic.
+        """Determine target device and source device (from_id) for parameter ops.
 
-        Combined helper method that extracts device_id and determines from_id
-        with fallback logic: explicit from_id -> bound device -> HGI gateway.
+        Resolves the source ID using fallback logic:
+        1. Explicit `from_id` in call data.
+        2. Bound device (e.g., Remote) if configured.
+        3. Fails if neither is available.
 
-        :param call: Service call data or dict
+        :param call: The service call or data dictionary.
         :type call: ServiceCall | dict[str, Any]
-        :return: Tuple of (original_device_id, normalized_device_id, from_id)
+        :returns: A tuple of (original_device_id, normalized_device_id, from_id).
+                  Returns empty strings if validation fails.
         :rtype: tuple[str, str, str]
-        :raises ValueError: If device_id is missing/invalid or no valid source device
         """
         # Handle both ServiceCall and direct dict inputs
         data: dict[str, Any] = call.data if hasattr(call, "data") else call
@@ -1036,6 +1051,7 @@ class RamsesBroker:
         :raises ValueError: If device is not found or not a FAN device
         :raises ValueError: If parameter ID is not a valid 2-digit hex value
 
+        ..note::
         The call data should contain:
             - device_id (str): Target device ID (required, supports colon/underscore formats)
             - param_id (str): Parameter ID to read (required, 2 hex digits)
@@ -1102,7 +1118,8 @@ class RamsesBroker:
         :raises ValueError: If device is not a FAN device
         :raises RuntimeError: If communication with device fails
 
-        The call data should contain:
+        ..note::
+            The call data should contain:
             - device_id (str): Target device ID (required, supports colon/underscore formats)
             - from_id (str, optional): Source device ID (defaults to Bound Rem or HGI)
 
@@ -1126,11 +1143,11 @@ class RamsesBroker:
         :raises ValueError: If device is not a FAN device
         :raises RuntimeError: If communication with device fails
 
-        The call data should contain:
+        ..note::
+            This method is called by get_all_fan_params and should not be called directly.
+            The call data should contain:
             - device_id (str): Target device ID (required, supports colon/underscore formats)
             - from_id (str, optional): Source device ID (defaults to Bound Rem or HGI)
-
-        note: This method is called by get_all_fan_params and should not be called directly.
         """
         # Handle both ServiceCall objects and plain dictionaries
         if hasattr(call, "data"):
@@ -1187,7 +1204,8 @@ class RamsesBroker:
         :raises ValueError: If device is not found or not a FAN device
         :raises RuntimeError: If communication with device fails or times out
 
-        The call data should contain:
+        ..note::
+            The call data should contain:
             - device_id (str): Target FAN device ID (required, supports colon/underscore formats)
             - param_id (str): Parameter ID to write (required, 2 hex digits)
             - value: The value to set (required, type depends on parameter)
@@ -1260,9 +1278,17 @@ class RamsesMqttBridge:
 
     This class implements the 'Inversion of Control' pattern by providing
     the transport_constructor and io_writer callbacks required by ramses_rf.
+    It translates MQTT messages to protocol frames and vice-versa.
     """
 
     def __init__(self, hass: HomeAssistant, topic_root: str) -> None:
+        """Initialize the MQTT bridge.
+
+        :param hass: The Home Assistant instance.
+        :type hass: HomeAssistant
+        :param topic_root: The root MQTT topic for this gateway.
+        :type topic_root: str
+        """
         self._hass = hass
         self._topic_root = topic_root if topic_root.endswith("/") else f"{topic_root}/"
 
@@ -1279,7 +1305,15 @@ class RamsesMqttBridge:
     async def async_transport_constructor(
         self, protocol: Any, **kwargs: Any
     ) -> CallbackTransport:
-        """The factory function injected into ramses_rf."""
+        """Factory function injected into ramses_rf to create the transport layer.
+
+        :param protocol: The protocol instance from ramses_rf.
+        :type protocol: Any
+        :param kwargs: Additional arguments for transport creation.
+        :type kwargs: Any
+        :returns: A configured CallbackTransport connected to this bridge's IO.
+        :rtype: CallbackTransport
+        """
         _LOGGER.debug("RamsesMqttBridge: Initializing CallbackTransport")
 
         self._transport = CallbackTransport(
@@ -1290,11 +1324,14 @@ class RamsesMqttBridge:
         return self._transport
 
     async def _async_mqtt_publish(self, frame: str) -> None:
-        """The IO Writer callback: Publishes raw packets to MQTT.
+        """IO Writer callback: Publish raw packets to MQTT.
 
         Format:
-        Topic: RAMSES/GATEWAY/<gateway_id>/tx
-        Payload: {"msg": "..."}
+        Topic: ``RAMSES/GATEWAY/<gateway_id>/tx``
+        Payload: ``{"msg": "..."}``
+
+        :param frame: The raw packet string to publish.
+        :type frame: str
         """
         if not self._gateway:
             _LOGGER.warning("Attempted to publish before Gateway is ready")
@@ -1318,7 +1355,13 @@ class RamsesMqttBridge:
 
     @callback
     def _handle_mqtt_message(self, msg: ReceiveMessage) -> None:
-        """Handle incoming MQTT messages from Home Assistant."""
+        """Handle incoming MQTT messages from Home Assistant.
+
+        Parses the payload and injects valid packets into the ramses_rf transport.
+
+        :param msg: The MQTT message object containing topic and payload.
+        :type msg: ReceiveMessage
+        """
         # msg.topic, msg.payload, msg.qos
 
         # 1. Parsing Logic
@@ -1372,7 +1415,11 @@ class RamsesMqttBridge:
             _LOGGER.exception(f"Unexpected error processing MQTT message: {err}")
 
     async def async_start(self, gateway: Gateway) -> None:
-        """Start the bridge: Subscribe to topics and monitor connection."""
+        """Start the bridge: Subscribe to topics and monitor connection.
+
+        :param gateway: The initialized RAMSES gateway instance.
+        :type gateway: Gateway
+        """
         self._gateway = gateway
 
         # 1. Subscribe to MQTT
@@ -1394,7 +1441,13 @@ class RamsesMqttBridge:
 
     @callback
     def _handle_connection_status(self, connected: bool) -> None:
-        """Handle MQTT connection status changes (Circuit Breaker)."""
+        """Handle MQTT connection status changes (Circuit Breaker).
+
+        Pauses the transport when MQTT is disconnected to prevent write errors.
+
+        :param connected: True if MQTT is connected, False otherwise.
+        :type connected: bool
+        """
         if not self._transport:
             return
 
