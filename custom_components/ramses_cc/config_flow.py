@@ -1,5 +1,7 @@
 """Config flow to configure Ramses integration."""
 
+from __future__ import annotations
+
 import logging
 import re
 from abc import abstractmethod
@@ -48,6 +50,9 @@ from ramses_tx.schemas import (
 from .const import (
     CONF_ADVANCED_FEATURES,
     CONF_MESSAGE_EVENTS,
+    CONF_MQTT_TOPIC,
+    CONF_MQTT_USE_HA,
+    CONF_PACKET_SOURCE,
     CONF_RAMSES_RF,
     CONF_SCHEMA,
     CONF_SEND_PACKET,
@@ -63,6 +68,13 @@ _LOGGER = logging.getLogger(__name__)
 
 CONF_MANUAL_PATH: Final = "Enter Manually..."  # TODO i18n this string
 CONF_MQTT_PATH: Final = "MQTT Broker..."
+
+# Schema for the MQTT step
+MQTT_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_MQTT_TOPIC, default="RAMSES/GATEWAY"): str,
+    }
+)
 
 
 def get_usb_ports() -> dict[str, str]:
@@ -604,10 +616,13 @@ class BaseRamsesFlow(FlowHandler):
         )
 
 
-class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
+class RamsesConfigFlow(ConfigFlow):
     """Config flow for Ramses."""
 
     VERSION = 1
+    # Set the handler manually instead of using 'domain=DOMAIN' in the class definition
+    # to satisfy Mypy which doesn't recognize the __init_subclass__ kwarg.
+    handler = DOMAIN
 
     def __init__(self) -> None:
         """Initialize Ramses config flow."""
@@ -615,12 +630,46 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle a flow initiated by the user."""
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
+    ) -> FlowResult:
+        """Handle the initial step."""
+        return await self.async_step_menu()
 
-        return await self.async_step_choose_serial_port()
+    async def async_step_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Allow user to choose between Serial, Direct MQTT, or HA MQTT."""
+        return self.async_show_menu(
+            step_id="menu",
+            menu_options=["serial", "mqtt_ha", "mqtt_direct"],
+        )
+
+    async def async_step_mqtt_ha(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the Home Assistant MQTT selection."""
+        errors: dict[str, str] = {}
+
+        # Section 4.3: Config Flow (Runtime Check)
+        # Check if MQTT integration is set up
+        if not self.hass.config_entries.async_entries("mqtt"):
+            return self.async_abort(reason="mqtt_not_setup")
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title="RAMSES MQTT (HA)",
+                data={
+                    CONF_PACKET_SOURCE: "mqtt",  # Internal marker
+                    CONF_MQTT_USE_HA: True,
+                    CONF_MQTT_TOPIC: user_input[CONF_MQTT_TOPIC],
+                },
+            )
+
+        return self.async_show_form(
+            step_id="mqtt_ha",
+            data_schema=MQTT_SCHEMA,
+            errors=errors,
+            description_placeholders={"default_topic": "RAMSES/GATEWAY"},
+        )
 
     def _async_save(self) -> FlowResult:
         return self.async_create_entry(title="RAMSES RF", data={}, options=self.options)
