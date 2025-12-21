@@ -1332,7 +1332,7 @@ class RamsesMqttBridge:
         self._transport = CallbackTransport(
             protocol,
             io_writer=self._async_mqtt_publish,
-            isable_sending=disable_sending,
+            disable_sending=disable_sending,
             extra=extra,
         )
         return self._transport
