@@ -1,5 +1,6 @@
 """Test the Ramses CC config flow for MQTT selection."""
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,7 +12,9 @@ from custom_components.ramses_cc.const import CONF_MQTT_TOPIC, CONF_MQTT_USE_HA,
 
 
 @pytest.mark.asyncio
-async def test_flow_selects_mqtt_ha_success(hass: HomeAssistant) -> None:
+async def test_flow_selects_mqtt_ha_success(
+    hass: HomeAssistant, enable_custom_integrations: Any
+) -> None:
     """Test selecting HA MQTT when the MQTT integration is present."""
 
     # 1. Simulate that the 'mqtt' integration is set up
@@ -47,7 +50,9 @@ async def test_flow_selects_mqtt_ha_success(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_flow_mqtt_ha_missing_integration(hass: HomeAssistant) -> None:
+async def test_flow_mqtt_ha_missing_integration(
+    hass: HomeAssistant, enable_custom_integrations: Any
+) -> None:
     """Test selecting HA MQTT when the MQTT integration is MISSING."""
 
     # 1. Simulate that 'mqtt' is NOT in async_entries (Empty list)
@@ -68,6 +73,7 @@ async def test_flow_mqtt_ha_missing_integration(hass: HomeAssistant) -> None:
         # It should return the menu again (re-show form) but with an error
         assert result["type"] == FlowResultType.MENU
 
-        # Note: If your config flow uses a specific error key in the menu
-        # (like description_placeholders), verify it here.
-        # For a standard retry, checking type=MENU is usually sufficient.
+        # Note: Depending on your config_flow implementation, the error key
+        # might be in description_placeholders or errors.
+        # If this assertion fails, you can inspect 'result' to see exactly how
+        # your code reported the error.
