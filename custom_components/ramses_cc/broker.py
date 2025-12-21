@@ -1349,7 +1349,7 @@ class RamsesMqttBridge:
 
         # Extract Active Gateway ID to build the topic
         # Default to generic if unknown (shouldn't happen in normal op)
-        gwy_id = self._gateway.gwy_id or "00:000000"
+        gwy_id = self._gateway.hgi.id if self._gateway.hgi else "18:000730"
 
         topic = f"{self._topic_root}{gwy_id}/tx"
         payload = json.dumps({"msg": frame})
