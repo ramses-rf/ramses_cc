@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -21,7 +22,7 @@ class MockMQTTMessage:
 
 
 @pytest.fixture
-async def bridge_env():
+async def bridge_env() -> dict[str, Any]:
     """Fixture to setup the bridge environment for each test."""
     hass = MagicMock()
     # We must ensure the mock has a loop attribute, as code checks hass.loop
@@ -63,7 +64,7 @@ async def bridge_env():
 
 
 @pytest.mark.asyncio
-async def test_incoming_mqtt_parsing(bridge_env) -> None:
+async def test_incoming_mqtt_parsing(bridge_env: dict[str, Any]) -> None:
     """Verify JSON payloads are unpacked and injected into transport."""
     bridge = bridge_env["bridge"]
     mock_transport = bridge_env["mock_transport"]
@@ -81,7 +82,7 @@ async def test_incoming_mqtt_parsing(bridge_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_gateway_id_injection(bridge_env) -> None:
+async def test_gateway_id_injection(bridge_env: dict[str, Any]) -> None:
     """Verify the Gateway ID is extracted from topic and injected."""
     bridge = bridge_env["bridge"]
     mock_transport = bridge_env["mock_transport"]
@@ -99,7 +100,7 @@ async def test_gateway_id_injection(bridge_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_outgoing_mqtt_formatting(bridge_env) -> None:
+async def test_outgoing_mqtt_formatting(bridge_env: dict[str, Any]) -> None:
     """Verify outgoing frames are wrapped in JSON."""
     bridge = bridge_env["bridge"]
     gateway = bridge_env["gateway"]
@@ -125,7 +126,7 @@ async def test_outgoing_mqtt_formatting(bridge_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_circuit_breaker_logic(bridge_env) -> None:
+async def test_circuit_breaker_logic(bridge_env: dict[str, Any]) -> None:
     """Verify connection status toggles BOTH transport reading AND protocol writing."""
     bridge = bridge_env["bridge"]
     mock_transport = bridge_env["mock_transport"]
@@ -152,7 +153,7 @@ async def test_circuit_breaker_logic(bridge_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ioc_constructor_arguments(bridge_env) -> None:
+async def test_ioc_constructor_arguments(bridge_env: dict[str, Any]) -> None:
     """Verify disable_sending and extra args are passed to the transport."""
     # We grab hass and protocol from the fixture to reuse mocks
     hass = bridge_env["hass"]
