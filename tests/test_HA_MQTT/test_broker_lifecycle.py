@@ -17,18 +17,14 @@ async def test_broker_waits_for_mqtt_client() -> None:
     hass = MagicMock()
     hass.loop = asyncio.get_event_loop()
 
-    # Create a config entry with MQTT enabled options
     entry = MagicMock()
     entry.options = {CONF_MQTT_USE_HA: True}
 
-    # Initialize the Broker
-    broker = RamsesBroker(hass, entry)
-
     # 2. Mock Dependencies
-    # We mock the Store class so we can control what async_load returns
+    # CRITICAL FIX: Patch Store BEFORE instantiating RamsesBroker
     with patch("custom_components.ramses_cc.broker.Store") as mock_store_cls:
         mock_store_instance = mock_store_cls.return_value
-        mock_store_instance.async_load = AsyncMock(return_value={})  # Return empty dict
+        mock_store_instance.async_load = AsyncMock(return_value={})
 
         with (
             patch(
@@ -48,11 +44,13 @@ async def test_broker_waits_for_mqtt_client() -> None:
             # KEY: Mock the wait function to return True (connected)
             mock_mqtt.async_wait_for_mqtt_client = AsyncMock(return_value=True)
 
-            # 3. Run Setup
+            # 3. Initialize the Broker (INSIDE the patch context)
+            broker = RamsesBroker(hass, entry)
+
+            # 4. Run Setup
             await broker.async_setup()
 
-            # 4. Verifications
-
+            # 5. Verifications
             # Ensure we waited for the client
             mock_mqtt.async_wait_for_mqtt_client.assert_awaited_once_with(hass)
 
@@ -73,8 +71,8 @@ async def test_broker_aborts_if_mqtt_fails() -> None:
     hass.loop = asyncio.get_event_loop()
     entry = MagicMock()
     entry.options = {CONF_MQTT_USE_HA: True}
-    broker = RamsesBroker(hass, entry)
 
+    # CRITICAL FIX: Patch Store BEFORE instantiating RamsesBroker
     with patch("custom_components.ramses_cc.broker.Store") as mock_store_cls:
         mock_store_instance = mock_store_cls.return_value
         mock_store_instance.async_load = AsyncMock(return_value={})
@@ -92,7 +90,10 @@ async def test_broker_aborts_if_mqtt_fails() -> None:
             # KEY: Simulate timeout/failure (return False)
             mock_mqtt.async_wait_for_mqtt_client = AsyncMock(return_value=False)
 
-            # 3. Run Setup
+            # Initialize the Broker (INSIDE the patch context)
+            broker = RamsesBroker(hass, entry)
+
+            # Run Setup
             await broker.async_setup()
 
             # Verification: We waited...
