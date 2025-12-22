@@ -301,6 +301,11 @@ class RamsesBroker:
             This method creates a new Gateway instance with the provided configuration
             and sets up the necessary callbacks for device discovery and updates.
         """
+        # Defaults
+        port_name = None
+        port_config = {}
+        transport_constructor = None
+
         # 1. Check if we are using Home Assistant MQTT
         if self.options.get(CONF_MQTT_USE_HA):
             if not HAS_MQTT_SUPPORT:
@@ -313,28 +318,32 @@ class RamsesBroker:
                 port_name, port_config = extract_serial_port(
                     self.options.get(SZ_SERIAL_PORT, {})
                 )
-                transport_constructor = None
             else:
                 _LOGGER.info("Configuring RAMSES_RF to use Home Assistant MQTT")
                 topic = self.options.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY")
                 self.mqtt_bridge = RamsesMqttBridge(self.hass, topic)
 
-                # --- CHANGE 1: Dummy string to satisfy library checks ---
-                # The actual connection is handled by transport_constructor, but
-                # ramses_tx.gateway checks if port_name is None and raises TypeError if so.
+                # IMPORTANT: Dummy string to satisfy library checks
                 port_name = "mqtt://homeassistant"
-
                 port_config = {}
                 transport_constructor = self.mqtt_bridge.async_transport_constructor
 
         else:
             # 2. Fallback to Standard Serial / TCP
-            port_name, port_config = extract_serial_port(self.options[SZ_SERIAL_PORT])
-            transport_constructor = None
+            # extract_serial_port handles Missing Keys gracefully by returning (None, None)
+            port_name, port_config = extract_serial_port(
+                self.options.get(SZ_SERIAL_PORT, {})
+            )
 
-        # 3. Instantiate Gateway with Injection
+        # 3. Final Safety Check
+        # If port_name is still None (e.g. invalid config), force a dummy value
+        # IF we have a transport constructor.
+        if transport_constructor and not port_name:
+            _LOGGER.warning("Port name missing in HA MQTT mode, forcing dummy")
+            port_name = "mqtt://homeassistant"
+
+        # 4. Prepare Kwargs
         kwargs = {
-            "port_name": port_name,
             "loop": self.hass.loop,
             "port_config": port_config,
             "packet_log": self.options.get(SZ_PACKET_LOG, {}),
@@ -343,17 +352,17 @@ class RamsesBroker:
             **schema,
         }
 
+        # CRITICAL: Remove port_name from kwargs if it exists in schema to prevent conflict
+        # or overwriting our explicit value with None
+        kwargs.pop("port_name", None)
+
         if transport_constructor:
             kwargs["transport_constructor"] = transport_constructor
 
-        # --- CHANGE 2: Safety Net (Optional but recommended) ---
-        if kwargs.get("port_name") is None:
-            _LOGGER.warning("DEBUG ALERT: port_name is None! Forcing dummy value.")
-            kwargs["port_name"] = "mqtt://homeassistant"
+        _LOGGER.debug("Creating Gateway with port_name='%s'", port_name)
 
-        _LOGGER.debug("Creating Gateway with kwargs: %s", kwargs)
-
-        client = Gateway(**kwargs)
+        # 5. Instantiate Gateway with Explicit Positional Argument
+        client = Gateway(port_name, **kwargs)
 
         return client
 
