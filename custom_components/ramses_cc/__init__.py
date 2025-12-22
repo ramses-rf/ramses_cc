@@ -22,6 +22,14 @@ import sys
 ENABLE_DEV_HOOK = True  # Set to true to enable the dev hook
 DEV_LIB_PATH = "/config/dev-lib/"
 
+exists = os.path.exists(DEV_LIB_PATH)
+is_dir = os.path.isdir(DEV_LIB_PATH)
+if exists and is_dir:
+    logging.getLogger(__name__).warning(
+        "Development hook is enabled and development library path exists: %s",
+        DEV_LIB_PATH,
+    )
+
 if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
     # Insert at index 0 so it takes precedence over system libraries
     sys.path.insert(0, DEV_LIB_PATH)
@@ -31,6 +39,13 @@ if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
         "Do not use this in a production environment unless you understand the risks.",
         DEV_LIB_PATH,
     )
+elif ENABLE_DEV_HOOK:
+    logging.getLogger(__name__).warning(
+        "Development hook is enabled but development library path does not exist: %s",
+        DEV_LIB_PATH,
+    )
+
+# --- END DEVELOPMENT HOOK ---
 # ------------------------
 
 from dataclasses import dataclass
