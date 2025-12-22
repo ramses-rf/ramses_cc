@@ -240,7 +240,8 @@ class RamsesBroker:
                 if dt.fromisoformat(dtm) > dt.now() - timedelta(days=1)
                 and pkt[41:45] not in msg_code_filter
                 and (
-                    not self.options[CONF_RAMSES_RF].get(SZ_ENFORCE_KNOWN_LIST)
+                    # FIX: Use .get() to safely access CONF_RAMSES_RF, defaulting to empty dict
+                    not self.options.get(CONF_RAMSES_RF, {}).get(SZ_ENFORCE_KNOWN_LIST)
                     or pkt[11:20] in _known_list
                     or pkt[21:30] in _known_list
                 )
