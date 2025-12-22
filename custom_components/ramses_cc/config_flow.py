@@ -805,7 +805,8 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
         if user_input is not None:
             return self.async_create_entry(
                 title="RAMSES MQTT (HA)",
-                data={
+                data={},
+                options={
                     CONF_PACKET_SOURCE: "mqtt",  # Internal marker
                     CONF_MQTT_USE_HA: True,
                     CONF_MQTT_TOPIC: user_input[CONF_MQTT_TOPIC],
