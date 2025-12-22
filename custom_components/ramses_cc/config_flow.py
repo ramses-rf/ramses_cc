@@ -8,46 +8,44 @@ import sys
 import os
 
 _LOGGER = logging.getLogger(__name__)
-_LOGGER.warning("DEBUG TRACE: config_flow.py is starting execution.")
-_LOGGER.warning(f"DEBUG TRACE: sys.path[0] is currently: {sys.path[0]}")
 
 try:
-    # Attempt to print where ramses_tx is coming from BEFORE importing specific items
-    import ramses_tx
+    # 1. Log Start
+    _LOGGER.warning("DEBUG TRACE: config_flow.py is starting execution.")
 
-    _LOGGER.warning(f"DEBUG TRACE: ramses_tx resolved to: {ramses_tx.__file__}")
-
-    # Now try the import that likely fails
-    from ramses_tx.schemas import (
-        SCH_ENGINE_DICT,
-        SCH_SERIAL_PORT_CONFIG,
-        SZ_ENFORCE_KNOWN_LIST,
-        SZ_FILE_NAME,
-        SZ_KNOWN_LIST,
-        SZ_LOG_ALL_MQTT,
-        SZ_PACKET_LOG,
-        SZ_PORT_NAME,
-        SZ_ROTATE_BACKUPS,
-        SZ_ROTATE_BYTES,
-        SZ_SERIAL_PORT,
-    )
-
-    # Check for the specific constant that was causing issues
+    # 2. Check ramses_tx imports
     from ramses_tx.schemas import SZ_SQLITE_INDEX
 
-    _LOGGER.warning("DEBUG TRACE: Successfully imported SZ_SQLITE_INDEX")
+    _LOGGER.warning("DEBUG TRACE: Successfully imported SZ_SQLITE_INDEX from ramses_tx")
+
+    # 3. Check ramses_rf imports (THIS IS LIKELY WHERE IT FAILS NOW)
+    # We wrap this in the try block to catch the specific error
+    from ramses_rf.schemas import (
+        SCH_GATEWAY_DICT,
+        SCH_GLOBAL_SCHEMAS,
+        SZ_RESTORE_CACHE,
+        SZ_SCHEMA,
+    )
+
+    _LOGGER.warning(
+        "DEBUG TRACE: Successfully imported SCH_GLOBAL_SCHEMAS from ramses_rf"
+    )
 
 except ImportError as err:
-    _LOGGER.warning(f"DEBUG TRACE: CRITICAL IMPORT FAILURE in config_flow.py: {err}")
-    _LOGGER.warning("DEBUG TRACE: ramses_tx directory listing (if found):")
+    _LOGGER.error(f"DEBUG TRACE: CRITICAL IMPORT FAILURE in config_flow.py: {err}")
+    # Attempt to list files to see if ramses_rf is actually there
     try:
-        import ramses_tx
+        import ramses_rf
 
-        _LOGGER.warning(str(os.listdir(os.path.dirname(ramses_tx.__file__))))
-    except:
-        _LOGGER.warning("Could not list ramses_tx directory")
+        _LOGGER.warning(f"DEBUG TRACE: ramses_rf is located at: {ramses_rf.__file__}")
+        _LOGGER.warning(
+            f"DEBUG TRACE: ramses_rf directory contents: {os.listdir(os.path.dirname(ramses_rf.__file__))}"
+        )
+    except Exception as e:
+        _LOGGER.warning(f"DEBUG TRACE: Could not inspect ramses_rf: {e}")
     raise err
 # --- DEBUG LOGGING END ---
+
 import re
 from abc import abstractmethod
 from copy import deepcopy
@@ -70,12 +68,13 @@ from homeassistant.helpers import config_validation as cv, selector
 from homeassistant.helpers.storage import Store
 from serial.tools import list_ports  # type: ignore[import-untyped]
 
+"""
 from ramses_rf.schemas import (
     SCH_GATEWAY_DICT,
     SCH_GLOBAL_SCHEMAS,
     SZ_RESTORE_CACHE,
     SZ_SCHEMA,
-)
+)"""
 from ramses_tx.const import Code
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
