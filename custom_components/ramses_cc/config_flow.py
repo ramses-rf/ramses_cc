@@ -2,111 +2,69 @@
 
 from __future__ import annotations
 
-# --- DEBUG LOGGING START ---
 import logging
-import sys
-import os
+import re
+from abc import abstractmethod
+from copy import deepcopy
+from typing import Any, Final
+from urllib.parse import urlparse
+
+import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
+from homeassistant.components import usb
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigEntryState,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.const import CONF_SCAN_INTERVAL
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.data_entry_flow import FlowHandler, FlowResult
+from homeassistant.helpers import config_validation as cv, selector
+from homeassistant.helpers.storage import Store
+from serial.tools import list_ports  # type: ignore[import-untyped]
+
+from ramses_rf.schemas import (
+    SCH_GATEWAY_DICT,
+    SCH_GLOBAL_SCHEMAS,
+    SCH_GLOBAL_TRAITS_DICT,
+    SZ_RESTORE_CACHE,
+    SZ_SCHEMA,
+)
+from ramses_tx.const import Code
+from ramses_tx.schemas import (
+    SCH_ENGINE_DICT,
+    SCH_SERIAL_PORT_CONFIG,
+    SZ_ENFORCE_KNOWN_LIST,
+    SZ_FILE_NAME,
+    SZ_KNOWN_LIST,
+    SZ_LOG_ALL_MQTT,
+    SZ_PACKET_LOG,
+    SZ_PORT_NAME,
+    SZ_ROTATE_BACKUPS,
+    SZ_ROTATE_BYTES,
+    SZ_SERIAL_PORT,
+    SZ_SQLITE_INDEX,
+)
+
+from .const import (
+    CONF_ADVANCED_FEATURES,
+    CONF_MESSAGE_EVENTS,
+    CONF_MQTT_TOPIC,
+    CONF_MQTT_USE_HA,
+    CONF_PACKET_SOURCE,
+    CONF_RAMSES_RF,
+    CONF_SCHEMA,
+    CONF_SEND_PACKET,
+    DOMAIN,
+    STORAGE_KEY,
+    STORAGE_VERSION,
+    SZ_CLIENT_STATE,
+    SZ_PACKETS,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-# --- DEBUG TRACE START ---
-# We use noqa: F401 here because we import modules just to test if they exist/load
-# which linters flag as "unused".
-try:
-    _LOGGER.warning("DEBUG TRACE: config_flow.py is starting execution.")
-
-    # 1. Standard Library & HA Imports
-    import re
-    from abc import abstractmethod
-    from copy import deepcopy
-    from typing import Any, Final
-    from urllib.parse import urlparse
-
-    import voluptuous as vol
-    from homeassistant.components import usb
-    from homeassistant.config_entries import (
-        ConfigEntry,
-        ConfigEntryState,
-        ConfigFlow,
-        ConfigFlowResult,
-        OptionsFlow,
-    )
-    from homeassistant.const import CONF_SCAN_INTERVAL
-    from homeassistant.core import HomeAssistant, callback
-    from homeassistant.data_entry_flow import FlowHandler, FlowResult
-    from homeassistant.helpers import config_validation as cv, selector
-    from homeassistant.helpers.storage import Store
-    from serial.tools import list_ports  # type: ignore[import-untyped] # noqa: F401
-
-    # 2. RAMSES_RF / TX Imports
-    import ramses_tx
-    from ramses_tx.schemas import SZ_SQLITE_INDEX  # noqa: F401
-
-    _LOGGER.warning(f"DEBUG TRACE: Imported SZ_SQLITE_INDEX from {ramses_tx.__file__}")
-
-    from ramses_rf.schemas import (
-        SCH_GATEWAY_DICT,
-        SCH_GLOBAL_SCHEMAS,
-        SCH_GLOBAL_TRAITS_DICT,
-        SZ_RESTORE_CACHE,
-        SZ_SCHEMA,
-    )  # noqa: F401
-
-    _LOGGER.warning("DEBUG TRACE: Imported schemas from ramses_rf")
-
-    from ramses_tx.const import Code  # noqa: F401
-
-    _LOGGER.warning("DEBUG TRACE: Imported Code from ramses_tx.const")
-
-    # 3. DETAILED CHECK: Specific constants that often change names
-    from ramses_tx.schemas import (  # noqa: F401
-        SCH_ENGINE_DICT,
-        SCH_SERIAL_PORT_CONFIG,
-        SZ_ENFORCE_KNOWN_LIST,
-        SZ_FILE_NAME,
-        SZ_KNOWN_LIST,
-        SZ_LOG_ALL_MQTT,
-        SZ_PACKET_LOG,
-        SZ_PORT_CONFIG,
-        SZ_PORT_NAME,
-        SZ_ROTATE_BACKUPS,
-        SZ_ROTATE_BYTES,
-        SZ_SERIAL_PORT,
-    )
-
-    _LOGGER.warning("DEBUG TRACE: Imported detailed schemas from ramses_tx")
-
-    # 4. Local Integration Imports
-    from .const import (  # noqa: F401
-        CONF_ADVANCED_FEATURES,
-        CONF_MESSAGE_EVENTS,
-        CONF_MQTT_TOPIC,
-        CONF_MQTT_USE_HA,
-        CONF_PACKET_SOURCE,
-        CONF_RAMSES_RF,
-        CONF_SCHEMA,
-        CONF_SEND_PACKET,
-        DOMAIN,
-        SZ_CLIENT_STATE,
-        SZ_PACKETS,
-        STORAGE_KEY,
-        STORAGE_VERSION,
-    )
-
-    _LOGGER.warning("DEBUG TRACE: Imported local .const")
-
-    _LOGGER.warning("DEBUG TRACE: All imports successful!")
-
-except ImportError as err:
-    _LOGGER.error(f"DEBUG TRACE: CRITICAL IMPORT FAILURE in config_flow.py: {err}")
-    _LOGGER.error(f"DEBUG TRACE: The failing module was: {err.name}")
-    _LOGGER.error(f"DEBUG TRACE: Exception path: {err.path}")
-    raise err
-except Exception as e:
-    _LOGGER.error(f"DEBUG TRACE: UNEXPECTED ERROR in config_flow.py: {e}")
-    raise e
-# --- DEBUG TRACE END ---
-
 
 CONF_MANUAL_PATH: Final = "Enter Manually..."  # TODO i18n this string
 CONF_MQTT_PATH: Final = "MQTT Broker..."
@@ -760,6 +718,9 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
     """
 
     VERSION = 1
+    # Set the handler manually instead of using 'domain=DOMAIN' in the class definition
+    # to satisfy Mypy which doesn't recognize the __init_subclass__ kwarg.
+    # handler = DOMAIN  <-- DELETED: using domain=DOMAIN in class definition instead
 
     def __init__(self) -> None:
         """Initialize Ramses config flow.
