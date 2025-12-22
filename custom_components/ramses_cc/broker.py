@@ -352,14 +352,20 @@ class RamsesBroker:
             **schema,
         }
 
-        # CRITICAL: Remove port_name from kwargs if it exists in schema to prevent conflict
-        # or overwriting our explicit value with None
-        kwargs.pop("port_name", None)
+        # CRITICAL SANITIZATION: Remove conflicting keys from kwargs
+        # We are passing port_name positionally, so it MUST NOT be in kwargs
+        for key in ["port_name", "input_file", "serial_port"]:
+            if key in kwargs:
+                _LOGGER.warning(f"Removing conflicting key '{key}' from Gateway kwargs")
+                kwargs.pop(key)
 
         if transport_constructor:
             kwargs["transport_constructor"] = transport_constructor
 
-        _LOGGER.debug("Creating Gateway with port_name='%s'", port_name)
+        # DEBUG: Inspect the payload before launch
+        _LOGGER.warning(
+            f"DEBUG: Calling Gateway(port_name='{port_name}', kwargs={kwargs.keys()})"
+        )
 
         # 5. Instantiate Gateway with Explicit Positional Argument
         client = Gateway(port_name, **kwargs)
