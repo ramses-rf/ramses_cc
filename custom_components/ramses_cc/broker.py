@@ -309,7 +309,7 @@ class RamsesBroker:
                     "ramses_rf library is too old (missing CallbackTransport). "
                     "Please update the library."
                 )
-                # Fallback to avoid crash, though this config will likely fail if no port
+                # Fallback to avoid crash
                 port_name, port_config = extract_serial_port(
                     self.options.get(SZ_SERIAL_PORT, {})
                 )
@@ -319,8 +319,11 @@ class RamsesBroker:
                 topic = self.options.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY")
                 self.mqtt_bridge = RamsesMqttBridge(self.hass, topic)
 
-                # Prepare arguments for Injection
-                port_name = "mqtt://homeassistant"  # We provide a dummy port_name to satisfy legacy checks in ramses_tx.gateway
+                # --- CHANGE 1: Dummy string to satisfy library checks ---
+                # The actual connection is handled by transport_constructor, but
+                # ramses_tx.gateway checks if port_name is None and raises TypeError if so.
+                port_name = "mqtt://homeassistant"
+
                 port_config = {}
                 transport_constructor = self.mqtt_bridge.async_transport_constructor
 
@@ -330,10 +333,6 @@ class RamsesBroker:
             transport_constructor = None
 
         # 3. Instantiate Gateway with Injection
-        # Safety check: does Gateway accept transport_constructor?
-        # If library is old, passing transport_constructor might crash it.
-        # We assume if CallbackTransport exists, Gateway is also new enough.
-
         kwargs = {
             "port_name": port_name,
             "loop": self.hass.loop,
@@ -346,6 +345,13 @@ class RamsesBroker:
 
         if transport_constructor:
             kwargs["transport_constructor"] = transport_constructor
+
+        # --- CHANGE 2: Safety Net (Optional but recommended) ---
+        if kwargs.get("port_name") is None:
+            _LOGGER.warning("DEBUG ALERT: port_name is None! Forcing dummy value.")
+            kwargs["port_name"] = "mqtt://homeassistant"
+
+        _LOGGER.debug("Creating Gateway with kwargs: %s", kwargs)
 
         client = Gateway(**kwargs)
 
