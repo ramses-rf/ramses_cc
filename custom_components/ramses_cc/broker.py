@@ -234,6 +234,21 @@ class RamsesBroker:
         def cached_packets() -> dict[str, str]:  # dtm_str, packet_as_str
             msg_code_filter = ["313F"]  # ? 1FC9
             _known_list = self.options.get(SZ_KNOWN_LIST, {})
+
+            # -----------------------------------------------
+            # Retrieve all packets
+            all_packets = client_state.get(SZ_PACKETS, {})
+
+            # Simple optimization: If huge, only take the last 1000 to prevent startup timeout
+            if len(all_packets) > 1000:
+                _LOGGER.warning(
+                    f"Packet cache too large ({len(all_packets)}). Loading only last 1000 to prevent timeout."
+                )
+                # Sort by timestamp (key) and take last 1000
+                sorted_keys = sorted(all_packets.keys())[-1000:]
+                all_packets = {k: all_packets[k] for k in sorted_keys}
+            # -----------------------------------------------
+
             return {
                 dtm: pkt
                 for dtm, pkt in client_state.get(SZ_PACKETS, {}).items()
@@ -341,7 +356,7 @@ class RamsesBroker:
         # IF we have a transport constructor.
         if transport_constructor and not port_name:
             _LOGGER.warning("Port name missing in HA MQTT mode, forcing dummy")
-            port_name = "mqtt://homeassistant"
+            port_name = "/dev/null"
 
         # 4. Prepare Kwargs
         kwargs = {
