@@ -23,14 +23,39 @@ ENABLE_DEV_HOOK = True  # Set to true to enable the dev hook
 DEV_LIB_PATH = "/config/dev_lib/"
 
 if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
-    # Insert at index 0 so it takes precedence over system libraries
-    sys.path.insert(0, DEV_LIB_PATH)
+    # 1. Insert local path at the top of sys.path at index 0
+    #    This ensures any FUTURE imports find the local version first.
+    if DEV_LIB_PATH not in sys.path:
+        sys.path.insert(0, DEV_LIB_PATH)
 
-    logging.getLogger(__name__).warning(
-        "SECURITY WARNING: 'ramses_rf' is being loaded from a local development path: %s. "
-        "Do not use this in a production environment unless you understand the risks.",
-        DEV_LIB_PATH,
-    )
+    # 2. NUCLEAR OPTION: Identify modules that were ALREADY loaded by the system
+    #    (e.g. by config_flow.py loading before this file)
+    modules_to_unload = [
+        m
+        for m in sys.modules
+        if m.startswith("ramses_rf")
+        or m.startswith("ramses_tx")
+        or m.startswith("ramses_cli")
+    ]
+
+    # 3. Force unload them
+    for module_name in modules_to_unload:
+        del sys.modules[module_name]
+
+    # 4. Log the intervention
+    if modules_to_unload:
+        module_names_str = ", ".join(modules_to_unload)
+        logging.getLogger(__name__).warning(
+            "DEV HOOK: Unloaded %d system modules to force local reload from %s: %s",
+            len(modules_to_unload),
+            DEV_LIB_PATH,
+            module_names_str,
+        )
+    else:
+        logging.getLogger(__name__).warning(
+            "DEV HOOK: Loaded directly from %s (No system modules needed unloading).",
+            DEV_LIB_PATH,
+        )
 elif ENABLE_DEV_HOOK:
     logging.getLogger(__name__).warning(
         "Development hook is enabled but development library path does not exist: %s",
