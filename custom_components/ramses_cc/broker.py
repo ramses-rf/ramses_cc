@@ -11,7 +11,6 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable, Coroutine
-from copy import deepcopy
 from datetime import datetime as dt, timedelta
 from threading import Semaphore
 from typing import TYPE_CHECKING, Any, Final
@@ -142,7 +141,7 @@ class RamsesBroker:
 
         self.hass = hass
         self.entry = entry
-        self.options = deepcopy(dict(entry.options))
+        self.options = {**entry.data, **entry.options}
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
 
         _LOGGER.debug("Config = %s", entry.options)
