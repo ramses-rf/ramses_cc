@@ -50,7 +50,31 @@ from ramses_tx.schemas import (
     SZ_SERIAL_PORT,
     extract_serial_port,
 )
-from ramses_tx.transport import CallbackTransport
+
+# --- START: Safe Import for CallbackTransport ---
+# We use a flag for logic checks, and 'Any' for type checks if missing.
+# This satisfies Pylance (Any is a type) and Runtime (flag prevents crash).
+if TYPE_CHECKING:
+    from ramses_tx.transport import CallbackTransport
+
+    HAS_MQTT_SUPPORT = True
+else:
+    try:
+        from ramses_tx.transport import CallbackTransport
+
+        HAS_MQTT_SUPPORT = True
+    except ImportError:
+        from typing import Any
+
+        CallbackTransport = Any  # 'Any' is a valid type, 'None' is not.
+        HAS_MQTT_SUPPORT = False
+
+        _LOGGER = logging.getLogger(__name__)
+        _LOGGER.warning(
+            "ramses_rf library is too old: CallbackTransport not available. "
+            "Home Assistant MQTT support will be disabled."
+        )
+# --- END: Safe Import ---
 
 from .const import (
     CONF_COMMANDS,
@@ -193,6 +217,7 @@ class RamsesBroker:
         if not self.client:
             self.client = self._create_client(config_schema)
 
+        # Check if bridge exists (it might be None if library is old)
         if self.mqtt_bridge:
             # Lifecycle Management: Delayed Start
             # We must ensure the HA MQTT client is fully connected before starting
@@ -279,15 +304,26 @@ class RamsesBroker:
         """
         # 1. Check if we are using Home Assistant MQTT
         if self.options.get(CONF_MQTT_USE_HA):
-            _LOGGER.info("Configuring RAMSES_RF to use Home Assistant MQTT")
+            if not HAS_MQTT_SUPPORT:
+                _LOGGER.error(
+                    "Configuration asks for Home Assistant MQTT, but the installed "
+                    "ramses_rf library is too old (missing CallbackTransport). "
+                    "Please update the library."
+                )
+                # Fallback to avoid crash, though this config will likely fail if no port
+                port_name, port_config = extract_serial_port(
+                    self.options.get(SZ_SERIAL_PORT, {})
+                )
+                transport_constructor = None
+            else:
+                _LOGGER.info("Configuring RAMSES_RF to use Home Assistant MQTT")
+                topic = self.options.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY")
+                self.mqtt_bridge = RamsesMqttBridge(self.hass, topic)
 
-            topic = self.options.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY")
-            self.mqtt_bridge = RamsesMqttBridge(self.hass, topic)
-
-            # Prepare arguments for Injection
-            port_name = None  # Not used for generic transport
-            port_config = {}
-            transport_constructor = self.mqtt_bridge.async_transport_constructor
+                # Prepare arguments for Injection
+                port_name = None  # Not used for generic transport
+                port_config = {}
+                transport_constructor = self.mqtt_bridge.async_transport_constructor
 
         else:
             # 2. Fallback to Standard Serial / TCP
@@ -295,16 +331,24 @@ class RamsesBroker:
             transport_constructor = None
 
         # 3. Instantiate Gateway with Injection
-        client = Gateway(
-            port_name=port_name,
-            loop=self.hass.loop,
-            port_config=port_config,
-            packet_log=self.options.get(SZ_PACKET_LOG, {}),
-            known_list=self.options.get(SZ_KNOWN_LIST, {}),
-            config=self.options.get(CONF_RAMSES_RF, {}),
-            transport_constructor=transport_constructor,  # INJECTION HAPPENS HERE
+        # Safety check: does Gateway accept transport_constructor?
+        # If library is old, passing transport_constructor might crash it.
+        # We assume if CallbackTransport exists, Gateway is also new enough.
+
+        kwargs = {
+            "port_name": port_name,
+            "loop": self.hass.loop,
+            "port_config": port_config,
+            "packet_log": self.options.get(SZ_PACKET_LOG, {}),
+            "known_list": self.options.get(SZ_KNOWN_LIST, {}),
+            "config": self.options.get(CONF_RAMSES_RF, {}),
             **schema,
-        )
+        }
+
+        if transport_constructor:
+            kwargs["transport_constructor"] = transport_constructor
+
+        client = Gateway(**kwargs)
 
         return client
 
@@ -1328,6 +1372,9 @@ class RamsesMqttBridge:
         :rtype: CallbackTransport
         """
         _LOGGER.debug("RamsesMqttBridge: Initializing CallbackTransport")
+
+        if not HAS_MQTT_SUPPORT:
+            raise ImportError("CallbackTransport class not found in ramses_rf library")
 
         self._transport = CallbackTransport(
             protocol,
