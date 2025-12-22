@@ -27,6 +27,9 @@ if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
     #    This ensures any FUTURE imports find the local version first.
     if DEV_LIB_PATH not in sys.path:
         sys.path.insert(0, DEV_LIB_PATH)
+        logging.getLogger(__name__).warning(
+            "DEBUG TRACE: __init__.py inserted dev_lib into sys.path"
+        )
 
     # 2. NUCLEAR OPTION: Identify modules that were ALREADY loaded by the system
     #    (e.g. by config_flow.py loading before this file)

@@ -2,7 +2,52 @@
 
 from __future__ import annotations
 
+# --- DEBUG LOGGING START ---
 import logging
+import sys
+import os
+
+_LOGGER = logging.getLogger(__name__)
+_LOGGER.warning("DEBUG TRACE: config_flow.py is starting execution.")
+_LOGGER.warning(f"DEBUG TRACE: sys.path[0] is currently: {sys.path[0]}")
+
+try:
+    # Attempt to print where ramses_tx is coming from BEFORE importing specific items
+    import ramses_tx
+
+    _LOGGER.warning(f"DEBUG TRACE: ramses_tx resolved to: {ramses_tx.__file__}")
+
+    # Now try the import that likely fails
+    from ramses_tx.schemas import (
+        SCH_ENGINE_DICT,
+        SCH_SERIAL_PORT_CONFIG,
+        SZ_ENFORCE_KNOWN_LIST,
+        SZ_FILE_NAME,
+        SZ_KNOWN_LIST,
+        SZ_LOG_ALL_MQTT,
+        SZ_PACKET_LOG,
+        SZ_PORT_NAME,
+        SZ_ROTATE_BACKUPS,
+        SZ_ROTATE_BYTES,
+        SZ_SERIAL_PORT,
+    )
+
+    # Check for the specific constant that was causing issues
+    from ramses_tx.schemas import SZ_SQLITE_INDEX
+
+    _LOGGER.warning("DEBUG TRACE: Successfully imported SZ_SQLITE_INDEX")
+
+except ImportError as err:
+    _LOGGER.warning(f"DEBUG TRACE: CRITICAL IMPORT FAILURE in config_flow.py: {err}")
+    _LOGGER.warning("DEBUG TRACE: ramses_tx directory listing (if found):")
+    try:
+        import ramses_tx
+
+        _LOGGER.warning(str(os.listdir(os.path.dirname(ramses_tx.__file__))))
+    except:
+        _LOGGER.warning("Could not list ramses_tx directory")
+    raise err
+# --- DEBUG LOGGING END ---
 import re
 from abc import abstractmethod
 from copy import deepcopy
