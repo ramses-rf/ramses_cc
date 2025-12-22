@@ -320,7 +320,7 @@ class RamsesBroker:
                 self.mqtt_bridge = RamsesMqttBridge(self.hass, topic)
 
                 # Prepare arguments for Injection
-                port_name = None  # Not used for generic transport
+                port_name = "mqtt://homeassistant"  # We provide a dummy port_name to satisfy legacy checks in ramses_tx.gateway
                 port_config = {}
                 transport_constructor = self.mqtt_bridge.async_transport_constructor
 
