@@ -753,16 +753,13 @@ class BaseRamsesFlow(FlowHandler):
         )
 
 
-class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow):
+class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     """Config flow for Ramses.
 
     Handles the initial setup of the Ramses RF integration.
     """
 
     VERSION = 1
-    # Set the handler manually instead of using 'domain=DOMAIN' in the class definition
-    # to satisfy Mypy which doesn't recognize the __init_subclass__ kwarg.
-    handler = DOMAIN
 
     def __init__(self) -> None:
         """Initialize Ramses config flow.
