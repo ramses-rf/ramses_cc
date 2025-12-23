@@ -90,7 +90,7 @@ class FakeESP32:
 # -------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_mqtt_connection_and_data_flow(
-    hass: HomeAssistant, mqtt_mock: MagicMock
+    hass: HomeAssistant, mqtt_mock: MagicMock, enable_custom_integrations: None
 ) -> None:
     """Test full MQTT data flow using real packet logs.
 
