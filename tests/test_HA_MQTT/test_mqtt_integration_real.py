@@ -60,29 +60,35 @@ class FakeESP32:
 
     def assert_received_packet(self, packet_str: str) -> None:
         """Check if Home Assistant sent a packet BACK to the ESP32."""
-        # Scan all calls to mqtt.publish
         found = False
         debug_payloads = []
 
-        for call in self.mqtt_mock.async_publish.call_args_list:
-            # args: (hass, topic, payload, qos, retain)
-            topic = call.args[1]
-            payload = call.args[2]
+        # Check both async_publish (normal) and publish (sync) just in case
+        all_calls = self.mqtt_mock.async_publish.call_args_list + self.mqtt_mock.publish.call_args_list
 
-            # We are looking for a message sent TO the TX topic
-            if topic == TOPIC_TX:
-                json_payload = json.loads(payload)
-                msg = json_payload.get("msg")
-                debug_payloads.append(msg)
+        for call in all_calls:
+            # We don't know if 'hass' is the first arg or not, so we check
+            # if the TX Topic exists anywhere in the arguments.
+            if TOPIC_TX in call.args:
+                # The payload is usually the argument AFTER the topic
+                try:
+                    topic_index = call.args.index(TOPIC_TX)
+                    payload = call.args[topic_index + 1]
+                    
+                    json_payload = json.loads(payload)
+                    msg = json_payload.get("msg")
+                    debug_payloads.append(msg)
 
-                # Check if it matches our expected packet
-                if msg == packet_str:
-                    found = True
-                    break
+                    if msg == packet_str:
+                        found = True
+                        break
+                except (IndexError, ValueError, json.JSONDecodeError):
+                    continue
 
         if not found:
             raise AssertionError(
-                f"ESP32 Expected: {packet_str}\n" f"But Received: {debug_payloads}"
+                f"ESP32 Expected: {packet_str}\n" f"But Received (on {TOPIC_TX}): {debug_payloads}\n" 
+                f"All Calls: {self.mqtt_mock.async_publish.call_args_list}"
             )
 
 
@@ -112,21 +118,13 @@ async def test_mqtt_connection_and_data_flow(
     config_entry.add_to_hass(hass)
 
     # 3. EXECUTE: Start the Integration
-    # We patch Gateway to avoid opening a physical serial port,
-    # but we KEEP the 'broker' logic real.
     with patch("custom_components.ramses_cc.broker.Gateway") as mock_gateway_cls:
 
-        # Capture the protocol mock so we can pretend to be the engine
         mock_gateway = mock_gateway_cls.return_value
-
-        # FIX 0: Set the HGI ID to a real string
+        
+        # MOCKS
         mock_gateway.hgi.id = HGI_ID
-        
-        # FIX 1: Make .start() awaitable so the broker can await it
         mock_gateway.start = AsyncMock()
-        
-        # FIX 2: Mock get_state to return empty data (Prevent Teardown Crash)
-        # The broker calls this during shutdown to save cache
         mock_gateway.get_state = MagicMock(return_value=({}, []))
 
         mock_protocol = MagicMock()
@@ -135,57 +133,42 @@ async def test_mqtt_connection_and_data_flow(
         # --- START UP ---
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
-        await asyncio.sleep(0.1)  # Give the loop a moment to register the call on the mock
+        await asyncio.sleep(0.1) 
 
-        # --- PHASE 1: VERIFY CONNECTION & SUBSCRIPTION ---
-        # The logs show your code subscribes to the wildcard '#'
+        # --- PHASE 1: VERIFY SUBSCRIPTION ---
         expected_subscription = f"{TOPIC_ROOT}/#"
-
-        # Check if mqtt.async_subscribe was called with the correct topic
-        # We scan ALL arguments of ALL calls because argument positions can shift
         found_subscription = False
-        all_calls_debug = []
         
         for call in mqtt_mock.async_subscribe.call_args_list:
-            # Flatten args to search for the string
-            args_str = [str(a) for a in call.args]
-            all_calls_debug.append(args_str)
-            
             if expected_subscription in call.args:
                 found_subscription = True
                 break
 
         assert found_subscription, (
-            f"Failed to subscribe to {expected_subscription}! Calls: {all_calls_debug}"
+            f"Failed to subscribe to {expected_subscription}!"
         )
-
         print(f"\n[PASS] Successfully subscribed to {expected_subscription}")
 
         # --- PHASE 2: RECEIVE REAL PACKET (RX) ---
         print(f"[TEST] Injecting Log Line: {REAL_RX_PACKET}")
-
         esp32.send_packet(REAL_RX_PACKET, REAL_RX_TIMESTAMP)
         await hass.async_block_till_done()
 
         # --- PHASE 3: SEND REAL PACKET (TX) ---
         print(f"[TEST] Ramses_rf attempting to send: {REAL_TX_PACKET}")
 
-        # Get the transport constructor that was passed to the Gateway
         _, kwargs = mock_gateway_cls.call_args
         transport_constructor = kwargs.get("transport_constructor")
-
-        # Instantiate the transport (simulating what Gateway does internally)
         transport = await transport_constructor(mock_protocol)
 
-        # Simulate ramses_rf engine writing a frame to the transport
-        # NOTE: CallbackTransport explicitly forbids .write() and demands .write_frame()
-        # This is because MQTT is message-based, not stream-based.
+        # Simulate engine writing frame
         if hasattr(transport, "write_frame"):
             await transport.write_frame(REAL_TX_PACKET)
         elif hasattr(transport, "send_frame"):
             transport.send_frame(REAL_TX_PACKET)
 
         await hass.async_block_till_done()
+        await asyncio.sleep(0.1) # Wait for event loop to process the publish
 
         # Verify the ESP32 "received" it via MQTT
         esp32.assert_received_packet(REAL_TX_PACKET)
