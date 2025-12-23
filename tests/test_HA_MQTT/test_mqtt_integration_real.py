@@ -2,19 +2,18 @@
 
 import asyncio
 import json
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
+import pytest  # type: ignore
 from homeassistant.core import HomeAssistant
 
 # Import testing helpers
 # Mypy cannot find types for this library, so we ignore the error
-from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
+from pytest_homeassistant_custom_component.common import (  # type: ignore
     MockConfigEntry,
     async_fire_mqtt_message,
 )
-import homeassistant.util.json
-
 
 # Constants from your code
 from custom_components.ramses_cc.const import (
@@ -78,7 +77,7 @@ class FakeESP32:
                 try:
                     topic_index = call.args.index(TOPIC_TX)
                     payload = call.args[topic_index + 1]
-                    
+
                     json_payload = json.loads(payload)
                     msg = json_payload.get("msg")
                     debug_payloads.append(msg)
@@ -91,12 +90,13 @@ class FakeESP32:
 
         if not found:
             raise AssertionError(
-                f"ESP32 Expected: {packet_str}\n" f"But Received (on {TOPIC_TX}): {debug_payloads}\n" 
+                f"ESP32 Expected: {packet_str}\n"
+                f"But Received (on {TOPIC_TX}): {debug_payloads}\n"
                 f"All Calls: {self.mqtt_mock.async_publish.call_args_list}"
             )
 
 
-async def mock_req(*args, **kwargs):
+async def mock_req(*args: Any, **kwargs: Any) -> None:
     """Mock requirements processing to bypass dependency installation."""
     return
 
@@ -132,16 +132,20 @@ async def test_mqtt_connection_and_data_flow(
     # FIX: Patch manifest.json loading to remove 'usb' dependency on the fly
     # Mock pyudev to prevent USB component crash
     import sys
-    sys.modules['pyudev'] = MagicMock()
-    sys.modules['pyudev.Context'] = MagicMock()
-    sys.modules['pyudev.Monitor'] = MagicMock()
 
+    sys.modules["pyudev"] = MagicMock()
+    sys.modules["pyudev.Context"] = MagicMock()
+    sys.modules["pyudev.Monitor"] = MagicMock()
 
-    with patch("custom_components.ramses_cc.broker.Gateway") as mock_gateway_cls, \
-         patch("homeassistant.requirements.async_process_requirements", side_effect=mock_req):
-
+    with (
+        patch("custom_components.ramses_cc.broker.Gateway") as mock_gateway_cls,
+        patch(
+            "homeassistant.requirements.async_process_requirements",
+            side_effect=mock_req,
+        ),
+    ):
         mock_gateway = mock_gateway_cls.return_value
-        
+
         # MOCKS
         mock_gateway.hgi.id = HGI_ID
         mock_gateway.start = AsyncMock()
@@ -153,22 +157,22 @@ async def test_mqtt_connection_and_data_flow(
         # --- START UP ---
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
-        await asyncio.sleep(0.1) 
+        await asyncio.sleep(0.1)
 
         # --- FIX: Manually inject HGI state and Force Protocol Connection ---
         broker = hass.data[DOMAIN][config_entry.entry_id]
-        
+
         # 1. Inject a mock device for the HGI so Gateway.hgi works
         mock_hgi = MagicMock()
         mock_hgi.id = HGI_ID
         broker.client.device_by_id[HGI_ID] = mock_hgi
-        
+
         # 2. Force the transport to report this ID as the active HGI
         if broker.client._transport:
             broker.client._transport.get_extra_info = MagicMock(return_value=HGI_ID)
-            
-        # 3. FORCE PROTOCOL STATE: The FSM is stuck in 'Inactive' because we 
-        # mocked away the connection wait. We must manually tell the protocol 
+
+        # 3. FORCE PROTOCOL STATE: The FSM is stuck in 'Inactive' because we
+        # mocked away the connection wait. We must manually tell the protocol
         # that the connection is made.
         if broker.client._protocol and broker.client._transport:
             broker.client._protocol.connection_made(broker.client._transport)
@@ -177,15 +181,13 @@ async def test_mqtt_connection_and_data_flow(
         # --- PHASE 1: VERIFY SUBSCRIPTION ---
         expected_subscription = f"{TOPIC_ROOT}/#"
         found_subscription = False
-        
+
         for call in mqtt_mock.async_subscribe.call_args_list:
             if expected_subscription in call.args:
                 found_subscription = True
                 break
 
-        assert found_subscription, (
-            f"Failed to subscribe to {expected_subscription}!"
-        )
+        assert found_subscription, f"Failed to subscribe to {expected_subscription}!"
         print(f"\n[PASS] Successfully subscribed to {expected_subscription}")
 
         # --- PHASE 2: RECEIVE REAL PACKET (RX) ---
@@ -207,11 +209,12 @@ async def test_mqtt_connection_and_data_flow(
             transport.send_frame(REAL_TX_PACKET)
 
         await hass.async_block_till_done()
-        await asyncio.sleep(0.1) # Wait for event loop to process the publish
+        await asyncio.sleep(0.1)  # Wait for event loop to process the publish
 
         # Verify the ESP32 "received" it via MQTT
         esp32.assert_received_packet(REAL_TX_PACKET)
         print("[PASS] ESP32 received the packet correctly.")
+
 
 # -------------------------------------------------------------------------
 # NEW TEST: Real Gateway Logic (No Mocks for Gateway)
@@ -221,14 +224,14 @@ async def test_service_call_end_to_end(
     hass: HomeAssistant, mqtt_mock: MagicMock, enable_custom_integrations: None
 ) -> None:
     """Test that a Service Call triggers a Real Packet from the Real Gateway.
-    
-    This test does NOT mock the Gateway class. It runs the actual ramses_rf 
-    library logic to ensure it creates a packet and sends it via our 
+
+    This test does NOT mock the Gateway class. It runs the actual ramses_rf
+    library logic to ensure it creates a packet and sends it via our
     injected MQTT transport.
     """
-    
+
     # 1. SETUP: Create the Fake ESP32 to listen for the command
-    esp32 = FakeESP32(hass, mqtt_mock)
+    FakeESP32(hass, mqtt_mock)
 
     # 2. SETUP: Config Entry with Advanced Features Enabled
     config_entry = MockConfigEntry(
@@ -236,11 +239,7 @@ async def test_service_call_end_to_end(
         unique_id="ramses_mqtt_real_gateway_test",
         data={CONF_MQTT_USE_HA: True, CONF_MQTT_TOPIC: TOPIC_ROOT},
         # ENABLE send_packet service
-        options={
-            CONF_ADVANCED_FEATURES: {
-                CONF_SEND_PACKET: True
-            }
-        }
+        options={CONF_ADVANCED_FEATURES: {CONF_SEND_PACKET: True}},
     )
     config_entry.add_to_hass(hass)
 
@@ -248,7 +247,9 @@ async def test_service_call_end_to_end(
     # 3. EXECUTE: Start the Integration (REAL GATEWAY)
     # We NO LONGER patch wait_for_connection_made because broker.py fix handles it!
     # FIX: Patch manifest.json loading to remove 'usb' dependency on the fly
-    with patch("homeassistant.requirements.async_process_requirements", side_effect=mock_req):
+    with patch(
+        "homeassistant.requirements.async_process_requirements", side_effect=mock_req
+    ):
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
         await asyncio.sleep(0.1)
@@ -256,14 +257,14 @@ async def test_service_call_end_to_end(
     # --- FIX: Manually inject HGI state into the Real Gateway ---
     # The gateway needs to believe it has a valid HGI device to process commands.
     # We satisfy Gateway.hgi property logic: transport.get_extra_info -> ID -> device_by_id[ID]
-    
+
     broker = hass.data[DOMAIN][config_entry.entry_id]
-    
+
     # 1. Inject a mock device for the HGI
     mock_hgi = MagicMock()
     mock_hgi.id = HGI_ID
     broker.client.device_by_id[HGI_ID] = mock_hgi
-    
+
     # 2. Force the transport to report this ID as the active HGI
     # We overwrite the method on the transport instance directly
     if broker.client._transport:
@@ -273,20 +274,22 @@ async def test_service_call_end_to_end(
     # ramses_rf expects an echo for every transmitted packet.
     # We configure the mock to echo TX packets back to RX.
     import datetime
-    
-    async def mock_publish(hass, topic, payload, *args, **kwargs):
+
+    async def mock_publish(
+        hass: Any, topic: str, payload: str, *args: Any, **kwargs: Any
+    ) -> None:
         if topic.endswith("/tx"):
-                try:
-                    d = json.loads(payload)
-                    frame = d["msg"]
-                    # Construct RX payload (Echo)
-                    ts = datetime.datetime.now().isoformat()
-                    rx_payload = json.dumps({"ts": ts, "msg": frame})
-                    
-                    # Fire the RX message back into HA
-                    async_fire_mqtt_message(hass, TOPIC_RX, rx_payload)
-                except Exception as e:
-                    print(f"Loopback error: {e}")
+            try:
+                d = json.loads(payload)
+                frame = d["msg"]
+                # Construct RX payload (Echo)
+                ts = datetime.datetime.now().isoformat()
+                rx_payload = json.dumps({"ts": ts, "msg": frame})
+
+                # Fire the RX message back into HA
+                async_fire_mqtt_message(hass, TOPIC_RX, rx_payload)
+            except Exception as e:
+                print(f"Loopback error: {e}")
         return None
 
     mqtt_mock.async_publish.side_effect = mock_publish
@@ -296,14 +299,14 @@ async def test_service_call_end_to_end(
     # Command: "1F09" (System Sync) to Device "01:123456"
     # We use 'I' (Info) instead of 'RQ' because our test environment doesn't
     # simulate the loopback echo required for QoS.
-    
+
     if hass.services.has_service(DOMAIN, "send_packet"):
         print("[TEST] Calling service send_packet")
         await hass.services.async_call(
-            DOMAIN, 
-            "send_packet", 
+            DOMAIN,
+            "send_packet",
             {"device_id": "01:123456", "verb": "I", "code": "1F09", "payload": "00"},
-            blocking=True
+            blocking=True,
         )
     else:
         # Fallback if service registration registration failed (shouldn't happen)
@@ -326,8 +329,12 @@ async def test_service_call_end_to_end(
                     if "1F09" in payload:
                         found = True
                         break
-                except:
+                except (IndexError, ValueError):
                     continue
-                    
-        assert found, f"Real Gateway failed to send packet! Payloads sent to {TOPIC_TX}: {debug_list}"
-        print("\n[PASS] Real Gateway Logic successfully converted Service Call -> MQTT Packet")
+
+        assert found, (
+            f"Real Gateway failed to send packet! Payloads sent to {TOPIC_TX}: {debug_list}"
+        )
+        print(
+            "\n[PASS] Real Gateway Logic successfully converted Service Call -> MQTT Packet"
+        )
