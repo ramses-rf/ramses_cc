@@ -117,6 +117,9 @@ async def test_mqtt_connection_and_data_flow(
 
         # Capture the protocol mock so we can pretend to be the engine
         mock_gateway = mock_gateway_cls.return_value
+
+        # FIX 0: Set the HGI ID to a real string
+        mock_gateway.hgi.id = HGI_ID
         
         # FIX 1: Make .start() awaitable so the broker can await it
         mock_gateway.start = AsyncMock()
