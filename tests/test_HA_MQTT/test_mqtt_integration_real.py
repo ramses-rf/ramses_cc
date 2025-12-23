@@ -225,7 +225,7 @@ async def test_service_call_end_to_end(
             await hass.services.async_call(
                 DOMAIN, 
                 "send_packet", 
-                {"device_id": "01:123456", "verb": "1F09", "payload": "00"},
+                {"device_id": "01:123456", "verb": "RQ", "code": "1F09", "payload": "00"},
                 blocking=True
             )
         else:
