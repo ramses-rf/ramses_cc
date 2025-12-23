@@ -1,7 +1,7 @@
 """End-to-End Integration Test for ramses_cc using HA MQTT with Real Data."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -116,6 +116,7 @@ async def test_mqtt_connection_and_data_flow(
     with patch("custom_components.ramses_cc.broker.Gateway") as mock_gateway_cls:
         # Capture the protocol mock so we can pretend to be the engine
         mock_gateway = mock_gateway_cls.return_value
+        mock_gateway.start = AsyncMock()
         mock_protocol = MagicMock()
         mock_gateway._protocol = mock_protocol
 
