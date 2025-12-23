@@ -200,8 +200,9 @@ async def test_service_call_end_to_end(
     config_entry.add_to_hass(hass)
 
     # 3. EXECUTE: Start the Integration (REAL GATEWAY)
-    # We patch wait_for_connection_made to avoid hanging waiting for a "real" connection signal
-    with patch("ramses_tx.protocol.Protocol.wait_for_connection_made", new_callable=AsyncMock) as mock_wait:
+    # We patch wait_for_connection_made on PortProtocol (the actual class used)
+    # to avoid hanging waiting for a "real" connection signal.
+    with patch("ramses_tx.protocol.PortProtocol.wait_for_connection_made", new_callable=AsyncMock) as mock_wait:
         
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
