@@ -173,11 +173,11 @@ async def test_mqtt_connection_and_data_flow(
         transport = await transport_constructor(mock_protocol)
 
         # Simulate ramses_rf engine writing a frame to the transport
-        # The transport should format this as JSON and publish to MQTT
-        if hasattr(transport, "write"):
-            transport.write(REAL_TX_PACKET.encode())
+        # NOTE: CallbackTransport explicitly forbids .write() and demands .write_frame()
+        # This is because MQTT is message-based, not stream-based.
+        if hasattr(transport, "write_frame"):
+            transport.write_frame(REAL_TX_PACKET)
         elif hasattr(transport, "send_frame"):
-            # Fallback for different transport implementations
             transport.send_frame(REAL_TX_PACKET)
 
         await hass.async_block_till_done()
