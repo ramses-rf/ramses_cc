@@ -176,7 +176,7 @@ async def test_mqtt_connection_and_data_flow(
         # NOTE: CallbackTransport explicitly forbids .write() and demands .write_frame()
         # This is because MQTT is message-based, not stream-based.
         if hasattr(transport, "write_frame"):
-            transport.write_frame(REAL_TX_PACKET)
+            await transport.write_frame(REAL_TX_PACKET)
         elif hasattr(transport, "send_frame"):
             transport.send_frame(REAL_TX_PACKET)
 
