@@ -134,6 +134,7 @@ async def test_mqtt_connection_and_data_flow(
         # --- START UP ---
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
+        await asyncio.sleep(0.1)  # Give the loop a moment to register the call on the mock
 
         # --- PHASE 1: VERIFY CONNECTION & SUBSCRIPTION ---
         # The logs show your code subscribes to the wildcard '#'
