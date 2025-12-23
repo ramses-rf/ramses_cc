@@ -1542,6 +1542,15 @@ class RamsesMqttBridge:
             disable_sending=disable_sending,
             extra=extra,
         )
+
+        # CRITICAL: Activate the transport (ramses_rf 0.52.5+ IoC Requirement)
+        # We must signal to the protocol that the connection is made because
+        # CallbackTransport is passive and doesn't do it automatically.
+        protocol.connection_made(self._transport, ramses=True)
+        # CRITICAL: Enable reading by default (ramses_rf 0.52.5+ IoC Requirement)
+        self._transport.resume_reading() 
+        _LOGGER.info("RamsesMqttBridge: Protocol connection established explicitly in constructor")
+
         return self._transport
 
     async def _async_mqtt_publish(self, frame: str) -> None:
@@ -1573,6 +1582,18 @@ class RamsesMqttBridge:
         except Exception as err:
             _LOGGER.error(f"Failed to publish to MQTT: {err}")
             # We do not raise here to prevent crashing the protocol loop
+        
+        # CRITICAL FIX: Loopback for ramses_rf QosProtocol
+        # "Echo" the packet back to the transport immediately to satisfy QosProtocol,
+        # which expects to "hear" the packet on the bus after transmission.
+        # This prevents the 'echo_timeout' errors seen in logs.
+        if self._transport:
+            # Timestamp: Use current time (naive, as per ramses_rf expectation)
+            dtm = dt.now().isoformat() 
+            # CRITICAL: Packet.from_file expects "RSSI <Frame>" (offset 4).
+            # TX frames lack RSSI, so we prepend "000 ".
+            # We MUST use rstrip() to preserve leading space (e.g. " I") required by regex.
+            self._transport.receive_frame(f"000 {frame.rstrip()}", dtm=dtm)
 
     @callback
     def _handle_mqtt_message(self, msg: ReceiveMessage) -> None:
@@ -1599,7 +1620,24 @@ class RamsesMqttBridge:
 
             # Extract generic packet string
             packet = json_data.get("msg")
-            timestamp = json_data.get("ts")
+            packet = json_data.get("msg")
+            timestamp_str = json_data.get("ts")
+            
+            # CRITICAL FIX: Timezone Mismatch
+            # ramses_rf uses naive datetimes (dt.now()) internally for expiration checks.
+            # If MQTT provides an aware datetime (ISO string with offset/Z), it causes a TypeError.
+            # We must force the timestamp to be naive (local time) before passing it to the transport.
+            if timestamp_str:
+                try:
+                    dtm = dt.fromisoformat(timestamp_str)
+                    if dtm.tzinfo is not None:
+                        # Convert to naive (drop timezone info)
+                        dtm = dtm.replace(tzinfo=None)
+                        timestamp_str = dtm.isoformat()
+                except ValueError:
+                    pass # Let the transport handle invalid formats (or just pass raw string)
+
+            timestamp = timestamp_str
 
             if not packet:
                 _LOGGER.debug(f"Ignored invalid JSON payload: {payload_str}")

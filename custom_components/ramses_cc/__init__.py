@@ -91,6 +91,26 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.service import verify_domain_control
 from homeassistant.helpers.typing import ConfigType
+import inspect
+
+# Compatibility Shim for verify_domain_control
+# Old signature: (hass, domain)
+# New signature: (domain)
+# We inspect the signature to decide how to call it.
+try:
+    _sig = inspect.signature(verify_domain_control)
+    if "hass" in _sig.parameters:
+        # Old style
+        def verify_domain_control_compat(hass, domain):
+            return verify_domain_control(hass, domain)
+    else:
+        # New style
+        def verify_domain_control_compat(hass, domain):
+            return verify_domain_control(domain)
+except Exception:
+    # Fallback to safe default (likely old style if inspection fails)
+    def verify_domain_control_compat(hass, domain):
+        return verify_domain_control(hass, domain)
 
 from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_tx import exceptions as exc
@@ -302,19 +322,19 @@ def async_register_domain_services(
 ) -> None:
     """Set up the handlers for the domain-wide services."""
 
-    @verify_domain_control(hass, DOMAIN)  # Fixed: Added hass argument
+    @verify_domain_control_compat(hass, DOMAIN)
     async def async_bind_device(call: ServiceCall) -> None:
         await broker.async_bind_device(call)
 
-    @verify_domain_control(hass, DOMAIN)
+    @verify_domain_control_compat(hass, DOMAIN)
     async def async_force_update(call: ServiceCall) -> None:
         await broker.async_force_update(call)
 
-    @verify_domain_control(hass, DOMAIN)
+    @verify_domain_control_compat(hass, DOMAIN)
     async def async_send_packet(call: ServiceCall) -> None:
         await broker.async_send_packet(call)
 
-    @verify_domain_control(hass, DOMAIN)
+    @verify_domain_control_compat(hass, DOMAIN)
     async def async_set_fan_param(call: ServiceCall) -> None:
         await broker.async_set_fan_param(call)
 
