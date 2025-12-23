@@ -186,9 +186,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 func=f"async_{key}",
             )
 
-    return True
 # --------------------------------------------------------------------------
 """
+    return True
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Create a ramses_rf (RAMSES_II)-based system."""
