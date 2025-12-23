@@ -302,31 +302,31 @@ def async_register_domain_services(
 ) -> None:
     """Set up the handlers for the domain-wide services."""
 
-    @verify_domain_control(DOMAIN)  # TODO: is a work in progress
+    @verify_domain_control(hass, DOMAIN)  # Fixed: Added hass argument
     async def async_bind_device(call: ServiceCall) -> None:
         await broker.async_bind_device(call)
 
-    @verify_domain_control(DOMAIN)
+    @verify_domain_control(hass, DOMAIN)
     async def async_force_update(call: ServiceCall) -> None:
         await broker.async_force_update(call)
 
-    @verify_domain_control(DOMAIN)
+    @verify_domain_control(hass, DOMAIN)
     async def async_send_packet(call: ServiceCall) -> None:
         await broker.async_send_packet(call)
 
-    @verify_domain_control(DOMAIN)
+    @verify_domain_control(hass, DOMAIN)
     async def async_set_fan_param(call: ServiceCall) -> None:
         await broker.async_set_fan_param(call)
 
-    # @verify_domain_control(DOMAIN)
+    # @verify_domain_control(hass, DOMAIN)
     # async def async_get_fan_param(call: ServiceCall) -> None:
     #     await broker.async_get_fan_param(call)
     #
-    # @verify_domain_control(DOMAIN)
+    # @verify_domain_control(hass, DOMAIN)
     # async def async_set_fan_param(call: ServiceCall) -> None:
     #     await broker.async_set_fan_param(call)
     #
-    # @verify_domain_control(DOMAIN)
+    # @verify_domain_control(hass, DOMAIN)
     # async def async_update_fan_params(call: ServiceCall) -> None:
     #     await broker._async_run_fan_param_sequence(call)
 
