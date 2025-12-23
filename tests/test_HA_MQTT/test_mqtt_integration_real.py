@@ -63,8 +63,8 @@ class FakeESP32:
         found = False
         debug_payloads = []
 
-        # Check both async_publish (normal) and publish (sync) just in case
-        all_calls = self.mqtt_mock.async_publish.call_args_list + self.mqtt_mock.publish.call_args_list
+        # Check async_publish (normal). We don't check sync publish as it might not exist on the mock
+        all_calls = self.mqtt_mock.async_publish.call_args_list
 
         for call in all_calls:
             # We don't know if 'hass' is the first arg or not, so we check
