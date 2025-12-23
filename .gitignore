@@ -192,3 +192,6 @@ cython_debug/
 
 # sphinx folder
 /docs/
+
+# Design Document
+/Design Document - Home Assistant MQTT Support for RAMSES RF.md
