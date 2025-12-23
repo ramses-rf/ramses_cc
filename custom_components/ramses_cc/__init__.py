@@ -71,27 +71,23 @@ elif ENABLE_DEV_HOOK:
 # --- END DEVELOPMENT HOOK ---
 # ------------------------
 
+
+import inspect
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
 import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant import config_entries
-from homeassistant.components.climate import DOMAIN as CLIMATE_ENTITY_DOMAIN
-from homeassistant.components.number import DOMAIN as NUMBER_ENTITY_DOMAIN
-from homeassistant.components.remote import DOMAIN as REMOTE_ENTITY_DOMAIN
-from homeassistant.components.sensor import DOMAIN as SENSOR_ENTITY_DOMAIN
-from homeassistant.components.water_heater import DOMAIN as WATERHEATER_ENTITY_DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv, service
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.service import verify_domain_control
 from homeassistant.helpers.typing import ConfigType
-import inspect
 
 # Compatibility Shim for verify_domain_control
 # Old signature: (hass, domain)
@@ -101,16 +97,17 @@ try:
     _sig = inspect.signature(verify_domain_control)
     if "hass" in _sig.parameters:
         # Old style
-        def verify_domain_control_compat(hass, domain):
+        def verify_domain_control_compat(hass: HomeAssistant, domain: str) -> Any:
             return verify_domain_control(hass, domain)
     else:
         # New style
-        def verify_domain_control_compat(hass, domain):
+        def verify_domain_control_compat(hass: HomeAssistant, domain: str) -> Any:
             return verify_domain_control(domain)
 except Exception:
     # Fallback to safe default (likely old style if inspection fails)
-    def verify_domain_control_compat(hass, domain):
+    def verify_domain_control_compat(hass: HomeAssistant, domain: str) -> Any:
         return verify_domain_control(hass, domain)
+
 
 from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_tx import exceptions as exc
@@ -133,11 +130,6 @@ from .schemas import (
     SVC_FORCE_UPDATE,
     SVC_SEND_PACKET,
     SVC_SET_FAN_PARAM,
-    SVCS_RAMSES_CLIMATE,
-    SVCS_RAMSES_NUMBER,
-    SVCS_RAMSES_REMOTE,
-    SVCS_RAMSES_SENSOR,
-    SVCS_RAMSES_WATER_HEATER,
 )
 
 if TYPE_CHECKING:
@@ -177,6 +169,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         )
     return True
 
+
 """
 # --------------------------------------------------------------------------
 # COMMENT OUT THIS BLOCK TO FIX THE TEST
@@ -210,6 +203,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 # --------------------------------------------------------------------------
 """
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Create a ramses_rf (RAMSES_II)-based system."""
