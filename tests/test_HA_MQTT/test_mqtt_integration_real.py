@@ -137,12 +137,24 @@ async def test_mqtt_connection_and_data_flow(
         await hass.async_block_till_done()
         await asyncio.sleep(0.1) 
 
-        # --- FIX: Patch the real Gateway's HGI attribute ---
-        # The gateway hasn't discovered itself yet, so .hgi is None.
-        # We manually set it to prevent the crash in broker.py
+        # --- FIX: Manually inject HGI state and Force Protocol Connection ---
         broker = hass.data[DOMAIN][config_entry.entry_id]
-        broker.client.hgi = MagicMock()
-        broker.client.hgi.id = HGI_ID
+        
+        # 1. Inject a mock device for the HGI so Gateway.hgi works
+        mock_hgi = MagicMock()
+        mock_hgi.id = HGI_ID
+        broker.client.device_by_id[HGI_ID] = mock_hgi
+        
+        # 2. Force the transport to report this ID as the active HGI
+        if broker.client._transport:
+            broker.client._transport.get_extra_info = MagicMock(return_value=HGI_ID)
+            
+        # 3. FORCE PROTOCOL STATE: The FSM is stuck in 'Inactive' because we 
+        # mocked away the connection wait. We must manually tell the protocol 
+        # that the connection is made.
+        if broker.client._protocol and broker.client._transport:
+            broker.client._protocol.connection_made(broker.client._transport)
+        # -----------------------------------------------------------
 
         # --- PHASE 1: VERIFY SUBSCRIPTION ---
         expected_subscription = f"{TOPIC_ROOT}/#"
