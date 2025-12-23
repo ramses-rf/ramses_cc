@@ -24,7 +24,7 @@ from ..virtual_rf import VirtualRf
 # patched constants
 _CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.broker.py
 
-NUM_SVCS_AFTER = 31  # proxy for success, platform services included since 0.51.8
+NUM_SVCS_AFTER = 34  # proxy for success, platform services included since 0.51.8
 
 
 TEST_CONFIGS = {

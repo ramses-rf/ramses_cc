@@ -29,14 +29,14 @@ force_update:
 
 # FAN parameter service calls (HVAC devices)
 
-get_fan_param:
+get_fan_clim_param:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - climate
+
   fields:
-    device_id:
-      description: "Enter a (FAN) device ID in format XX:XXXXXX"
-      example: '"32:123456"'
-      required: true
-      selector:
-        text:
     param_id:
       example: '"31"'
       required: true
@@ -48,12 +48,74 @@ get_fan_param:
       selector:
         text:
 
+get_fan_rem_param:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - remote
+
+  fields:
+    param_id:
+      example: '"31"'
+      required: true
+      selector:
+        text:
+
+set_fan_clim_param:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - climate
+
+  fields:
+    param_id:
+      example: '"31"'
+      required: true
+      selector:
+        text:
+    value:
+      example: '"5"'
+      required: true
+      selector:
+        text:
+    from_id:
+      example: '"18:123456"'
+      required: false
+      selector:
+        text:
+
+set_fan_rem_param:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - remote
+
+  fields:
+    param_id:
+      example: '"31"'
+      required: true
+      selector:
+        text:
+    value:
+      example: '"5"'
+      required: true
+      selector:
+        text:
+
 set_fan_param:
   fields:
+    device:
+      required: false
+      selector:
+        device:
+          filter:
+            integration: ramses_cc
     device_id:
-      description: "Enter a (FAN) device ID in format XX:XXXXXX"
-      example: '"32:123456"'
-      required: true
+      example: '"32:153289"'
+      required: false
       selector:
         text:
     param_id:
@@ -73,13 +135,13 @@ set_fan_param:
         text:
 
 update_fan_params:
+  target:
+    entity:
+      - integration: ramses_cc
+        domain:
+          - climate
+
   fields:
-    device_id:
-      description: "The unique identifier of the FAN device to query. Enter any device ID in format XX:XXXXXX"
-      example: '"32:123456"'
-      required: true
-      selector:
-        text:
     from_id:
       example: '"18:123456"'
       required: false
