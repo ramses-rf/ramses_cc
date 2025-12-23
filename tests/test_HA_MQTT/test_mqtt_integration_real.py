@@ -137,6 +137,13 @@ async def test_mqtt_connection_and_data_flow(
         await hass.async_block_till_done()
         await asyncio.sleep(0.1) 
 
+        # --- FIX: Patch the real Gateway's HGI attribute ---
+        # The gateway hasn't discovered itself yet, so .hgi is None.
+        # We manually set it to prevent the crash in broker.py
+        broker = hass.data[DOMAIN][config_entry.entry_id]
+        broker.client.hgi = MagicMock()
+        broker.client.hgi.id = HGI_ID
+
         # --- PHASE 1: VERIFY SUBSCRIPTION ---
         expected_subscription = f"{TOPIC_ROOT}/#"
         found_subscription = False
