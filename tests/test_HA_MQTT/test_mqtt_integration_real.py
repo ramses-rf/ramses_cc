@@ -1,5 +1,6 @@
 """End-to-End Integration Test for ramses_cc using HA MQTT with Real Data."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
