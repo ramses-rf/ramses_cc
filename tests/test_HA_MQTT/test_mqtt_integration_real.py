@@ -222,11 +222,26 @@ async def test_service_call_end_to_end(
         await hass.async_block_till_done()
         await asyncio.sleep(0.1)
 
+        # --- FIX: Manually inject HGI state into the Real Gateway ---
+        # The gateway needs to believe it has a valid HGI device to process commands.
+        # We satisfy Gateway.hgi property logic: transport.get_extra_info -> ID -> device_by_id[ID]
+        
+        broker = hass.data[DOMAIN][config_entry.entry_id]
+        
+        # 1. Inject a mock device for the HGI
+        mock_hgi = MagicMock()
+        mock_hgi.id = HGI_ID
+        broker.client.device_by_id[HGI_ID] = mock_hgi
+        
+        # 2. Force the transport to report this ID as the active HGI
+        # We overwrite the method on the transport instance directly
+        if broker.client._transport:
+            broker.client._transport.get_extra_info = MagicMock(return_value=HGI_ID)
+        # -----------------------------------------------------------
+
         # 4. EXECUTE: Call a Service (Send Packet)
         # Command: "1F09" (System Sync) to Device "01:123456"
-        test_command = "RQ 01:123456 1F09 00"
         
-        # Check if service was successfully registered (it should be now)
         if hass.services.has_service(DOMAIN, "send_packet"):
             print("[TEST] Calling service send_packet")
             await hass.services.async_call(
@@ -236,10 +251,8 @@ async def test_service_call_end_to_end(
                 blocking=True
             )
         else:
-            # Fallback: Use broker.client (which is the gateway)
-            print("[TEST] Service not found, using direct gateway call")
-            broker = hass.data[DOMAIN][config_entry.entry_id]
-            # broker.client is the ramses_rf.Gateway instance
+            # Fallback if service registration failed (shouldn't happen)
+            test_command = "RQ 01:123456 1F09 00"
             await broker.client.async_send_cmd(test_command)
 
         await hass.async_block_till_done()
