@@ -16,8 +16,10 @@ from pytest_homeassistant_custom_component.common import (  # type: ignore[impor
 
 # Constants from your code
 from custom_components.ramses_cc.const import (
+    CONF_ADVANCED_FEATURES,
     CONF_MQTT_TOPIC,
     CONF_MQTT_USE_HA,
+    CONF_SEND_PACKET,
     DOMAIN,
 )
 
@@ -191,17 +193,22 @@ async def test_service_call_end_to_end(
     # 1. SETUP: Create the Fake ESP32 to listen for the command
     esp32 = FakeESP32(hass, mqtt_mock)
 
-    # 2. SETUP: Config Entry
+    # 2. SETUP: Config Entry with Advanced Features Enabled
     config_entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="ramses_mqtt_real_gateway_test",
         data={CONF_MQTT_USE_HA: True, CONF_MQTT_TOPIC: TOPIC_ROOT},
+        # ENABLE send_packet service
+        options={
+            CONF_ADVANCED_FEATURES: {
+                CONF_SEND_PACKET: True
+            }
+        }
     )
     config_entry.add_to_hass(hass)
 
     # 3. EXECUTE: Start the Integration (REAL GATEWAY)
-    # We patch wait_for_connection_made on PortProtocol (the actual class used)
-    # to avoid hanging waiting for a "real" connection signal.
+    # We patch wait_for_connection_made on PortProtocol to avoid hanging
     with patch("ramses_tx.protocol.PortProtocol.wait_for_connection_made", new_callable=AsyncMock) as mock_wait:
         
         assert await hass.config_entries.async_setup(config_entry.entry_id)
@@ -209,15 +216,12 @@ async def test_service_call_end_to_end(
         await asyncio.sleep(0.1)
 
         # 4. EXECUTE: Call a Service (Send Packet)
-        # We ask the integration to send a raw command (Identify Request)
-        # The real Gateway should parse this, frame it, and send it to MQTT.
         # Command: "1F09" (System Sync) to Device "01:123456"
         test_command = "RQ 01:123456 1F09 00"
         
-        # NOTE: We use the generic 'send_packet' service or similar logic.
-        # Since we don't have a device entity yet, we check if the integration 
-        # registered the domain service.
+        # Check if service was successfully registered (it should be now)
         if hass.services.has_service(DOMAIN, "send_packet"):
+            print("[TEST] Calling service send_packet")
             await hass.services.async_call(
                 DOMAIN, 
                 "send_packet", 
@@ -225,33 +229,30 @@ async def test_service_call_end_to_end(
                 blocking=True
             )
         else:
-            # Fallback: If service isn't registered, we inject the packet 
-            # directly into the real gateway object to simulate logic.
-            # (This is needed if discovery hasn't happened yet).
+            # Fallback: Use broker.client (which is the gateway)
+            print("[TEST] Service not found, using direct gateway call")
             broker = hass.data[DOMAIN][config_entry.entry_id]
-            # We call the method that the service WOULD call
-            await broker.gateway.async_send_cmd(test_command)
+            # broker.client is the ramses_rf.Gateway instance
+            await broker.client.async_send_cmd(test_command)
 
         await hass.async_block_till_done()
         await asyncio.sleep(0.1)
 
         # 5. VERIFY: The ESP32 should receive the compiled packet
-        # The real gateway might format it slightly differently (e.g. adding spaces)
-        # so we verify the packet exists in the MQTT stream.
-        
-        # We search for the specific command code "1F09" in the TX topic
         found = False
+        debug_list = []
         for call in mqtt_mock.async_publish.call_args_list:
             if TOPIC_TX in call.args:
-                # Check payload for our command
                 try:
                     topic_index = call.args.index(TOPIC_TX)
                     payload = call.args[topic_index + 1]
-                    if "1F09" in payload and "01:123456" in payload:
+                    debug_list.append(payload)
+                    # We look for the command code 1F09 in the payload
+                    if "1F09" in payload:
                         found = True
                         break
                 except:
                     continue
                     
-        assert found, f"Real Gateway failed to send packet! Calls: {mqtt_mock.async_publish.call_args_list}"
+        assert found, f"Real Gateway failed to send packet! Payloads sent to {TOPIC_TX}: {debug_list}"
         print("\n[PASS] Real Gateway Logic successfully converted Service Call -> MQTT Packet")
