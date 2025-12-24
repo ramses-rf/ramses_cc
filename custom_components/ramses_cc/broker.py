@@ -1548,8 +1548,10 @@ class RamsesMqttBridge:
         # CallbackTransport is passive and doesn't do it automatically.
         protocol.connection_made(self._transport, ramses=True)
         # CRITICAL: Enable reading by default (ramses_rf 0.52.5+ IoC Requirement)
-        self._transport.resume_reading() 
-        _LOGGER.info("RamsesMqttBridge: Protocol connection established explicitly in constructor")
+        self._transport.resume_reading()
+        _LOGGER.info(
+            "RamsesMqttBridge: Protocol connection established explicitly in constructor"
+        )
 
         return self._transport
 
@@ -1582,14 +1584,14 @@ class RamsesMqttBridge:
         except Exception as err:
             _LOGGER.error(f"Failed to publish to MQTT: {err}")
             # We do not raise here to prevent crashing the protocol loop
-        
+
         # CRITICAL FIX: Loopback for ramses_rf QosProtocol
         # "Echo" the packet back to the transport immediately to satisfy QosProtocol,
         # which expects to "hear" the packet on the bus after transmission.
         # This prevents the 'echo_timeout' errors seen in logs.
         if self._transport:
             # Timestamp: Use current time (naive, as per ramses_rf expectation)
-            dtm = dt.now().isoformat() 
+            dtm = dt.now().isoformat()
             # CRITICAL: Packet.from_file expects "RSSI <Frame>" (offset 4).
             # TX frames lack RSSI, so we prepend "000 ".
             # We MUST use rstrip() to preserve leading space (e.g. " I") required by regex.
@@ -1611,6 +1613,7 @@ class RamsesMqttBridge:
         # Expected Payload: JSON {"ts": "...", "msg": "..."}
 
         try:
+            _LOGGER.debug(f"MQTT msg received: {msg.topic} {msg.payload}")
             # Check if this is a 'rx' topic (incoming data)
             if not msg.topic.endswith("/rx"):
                 return
@@ -1622,7 +1625,7 @@ class RamsesMqttBridge:
             packet = json_data.get("msg")
             packet = json_data.get("msg")
             timestamp_str = json_data.get("ts")
-            
+
             # CRITICAL FIX: Timezone Mismatch
             # ramses_rf uses naive datetimes (dt.now()) internally for expiration checks.
             # If MQTT provides an aware datetime (ISO string with offset/Z), it causes a TypeError.
@@ -1635,7 +1638,7 @@ class RamsesMqttBridge:
                         dtm = dtm.replace(tzinfo=None)
                         timestamp_str = dtm.isoformat()
                 except ValueError:
-                    pass # Let the transport handle invalid formats (or just pass raw string)
+                    pass  # Let the transport handle invalid formats (or just pass raw string)
 
             timestamp = timestamp_str
 
@@ -1658,13 +1661,32 @@ class RamsesMqttBridge:
                 try:
                     parts = msg.topic.split("/")
                     device_id = parts[-2]
+
+                    # Section 6.1: Boundary Logging (HGI Detection)
+                    _LOGGER.debug(
+                        f"HGI Detection: Inspecting topic {msg.topic}, extracted candidate ID: {device_id}"
+                    )
+
                     # We inject this into the transport's extra info if not set
                     # This allows the protocol to identify the HGI
                     if "18:" in device_id:
                         # Accessing private attribute is necessary for this IoC pattern
                         # to set the "Active HGI"
-                        if not self._transport.get_extra_info(SZ_ACTIVE_HGI):
+                        current_hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
+                        if not current_hgi:
+                            _LOGGER.info(
+                                f"HGI Detection: Setting Active HGI to {device_id} (inferred from topic)"
+                            )
                             self._transport._extra[SZ_ACTIVE_HGI] = device_id
+                        elif current_hgi != device_id:
+                            _LOGGER.warning(
+                                f"HGI Detection: Topic suggests HGI {device_id} but Transport ALREADY has {current_hgi}. Ignoring topic inference."
+                            )
+                        else:
+                            _LOGGER.debug(
+                                f"HGI Detection: Matches existing Active HGI {device_id}"
+                            )
+
                 except IndexError:
                     pass
 
