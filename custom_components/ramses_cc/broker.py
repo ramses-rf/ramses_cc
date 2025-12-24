@@ -1614,6 +1614,8 @@ class RamsesMqttBridge:
 
         try:
             _LOGGER.debug(f"MQTT msg received: {msg.topic} {msg.payload}")
+            _LOGGER.warning(f"DEBUG: MQTT MSG RECEIVED: {msg.topic}")
+
             # Check if this is a 'rx' topic (incoming data)
             if not msg.topic.endswith("/rx"):
                 return
@@ -1661,6 +1663,10 @@ class RamsesMqttBridge:
                 try:
                     parts = msg.topic.split("/")
                     device_id = parts[-2]
+
+                    _LOGGER.warning(
+                        f"DEBUG: HGI Candidate Extraction - Topic: {msg.topic}, Candidate: {device_id}"
+                    )
 
                     # Section 6.1: Boundary Logging (HGI Detection)
                     _LOGGER.debug(
