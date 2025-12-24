@@ -1681,17 +1681,18 @@ class RamsesMqttBridge:
                         # to set the "Active HGI"
                         current_hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
                         if not current_hgi:
-                            _LOGGER.info(
-                                f"HGI Detection: Setting Active HGI to {device_id} (inferred from topic)"
+                            _LOGGER.warning(
+                                f"[TRACE_DISCOVERY] [Step: HGI_DETECT] [Status: NEW_HGI] | hgi_id={device_id} reason=topic_inference"
                             )
                             self._transport._extra[SZ_ACTIVE_HGI] = device_id
                         elif current_hgi != device_id:
                             _LOGGER.warning(
-                                f"HGI Detection: Topic suggests HGI {device_id} but Transport ALREADY has {current_hgi}. Ignoring topic inference."
+                                f"[TRACE_DISCOVERY] [Step: HGI_DETECT] [Status: CONFLICT] | "
+                                f"new_id={device_id} existing_id={current_hgi} reason=conflict"
                             )
                         else:
                             _LOGGER.debug(
-                                f"HGI Detection: Matches existing Active HGI {device_id}"
+                                f"[TRACE_DISCOVERY] [Step: HGI_DETECT] [Status: MATCH] | hgi_id={device_id}"
                             )
 
                 except IndexError:
