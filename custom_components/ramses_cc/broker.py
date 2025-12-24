@@ -1613,6 +1613,11 @@ class RamsesMqttBridge:
         # Expected Payload: JSON {"ts": "...", "msg": "..."}
 
         try:
+            if (
+                "cc1101_state" in msg.topic
+            ):  # Skip state messages from ramses_esp_eth loaded device
+                return
+
             _LOGGER.debug(f"MQTT msg received: {msg.topic} {msg.payload}")
             _LOGGER.warning(f"DEBUG: MQTT MSG RECEIVED: {msg.topic}")
 
