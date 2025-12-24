@@ -110,16 +110,11 @@ except Exception:
 
 
 from homeassistant.helpers import service
+
 from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_tx import exceptions as exc
 
 from .broker import RamsesBroker
-from .schemas import (
-    SVCS_RAMSES_CLIMATE,
-    SVCS_RAMSES_NUMBER,
-    SVCS_RAMSES_REMOTE,
-    SVCS_RAMSES_WATER_HEATER,
-)
 from .const import (
     CONF_ADVANCED_FEATURES,
     CONF_MESSAGE_EVENTS,
@@ -141,6 +136,10 @@ from .schemas import (
     SVC_SEND_PACKET,
     SVC_SET_FAN_PARAM,
     SVC_UPDATE_FAN_PARAMS,
+    SVCS_RAMSES_CLIMATE,
+    SVCS_RAMSES_NUMBER,
+    SVCS_RAMSES_REMOTE,
+    SVCS_RAMSES_WATER_HEATER,
 )
 
 if TYPE_CHECKING:
@@ -362,7 +361,6 @@ def async_register_domain_services(
         DOMAIN, SVC_SET_FAN_PARAM, async_set_fan_param, schema=SCH_SET_FAN_PARAM_DOMAIN
     )
 
-    # general access fan_param services for code
     # general access fan_param services for code
     hass.services.async_register(
         DOMAIN, SVC_GET_FAN_PARAM, async_get_fan_param, schema=SCH_GET_FAN_PARAM_DOMAIN
