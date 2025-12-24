@@ -109,10 +109,17 @@ except Exception:
         return verify_domain_control(hass, domain)
 
 
+from homeassistant.helpers import service
 from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_tx import exceptions as exc
 
 from .broker import RamsesBroker
+from .schemas import (
+    SVCS_RAMSES_CLIMATE,
+    SVCS_RAMSES_NUMBER,
+    SVCS_RAMSES_REMOTE,
+    SVCS_RAMSES_WATER_HEATER,
+)
 from .const import (
     CONF_ADVANCED_FEATURES,
     CONF_MESSAGE_EVENTS,
@@ -167,22 +174,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 data=config[DOMAIN],
             )
         )
-    return True
-
-
-"""
-# --------------------------------------------------------------------------
-# COMMENT OUT THIS BLOCK TO FIX THE TEST
-# --------------------------------------------------------------------------
 
     # register all platform services during async_setup, since 2025.10, see
     # https://developers.home-assistant.io/blog/2025/09/25/entity-services-api-changes
     for entity_domain, services in (
-        (CLIMATE_ENTITY_DOMAIN, SVCS_RAMSES_CLIMATE),
-        (REMOTE_ENTITY_DOMAIN, SVCS_RAMSES_REMOTE),
-        (SENSOR_ENTITY_DOMAIN, SVCS_RAMSES_SENSOR),
-        (WATERHEATER_ENTITY_DOMAIN, SVCS_RAMSES_WATER_HEATER),
-        (NUMBER_ENTITY_DOMAIN, SVCS_RAMSES_NUMBER),
+        (Platform.CLIMATE, SVCS_RAMSES_CLIMATE),
+        (Platform.REMOTE, SVCS_RAMSES_REMOTE),
+        # (Platform.SENSOR, SVCS_RAMSES_SENSOR),  # Not defined
+        (Platform.WATER_HEATER, SVCS_RAMSES_WATER_HEATER),
+        (Platform.NUMBER, SVCS_RAMSES_NUMBER),
     ):
         for key, schema in services.items():
             _LOGGER.debug(
@@ -191,18 +191,25 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 key,
                 schema,
             )
-            service.async_register_platform_entity_service(
-                hass,
-                DOMAIN,
-                key,
-                entity_domain=entity_domain,
-                schema=schema,
-                func=f"async_{key}",
-            )
+            try:
+                service.async_register_platform_entity_service(
+                    hass,
+                    DOMAIN,
+                    key,
+                    entity_domain=entity_domain,
+                    schema=schema,
+                    func=f"async_{key}",
+                )
+            except AttributeError:
+                _LOGGER.warning(
+                    "Registering %s entity service %s failed: "
+                    "async_register_platform_entity_service not found. "
+                    "(This method may require Home Assistant 2025.10+)",
+                    entity_domain,
+                    key,
+                )
 
     return True
-# --------------------------------------------------------------------------
-"""
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
