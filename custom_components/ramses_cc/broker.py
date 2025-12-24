@@ -1619,7 +1619,6 @@ class RamsesMqttBridge:
                 return
 
             _LOGGER.debug(f"MQTT msg received: {msg.topic} {msg.payload}")
-            _LOGGER.warning(f"DEBUG: MQTT MSG RECEIVED: {msg.topic}")
 
             # Check if this is a 'rx' topic (incoming data)
             if not msg.topic.endswith("/rx"):
@@ -1629,7 +1628,6 @@ class RamsesMqttBridge:
             json_data = json.loads(payload_str)
 
             # Extract generic packet string
-            packet = json_data.get("msg")
             packet = json_data.get("msg")
             timestamp_str = json_data.get("ts")
 
