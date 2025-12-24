@@ -323,6 +323,9 @@ class RamsesBroker:
         port_config = {}
         transport_constructor = None
 
+        # Used for sanitization (may be modified in MQTT block)
+        known_list = self.options.get(SZ_KNOWN_LIST, {})
+
         # 1. Check if we are using Home Assistant MQTT
         if self.options.get(CONF_MQTT_USE_HA):
             if not HAS_MQTT_SUPPORT:
@@ -339,16 +342,41 @@ class RamsesBroker:
                 _LOGGER.info("Configuring RAMSES_RF to use Home Assistant MQTT")
                 topic = self.options.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY")
 
-                # Look for configured HGI
-                known_list = self.options.get(SZ_KNOWN_LIST, {})
-                hgi_id = next(
-                    (
-                        k
-                        for k, v in known_list.items()
-                        if v.get(SZ_CLASS) in (DevType.HGI, "gateway_interface")
-                    ),
-                    None,
-                )
+                topic = self.options.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY")
+
+                # Look for configured HGI candidates
+                candidates = [
+                    k
+                    for k, v in known_list.items()
+                    if v.get(SZ_CLASS) in (DevType.HGI, "gateway_interface")
+                ]
+
+                # Default to None, or the sentinel if that's all we have
+                hgi_id = None
+
+                # Filter out the sentinel to find "real" HGIs
+                real_hgis = [x for x in candidates if x != "18:000730"]
+
+                if real_hgis:
+                    hgi_id = real_hgis[0]  # Pick the first real one
+                    _LOGGER.info(
+                        f"HGI Selection: Found {len(real_hgis)} real HGI(s), selected {hgi_id}"
+                    )
+
+                    # Sanitize known_list: remove phantom HGI if we have a real one
+                    if "18:000730" in known_list:
+                        known_list = dict(known_list)  # Create a copy to modify
+                        del known_list["18:000730"]
+                        _LOGGER.debug(
+                            "Sanitized known_list: removed phantom HGI 18:000730"
+                        )
+
+                elif "18:000730" in candidates:
+                    hgi_id = "18:000730"
+                    _LOGGER.info("HGI Selection: Only sentinel HGI found")
+                else:
+                    _LOGGER.info("HGI Selection: No HGIs found in known_list")
+
                 self.mqtt_bridge = RamsesMqttBridge(self.hass, topic, hgi_id=hgi_id)
 
                 # IMPORTANT: Dummy string to satisfy library checks
@@ -375,7 +403,7 @@ class RamsesBroker:
             "loop": self.hass.loop,
             "port_config": port_config,
             "packet_log": self.options.get(SZ_PACKET_LOG, {}),
-            "known_list": self.options.get(SZ_KNOWN_LIST, {}),
+            "known_list": known_list,
             "config": self.options.get(CONF_RAMSES_RF, {}),
             **schema,
         }
