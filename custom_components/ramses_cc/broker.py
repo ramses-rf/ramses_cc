@@ -34,7 +34,7 @@ from ramses_rf.device import Fakeable
 from ramses_rf.device.base import Device
 from ramses_rf.device.hvac import HvacRemoteBase, HvacVentilator
 from ramses_rf.entity_base import Child, Entity as RamsesRFEntity
-from ramses_rf.schemas import SZ_SCHEMA
+from ramses_rf.schemas import SZ_CLASS, SZ_SCHEMA
 from ramses_rf.system import Evohome, System, Zone
 from ramses_tx.address import pkt_addrs
 from ramses_tx.command import Command
@@ -338,7 +338,18 @@ class RamsesBroker:
             else:
                 _LOGGER.info("Configuring RAMSES_RF to use Home Assistant MQTT")
                 topic = self.options.get(CONF_MQTT_TOPIC, "RAMSES/GATEWAY")
-                self.mqtt_bridge = RamsesMqttBridge(self.hass, topic)
+
+                # Look for configured HGI
+                known_list = self.options.get(SZ_KNOWN_LIST, {})
+                hgi_id = next(
+                    (
+                        k
+                        for k, v in known_list.items()
+                        if v.get(SZ_CLASS) in (DevType.HGI, "gateway_interface")
+                    ),
+                    None,
+                )
+                self.mqtt_bridge = RamsesMqttBridge(self.hass, topic, hgi_id=hgi_id)
 
                 # IMPORTANT: Dummy string to satisfy library checks
                 port_name = "mqtt://homeassistant"
@@ -1494,16 +1505,21 @@ class RamsesMqttBridge:
     It translates MQTT messages to protocol frames and vice-versa.
     """
 
-    def __init__(self, hass: HomeAssistant, topic_root: str) -> None:
+    def __init__(
+        self, hass: HomeAssistant, topic_root: str, hgi_id: str | None = None
+    ) -> None:
         """Initialize the MQTT bridge.
 
         :param hass: The Home Assistant instance.
         :type hass: HomeAssistant
         :param topic_root: The root MQTT topic for this gateway.
         :type topic_root: str
+        :param hgi_id: The device ID of the HGI (if known).
+        :type hgi_id: str | None
         """
         self._hass = hass
         self._topic_root = topic_root if topic_root.endswith("/") else f"{topic_root}/"
+        self._hgi_id = hgi_id
 
         # Topics
         # We listen to everything under the root to catch incoming data
@@ -1571,7 +1587,9 @@ class RamsesMqttBridge:
 
         # Extract Active Gateway ID to build the topic
         # Default to generic if unknown (shouldn't happen in normal op)
-        gwy_id = self._gateway.hgi.id if self._gateway.hgi else "18:000730"
+        gwy_id = (
+            self._gateway.hgi.id if self._gateway.hgi else (self._hgi_id or "18:000730")
+        )
 
         topic = f"{self._topic_root}{gwy_id}/tx"
         payload = json.dumps({"msg": frame})
