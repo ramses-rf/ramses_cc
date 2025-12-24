@@ -1618,7 +1618,9 @@ class RamsesMqttBridge:
             ):  # Skip state messages from ramses_esp_eth loaded device
                 return
 
-            _LOGGER.debug(f"MQTT msg received: {msg.topic} {msg.payload}")
+            _LOGGER.debug(
+                f"[TRACE_MQTT] [Step: RX] [Status: OK] | topic={msg.topic} payload={msg.payload}"
+            )
 
             # Check if this is a 'rx' topic (incoming data)
             if not msg.topic.endswith("/rx"):
