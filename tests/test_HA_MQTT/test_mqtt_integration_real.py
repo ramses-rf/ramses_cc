@@ -5,7 +5,8 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest  # type: ignore
+import paho.mqtt.client as mqtt_client
+import pytest
 from homeassistant.core import HomeAssistant
 
 # Import testing helpers
@@ -23,6 +24,15 @@ from custom_components.ramses_cc.const import (
     CONF_SEND_PACKET,
     DOMAIN,
 )
+
+# Monkey-patch paho-mqtt 2.x for Home Assistant compatibility
+if not hasattr(mqtt_client, "base62"):
+    if hasattr(mqtt_client, "_base62"):
+        mqtt_client.base62 = mqtt_client._base62
+    else:
+        # paho-mqtt >= 2.0.0 removed base62, we need to provide a fallback if _base62 is also gone
+        # But for now, we trust the error message suggesting _base62
+        pass
 
 # -------------------------------------------------------------------------
 # REAL DATA FROM YOUR LOG
@@ -190,6 +200,11 @@ async def test_mqtt_connection_and_data_flow(
         assert found_subscription, f"Failed to subscribe to {expected_subscription}!"
         print(f"\n[PASS] Successfully subscribed to {expected_subscription}")
 
+        # --- INITIALIZE TRANSPORT (Must be done before RX/TX) ---
+        _, kwargs = mock_gateway_cls.call_args
+        transport_constructor = kwargs.get("transport_constructor")
+        transport = await transport_constructor(mock_protocol)
+
         # --- PHASE 2: RECEIVE REAL PACKET (RX) ---
         print(f"[TEST] Injecting Log Line: {REAL_RX_PACKET}")
         esp32.send_packet(REAL_RX_PACKET, REAL_RX_TIMESTAMP)
@@ -197,10 +212,6 @@ async def test_mqtt_connection_and_data_flow(
 
         # --- PHASE 3: SEND REAL PACKET (TX) ---
         print(f"[TEST] Ramses_rf attempting to send: {REAL_TX_PACKET}")
-
-        _, kwargs = mock_gateway_cls.call_args
-        transport_constructor = kwargs.get("transport_constructor")
-        transport = await transport_constructor(mock_protocol)
 
         # Simulate engine writing frame
         if hasattr(transport, "write_frame"):
