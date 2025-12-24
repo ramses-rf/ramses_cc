@@ -380,8 +380,8 @@ class RamsesBroker:
             kwargs["transport_constructor"] = transport_constructor
 
         # DEBUG: Inspect the payload before launch
-        _LOGGER.warning(
-            f"DEBUG: Calling Gateway(port_name='{port_name}', kwargs={kwargs.keys()})"
+        _LOGGER.debug(
+            f"Calling Gateway(port_name='{port_name}', kwargs={list(kwargs.keys())})"
         )
 
         # 5. Instantiate Gateway with Explicit Positional Argument
@@ -1666,10 +1666,6 @@ class RamsesMqttBridge:
                 try:
                     parts = msg.topic.split("/")
                     device_id = parts[-2]
-
-                    _LOGGER.warning(
-                        f"DEBUG: HGI Candidate Extraction - Topic: {msg.topic}, Candidate: {device_id}"
-                    )
 
                     # Section 6.1: Boundary Logging (HGI Detection)
                     _LOGGER.debug(
