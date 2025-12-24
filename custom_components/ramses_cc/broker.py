@@ -1580,6 +1580,11 @@ class RamsesMqttBridge:
         if not HAS_MQTT_SUPPORT:
             raise ImportError("CallbackTransport class not found in ramses_rf library")
 
+        # FIX: Inject Active HGI ID so protocol.py doesn't complain "Active Gateway None"
+        if self._hgi_id:
+            extra = extra or {}
+            extra[SZ_ACTIVE_HGI] = self._hgi_id
+
         self._transport = CallbackTransport(
             protocol,
             io_writer=self._async_mqtt_publish,
