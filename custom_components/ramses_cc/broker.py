@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import deque
 from collections.abc import Callable, Coroutine
 from datetime import datetime as dt, timedelta
 from threading import Semaphore
@@ -1557,7 +1558,10 @@ class RamsesMqttBridge:
         self._gateway: Gateway | None = None
 
         self._mqtt_unsub: Callable[[], None] | None = None
+        self._mqtt_unsub: Callable[[], None] | None = None
         self._status_unsub: Callable[[], None] | None = None
+
+        self._queue: deque[str] = deque()
 
     async def async_transport_constructor(
         self,
@@ -1631,7 +1635,31 @@ class RamsesMqttBridge:
         _LOGGER.debug(f"MQTT OUT: {topic} -> {payload}")
 
         try:
+            # Check if MQTT is connected
+            if mqtt and not mqtt.is_connected(self._hass):
+                self._queue.append((topic, payload))
+                _LOGGER.warning(
+                    "MQTT not connected - Queueing packet: %s",
+                    frame,
+                )
+                return
+
+            # Flush queue if connected
+            while self._queue:
+                q_topic, q_payload = self._queue.popleft()
+                # Parse payload back to frame for logging (payload is json {"msg": "frame"})
+                try:
+                    q_frame = json.loads(q_payload)["msg"]
+                except (json.JSONDecodeError, KeyError):
+                    q_frame = "unknown"
+
+                await mqtt.async_publish(
+                    self._hass, q_topic, q_payload, qos=0, retain=False
+                )
+                _LOGGER.info("Released queued packet: %s", q_frame)
+
             await mqtt.async_publish(self._hass, topic, payload, qos=0, retain=False)
+
         except Exception as err:
             _LOGGER.error(f"Failed to publish to MQTT: {err}")
             # We do not raise here to prevent crashing the protocol loop
