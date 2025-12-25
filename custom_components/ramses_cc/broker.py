@@ -1558,10 +1558,9 @@ class RamsesMqttBridge:
         self._gateway: Gateway | None = None
 
         self._mqtt_unsub: Callable[[], None] | None = None
-        self._mqtt_unsub: Callable[[], None] | None = None
         self._status_unsub: Callable[[], None] | None = None
 
-        self._queue: deque[str] = deque()
+        self._queue: deque[tuple[str, str]] = deque()
 
     async def async_transport_constructor(
         self,
@@ -1601,12 +1600,39 @@ class RamsesMqttBridge:
         # CallbackTransport is passive and doesn't do it automatically.
         protocol.connection_made(self._transport, ramses=True)
         # CRITICAL: Enable reading by default (ramses_rf 0.52.5+ IoC Requirement)
+        if mqtt:
+            self._status_unsub = mqtt.async_subscribe_connection_status(
+                self._hass, self._on_mqtt_connection_state_changed
+            )
+
         self._transport.resume_reading()
         _LOGGER.info(
             "RamsesMqttBridge: Protocol connection established explicitly in constructor"
         )
 
         return self._transport
+
+    @callback
+    def _on_mqtt_connection_state_changed(self, is_connected: bool) -> None:
+        """Handle MQTT connection state changes."""
+        if is_connected:
+            _LOGGER.info("MQTT connected: Flushing packet queue")
+            self._hass.async_create_task(self._async_flush_queue())
+
+    async def _async_flush_queue(self) -> None:
+        """Flush the packet queue."""
+        while self._queue:
+            q_topic, q_payload = self._queue.popleft()
+            # Parse payload back to frame for logging (payload is json {"msg": "frame"})
+            try:
+                q_frame = json.loads(q_payload)["msg"]
+            except (json.JSONDecodeError, KeyError):
+                q_frame = "unknown"
+
+            await mqtt.async_publish(
+                self._hass, q_topic, q_payload, qos=0, retain=False
+            )
+            _LOGGER.info("Released queued packet: %s", q_frame)
 
     async def _async_mqtt_publish(self, frame: str) -> None:
         """IO Writer callback: Publish raw packets to MQTT.
@@ -1645,18 +1671,7 @@ class RamsesMqttBridge:
                 return
 
             # Flush queue if connected
-            while self._queue:
-                q_topic, q_payload = self._queue.popleft()
-                # Parse payload back to frame for logging (payload is json {"msg": "frame"})
-                try:
-                    q_frame = json.loads(q_payload)["msg"]
-                except (json.JSONDecodeError, KeyError):
-                    q_frame = "unknown"
-
-                await mqtt.async_publish(
-                    self._hass, q_topic, q_payload, qos=0, retain=False
-                )
-                _LOGGER.info("Released queued packet: %s", q_frame)
+            await self._async_flush_queue()
 
             await mqtt.async_publish(self._hass, topic, payload, qos=0, retain=False)
 
