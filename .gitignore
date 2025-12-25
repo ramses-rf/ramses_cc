@@ -198,3 +198,4 @@ cython_debug/
 
 # Design Document
 /Design_Document_-_Home_Assistant_MQTT_Support_for_RAMSES_RF.md
+Home Assistant MQTT Integration Python API Reference.md
