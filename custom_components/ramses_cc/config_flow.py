@@ -68,6 +68,7 @@ _LOGGER = logging.getLogger(__name__)
 
 CONF_MANUAL_PATH: Final = "Enter Manually..."  # TODO i18n this string
 CONF_MQTT_PATH: Final = "MQTT Broker..."
+CONF_MQTT_HA_PATH: Final = "Home Assistant MQTT"
 
 # Schema for the MQTT step
 MQTT_SCHEMA = vol.Schema(
@@ -174,6 +175,36 @@ class BaseRamsesFlow(FlowHandler):
         :rtype: FlowResult
         """
 
+    async def async_step_mqtt_ha(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the Home Assistant MQTT selection.
+
+        Checks if the MQTT integration is properly configured in Home Assistant
+        before proceeding.
+        """
+        errors: dict[str, str] = {}
+
+        # Section 4.3: Config Flow (Runtime Check)
+        # Check if MQTT integration is set up
+        if not self.hass.config_entries.async_entries("mqtt"):
+            return self.async_abort(reason="mqtt_not_setup")
+
+        if user_input is not None:
+            self.options[CONF_PACKET_SOURCE] = "mqtt"
+            self.options[CONF_MQTT_USE_HA] = True
+            self.options[CONF_MQTT_TOPIC] = user_input[CONF_MQTT_TOPIC]
+            self.options[SZ_SERIAL_PORT] = {}  # Clear serial config
+
+            return self._async_save()
+
+        return self.async_show_form(
+            step_id="mqtt_ha",
+            data_schema=MQTT_SCHEMA,
+            errors=errors,
+            description_placeholders={"default_topic": "RAMSES/GATEWAY"},
+        )
+
     async def async_step_choose_serial_port(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -195,6 +226,8 @@ class BaseRamsesFlow(FlowHandler):
 
             if port_name == CONF_MQTT_PATH:
                 return await self.async_step_mqtt_config()
+            elif port_name == CONF_MQTT_HA_PATH:
+                return await self.async_step_mqtt_ha()
             elif port_name == CONF_MANUAL_PATH:
                 self._manual_serial_port = True
             else:
@@ -212,12 +245,15 @@ class BaseRamsesFlow(FlowHandler):
         #    return await self.async_step_configure_serial_port()
 
         # Always add these options now
+        ports[CONF_MQTT_HA_PATH] = CONF_MQTT_HA_PATH
         ports[CONF_MQTT_PATH] = CONF_MQTT_PATH
         ports[CONF_MANUAL_PATH] = CONF_MANUAL_PATH
 
         port_name = self.options[SZ_SERIAL_PORT].get(SZ_PORT_NAME)
         if port_name is None:
             default_port = vol.UNDEFINED
+        elif self.options.get(CONF_MQTT_USE_HA):
+            default_port = CONF_MQTT_HA_PATH
         elif port_name in ports:
             default_port = port_name
         else:
@@ -795,30 +831,8 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
         :return: The result of the flow (abort or create entry).
         :rtype: FlowResult
         """
-        errors: dict[str, str] = {}
-
-        # Section 4.3: Config Flow (Runtime Check)
-        # Check if MQTT integration is set up
-        if not self.hass.config_entries.async_entries("mqtt"):
-            return self.async_abort(reason="mqtt_not_setup")
-
-        if user_input is not None:
-            return self.async_create_entry(
-                title="RAMSES MQTT (HA)",
-                data={},
-                options={
-                    CONF_PACKET_SOURCE: "mqtt",  # Internal marker
-                    CONF_MQTT_USE_HA: True,
-                    CONF_MQTT_TOPIC: user_input[CONF_MQTT_TOPIC],
-                },
-            )
-
-        return self.async_show_form(
-            step_id="mqtt_ha",
-            data_schema=MQTT_SCHEMA,
-            errors=errors,
-            description_placeholders={"default_topic": "RAMSES/GATEWAY"},
-        )
+        # Call the base class implementation which now handles saving via _async_save
+        return await super().async_step_mqtt_ha(user_input)
 
     def _async_save(self) -> FlowResult:
         """Save the initial configuration entry.
