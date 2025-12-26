@@ -64,8 +64,10 @@ async def test_flow_selects_mqtt_ha_success(
         # 4. Verify Entry Creation
         # Because we mocked async_add, the flow finishes successfully and returns the creation data
         assert result["type"] == FlowResultType.CREATE_ENTRY
-        assert result["data"][CONF_MQTT_USE_HA] is True
-        assert result["data"][CONF_MQTT_TOPIC] == "RAMSES/TEST"
+
+        # FIX: Check "options" instead of "data" because _async_save writes to options
+        assert result["options"][CONF_MQTT_USE_HA] is True
+        assert result["options"][CONF_MQTT_TOPIC] == "RAMSES/TEST"
 
 
 @pytest.mark.asyncio
