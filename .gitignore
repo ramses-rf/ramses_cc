@@ -157,7 +157,6 @@ celerybeat.pid
 # Environments
 .env
 .venv
-.venv_wsl/
 env/
 venv/
 ENV/
@@ -166,7 +165,6 @@ venv.bak/
 
 
 # Spyder project settings
-tests/antigravity/
 .spyderproject
 .spyproject
 
