@@ -1,0 +1,13 @@
+# Requirements specifically for MQTT integration tests
+# Decoupled from requirements_dev.txt to avoid version conflicts
+
+# Runtime Dependencies (Copied from requirements_dev.txt)
+# aiousbwatcher>=1.1.1
+# pyserial-asyncio-fast>=0.16
+# ramses-rf==0.52.5
+# pycares==4.9.0
+# voluptuous>=0.15.2
+
+# Testing Dependencies
+# Pinned to ensure compatibility with Python 3.12 in WSL environment
+pytest_homeassistant_custom_component>=0.13.100
