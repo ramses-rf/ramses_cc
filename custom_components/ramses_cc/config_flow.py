@@ -143,6 +143,7 @@ class BaseRamsesFlow(FlowHandler):
         super().__init__()
         self._initial_setup = initial_setup
         self._manual_serial_port = False
+        self.options = {}  # Safe initialization
 
     def get_options(self) -> None:
         """Retrieve and prepare the options dictionary.
@@ -184,6 +185,7 @@ class BaseRamsesFlow(FlowHandler):
         before proceeding.
         """
         errors: dict[str, str] = {}
+        self.get_options()  # Ensure options are initialized
 
         # Section 4.3: Config Flow (Runtime Check)
         # Check if MQTT integration is set up
