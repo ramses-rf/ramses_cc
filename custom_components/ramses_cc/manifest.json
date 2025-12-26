@@ -4,6 +4,7 @@
     "codeowners": ["@zxdavb","@silverailscolo"],
     "config_flow": true,
     "dependencies": ["usb"],
+    "after_dependencies": ["mqtt"],
     "documentation": "https://github.com/ramses-rf/ramses_cc",
     "integration_type": "hub",
     "iot_class": "local_polling",

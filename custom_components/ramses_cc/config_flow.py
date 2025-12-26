@@ -1,5 +1,7 @@
 """Config flow to configure Ramses integration."""
 
+from __future__ import annotations
+
 import logging
 import re
 from abc import abstractmethod
@@ -26,6 +28,7 @@ from serial.tools import list_ports  # type: ignore[import-untyped]
 from ramses_rf.schemas import (
     SCH_GATEWAY_DICT,
     SCH_GLOBAL_SCHEMAS,
+    SCH_GLOBAL_TRAITS_DICT,
     SZ_RESTORE_CACHE,
     SZ_SCHEMA,
 )
@@ -48,6 +51,9 @@ from ramses_tx.schemas import (
 from .const import (
     CONF_ADVANCED_FEATURES,
     CONF_MESSAGE_EVENTS,
+    CONF_MQTT_TOPIC,
+    CONF_MQTT_USE_HA,
+    CONF_PACKET_SOURCE,
     CONF_RAMSES_RF,
     CONF_SCHEMA,
     CONF_SEND_PACKET,
@@ -57,16 +63,31 @@ from .const import (
     SZ_CLIENT_STATE,
     SZ_PACKETS,
 )
-from .schemas import SCH_GLOBAL_TRAITS_DICT
 
 _LOGGER = logging.getLogger(__name__)
 
 CONF_MANUAL_PATH: Final = "Enter Manually..."  # TODO i18n this string
 CONF_MQTT_PATH: Final = "MQTT Broker..."
+CONF_MQTT_HA_PATH: Final = "Home Assistant MQTT"
+
+# Schema for the MQTT step
+MQTT_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_MQTT_TOPIC, default="RAMSES/GATEWAY"): str,
+    }
+)
 
 
 def get_usb_ports() -> dict[str, str]:
-    """Return a dict of USB ports and their friendly names."""
+    """Return a dict of USB ports and their friendly names.
+
+    Iterates through available COM ports and attempts to resolve human-readable
+    device names using Home Assistant's USB helpers.
+
+    :return: A dictionary mapping the device path (e.g., /dev/ttyUSB0) to a
+        friendly description.
+    :rtype: dict[str, str]
+    """
     ports = list_ports.comports()
     port_descriptions = {}
     for port in ports:
@@ -90,22 +111,47 @@ def get_usb_ports() -> dict[str, str]:
 
 
 async def async_get_usb_ports(hass: HomeAssistant) -> dict[str, str]:
-    """Return a dict of USB ports and their friendly names."""
+    """Return a dict of USB ports and their friendly names asynchronously.
+
+    Executes the blocking `get_usb_ports` function in the executor.
+
+    :param hass: The Home Assistant instance.
+    :type hass: HomeAssistant
+    :return: A dictionary mapping device paths to friendly names.
+    :rtype: dict[str, str]
+    """
     return await hass.async_add_executor_job(get_usb_ports)
 
 
 class BaseRamsesFlow(FlowHandler):
-    """Mixin for common Ramses flow steps and forms."""
+    """Mixin for common Ramses flow steps and forms.
+
+    This class encapsulates the shared logic between the initial ConfigFlow
+    and the subsequent OptionsFlow, such as configuring serial ports, schemas,
+    and advanced features.
+    """
 
     options: dict[str, Any]
 
     def __init__(self, initial_setup: bool = False) -> None:
-        """Initialize flow."""
+        """Initialize flow.
+
+        :param initial_setup: Flag indicating if this is the initial configuration
+            flow (True) or an options flow (False). Defaults to False.
+        :type initial_setup: bool
+        """
         super().__init__()
         self._initial_setup = initial_setup
         self._manual_serial_port = False
+        self.options = {}  # Safe initialization
 
     def get_options(self) -> None:
+        """Retrieve and prepare the options dictionary.
+
+        If a config entry exists, deep copies its options. Otherwise, initializes
+        default structures for `CONF_RAMSES_RF` and `SZ_SERIAL_PORT` within the
+        flow's internal options storage.
+        """
         if (
             hasattr(self, "config_entry")
             and self.config_entry is not None
@@ -121,12 +167,59 @@ class BaseRamsesFlow(FlowHandler):
 
     @abstractmethod
     def _async_save(self) -> FlowResult:
-        """Finish the flow."""
+        """Finish the flow and save the result.
+
+        This method must be implemented by subclasses to handle the specific
+        saving mechanism (creating an entry vs updating an entry).
+
+        :return: The flow result indicating success.
+        :rtype: FlowResult
+        """
+
+    async def async_step_mqtt_ha(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the Home Assistant MQTT selection.
+
+        Checks if the MQTT integration is properly configured in Home Assistant
+        before proceeding.
+        """
+        errors: dict[str, str] = {}
+        self.get_options()  # Ensure options are initialized
+
+        # Section 4.3: Config Flow (Runtime Check)
+        # Check if MQTT integration is set up
+        if not self.hass.config_entries.async_entries("mqtt"):
+            return self.async_abort(reason="mqtt_not_setup")
+
+        if user_input is not None:
+            self.options[CONF_PACKET_SOURCE] = "mqtt"
+            self.options[CONF_MQTT_USE_HA] = True
+            self.options[CONF_MQTT_TOPIC] = user_input[CONF_MQTT_TOPIC]
+            self.options[SZ_SERIAL_PORT] = {}  # Clear serial config
+
+            return self._async_save()
+
+        return self.async_show_form(
+            step_id="mqtt_ha",
+            data_schema=MQTT_SCHEMA,
+            errors=errors,
+            description_placeholders={"default_topic": "RAMSES/GATEWAY"},
+        )
 
     async def async_step_choose_serial_port(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Ramses choose serial port step."""
+        """Handle the step to choose a serial port.
+
+        Displays a list of detected USB ports, plus options for Manual entry
+        and MQTT configuration.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The next step in the flow.
+        :rtype: FlowResult
+        """
         self.get_options()  # not available during init
 
         # --- PART 1: Handle the User's Selection ---
@@ -135,6 +228,8 @@ class BaseRamsesFlow(FlowHandler):
 
             if port_name == CONF_MQTT_PATH:
                 return await self.async_step_mqtt_config()
+            elif port_name == CONF_MQTT_HA_PATH:
+                return await self.async_step_mqtt_ha()
             elif port_name == CONF_MANUAL_PATH:
                 self._manual_serial_port = True
             else:
@@ -152,12 +247,15 @@ class BaseRamsesFlow(FlowHandler):
         #    return await self.async_step_configure_serial_port()
 
         # Always add these options now
+        ports[CONF_MQTT_HA_PATH] = CONF_MQTT_HA_PATH
         ports[CONF_MQTT_PATH] = CONF_MQTT_PATH
         ports[CONF_MANUAL_PATH] = CONF_MANUAL_PATH
 
         port_name = self.options[SZ_SERIAL_PORT].get(SZ_PORT_NAME)
         if port_name is None:
             default_port = vol.UNDEFINED
+        elif self.options.get(CONF_MQTT_USE_HA):
+            default_port = CONF_MQTT_HA_PATH
         elif port_name in ports:
             default_port = port_name
         else:
@@ -187,7 +285,16 @@ class BaseRamsesFlow(FlowHandler):
     async def async_step_mqtt_config(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Allow user to enter MQTT details separately."""
+        """Allow user to enter MQTT connection details separately.
+
+        Constructs a connection string in the format `mqtt://user:pass@host:port`
+        based on individual form fields.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The next step in the flow.
+        :rtype: FlowResult
+        """
 
         if user_input is not None:
             # 1. Extract data from the form
@@ -270,7 +377,15 @@ class BaseRamsesFlow(FlowHandler):
     async def async_step_configure_serial_port(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Ramses configure serial port step."""
+        """Handle the step to configure specific serial port parameters.
+
+        Validates the configuration against `SCH_SERIAL_PORT_CONFIG`.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The next step or the result of saving the flow.
+        :rtype: FlowResult
+        """
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
 
@@ -342,7 +457,15 @@ class BaseRamsesFlow(FlowHandler):
     async def async_step_config(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Gateway config step."""
+        """Handle the step to configure the gateway engine.
+
+        Validates the configuration against `SCH_GATEWAY_DICT` and `SCH_ENGINE_DICT`.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The next step or the result of saving the flow.
+        :rtype: FlowResult
+        """
         managed_keys = (
             SZ_ENFORCE_KNOWN_LIST,
             SZ_LOG_ALL_MQTT,
@@ -419,7 +542,15 @@ class BaseRamsesFlow(FlowHandler):
     async def async_step_schema(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """System schema step."""
+        """Handle the step to configure system schema and traits.
+
+        Validates against `SCH_GLOBAL_SCHEMAS` and `SCH_GLOBAL_TRAITS_DICT`.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The next step or the result of saving the flow.
+        :rtype: FlowResult
+        """
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
         self.get_options()  # was not available during init
@@ -508,7 +639,15 @@ class BaseRamsesFlow(FlowHandler):
     async def async_step_advanced_features(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Advanced features step."""
+        """Handle the step for advanced features like packet sending and message events.
+
+        Validates the message events regex.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The next step or the result of saving the flow.
+        :rtype: FlowResult
+        """
         errors: dict[str, str] = {}
         description_placeholders: dict[str, str] = {}
         self.get_options()  # not available during init
@@ -555,7 +694,13 @@ class BaseRamsesFlow(FlowHandler):
     async def async_step_packet_log(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Packet log step."""
+        """Handle the step to configure packet logging.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The result of saving the flow.
+        :rtype: FlowResult
+        """
         if user_input is not None:
             self.options[SZ_PACKET_LOG] = user_input
             return self._async_save()
@@ -605,30 +750,108 @@ class BaseRamsesFlow(FlowHandler):
 
 
 class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
-    """Config flow for Ramses."""
+    """Config flow for Ramses.
+
+    Handles the initial setup of the Ramses RF integration.
+    """
 
     VERSION = 1
+    # Set the handler manually instead of using 'domain=DOMAIN' in the class definition
+    # to satisfy Mypy which doesn't recognize the __init_subclass__ kwarg.
+    # handler = DOMAIN  <-- DELETED: using domain=DOMAIN in class definition instead
 
     def __init__(self) -> None:
-        """Initialize Ramses config flow."""
+        """Initialize Ramses config flow.
+
+        Sets the flow to initial setup mode.
+        """
         super().__init__(initial_setup=True)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle a flow initiated by the user. Required by hassfest:
-        if a config flow is “discoverable”, it must set a unique ID"""
-        await self.async_set_unique_id(DOMAIN)
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
+    ) -> FlowResult:
+        """Handle the initial step.
 
-        return await self.async_step_choose_serial_port()
+        Directs the user to the menu selection.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The menu step.
+        :rtype: FlowResult
+        """
+        return await self.async_step_menu()
+
+    async def async_step_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Allow user to choose between Serial, Direct MQTT, or HA MQTT.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The menu form.
+        :rtype: FlowResult
+        """
+        return self.async_show_menu(
+            step_id="menu",
+            menu_options=["serial", "mqtt_ha", "mqtt_direct"],
+        )
+
+    async def async_step_serial(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Wrapper to call the base serial port step.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The serial port choice step.
+        :rtype: FlowResult
+        """
+        return await self.async_step_choose_serial_port(user_input)
+
+    async def async_step_mqtt_direct(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Wrapper to call the base MQTT config step.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The MQTT config step.
+        :rtype: FlowResult
+        """
+        return await self.async_step_mqtt_config(user_input)
+
+    async def async_step_mqtt_ha(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the Home Assistant MQTT selection.
+
+        Checks if the MQTT integration is properly configured in Home Assistant
+        before proceeding.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The result of the flow (abort or create entry).
+        :rtype: FlowResult
+        """
+        # Call the base class implementation which now handles saving via _async_save
+        return await super().async_step_mqtt_ha(user_input)
 
     def _async_save(self) -> FlowResult:
+        """Save the initial configuration entry.
+
+        :return: The result of creating the config entry.
+        :rtype: FlowResult
+        """
         return self.async_create_entry(title="RAMSES RF", data={}, options=self.options)
 
     async def async_step_import(self, import_data: dict[str, Any]) -> ConfigFlowResult:
-        """Import entry from configuration.yaml."""
+        """Import entry from configuration.yaml.
+
+        :param import_data: The configuration data imported from YAML.
+        :type import_data: dict[str, Any]
+        :return: The result of the import flow.
+        :rtype: ConfigFlowResult
+        """
 
         self.options = deepcopy(import_data)
         self.options[CONF_SCAN_INTERVAL] = import_data[
@@ -641,12 +864,21 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        """Options callback for Ramses."""
+        """Return the options flow handler for Ramses.
+
+        :param config_entry: The config entry instance.
+        :type config_entry: ConfigEntry
+        :return: The initialized options flow handler.
+        :rtype: OptionsFlow
+        """
         return RamsesOptionsFlowHandler()
 
 
 class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
-    """Options config flow handler for Ramses."""
+    """Options config flow handler for Ramses.
+
+    Handles reconfiguration of the integration after initial setup.
+    """
 
     def __init__(self) -> None:
         """Initialize Ramses config options flow."""
@@ -655,7 +887,15 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the config options."""
+        """Manage the config options.
+
+        Displays the menu of available option steps.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The menu form.
+        :rtype: ConfigFlowResult
+        """
         return self.async_show_menu(
             step_id="init",
             menu_options=[
@@ -669,6 +909,13 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         )
 
     def _async_save(self) -> FlowResult:
+        """Save the updated options.
+
+        Reloads the integration if it is currently in a setup error state.
+
+        :return: The result of creating the config entry.
+        :rtype: FlowResult
+        """
         result = self.async_create_entry(title="", data=self.options)
 
         # Reload only if setup is failing as changes are normally handled by the update listener
@@ -685,7 +932,16 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
     async def async_step_clear_cache(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Clear cache step."""
+        """Handle the step to clear the internal cache.
+
+        Modifies the underlying JSON storage file to remove schema or packet
+        data based on user selection.
+
+        :param user_input: The input provided by the user, if any.
+        :type user_input: dict[str, Any] | None
+        :return: The result of the flow (abort on success).
+        :rtype: FlowResult
+        """
         if user_input is not None:
             # Unload immediately to stop scheduled broker state saves
             if self.config_entry.state == ConfigEntryState.LOADED:
