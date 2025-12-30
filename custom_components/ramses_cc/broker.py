@@ -1578,7 +1578,7 @@ class RamsesMqttBridge:
         :returns: A configured CallbackTransport connected to this bridge's IO.
         :rtype: CallbackTransport
         """
-        _LOGGER.debug("RamsesMqttBridge: Initializing CallbackTransport")
+        _LOGGER.debug("Initializing CallbackTransport for MQTT bridge")
 
         if not HAS_MQTT_SUPPORT:
             raise ImportError("CallbackTransport class not found in ramses_rf library")
@@ -1658,7 +1658,7 @@ class RamsesMqttBridge:
         payload = json.dumps({"msg": frame})
 
         # Section 6.1: Boundary Logging (Outgoing)
-        _LOGGER.debug(f"MQTT OUT: {topic} -> {payload}")
+        _LOGGER.debug(f"Publishing to MQTT: {topic} -> {payload}")
 
         try:
             # Check if MQTT is connected
@@ -1712,9 +1712,7 @@ class RamsesMqttBridge:
             ):  # Skip state messages from ramses_esp_eth loaded device
                 return
 
-            _LOGGER.debug(
-                f"[TRACE_MQTT] [Step: RX] [Status: OK] | topic={msg.topic} payload={msg.payload}"
-            )
+            _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
 
             # Check if this is a 'rx' topic (incoming data)
             if not msg.topic.endswith("/rx"):
@@ -1775,19 +1773,12 @@ class RamsesMqttBridge:
                         # to set the "Active HGI"
                         current_hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
                         if not current_hgi:
-                            _LOGGER.warning(
-                                f"[TRACE_DISCOVERY] [Step: HGI_DETECT] [Status: NEW_HGI] | hgi_id={device_id} reason=topic_inference"
-                            )
+                            _LOGGER.info(f"Inferred active HGI from MQTT topic: {device_id}")
                             self._transport._extra[SZ_ACTIVE_HGI] = device_id
                         elif current_hgi != device_id:
-                            _LOGGER.warning(
-                                f"[TRACE_DISCOVERY] [Step: HGI_DETECT] [Status: CONFLICT] | "
-                                f"new_id={device_id} existing_id={current_hgi} reason=conflict"
-                            )
+                            _LOGGER.warning(f"HGI conflict detected: topic implies {device_id} but active HGI is {current_hgi}")
                         else:
-                            _LOGGER.debug(
-                                f"[TRACE_DISCOVERY] [Step: HGI_DETECT] [Status: MATCH] | hgi_id={device_id}"
-                            )
+                            _LOGGER.debug(f"Confirmed active HGI matches MQTT topic: {device_id}")
 
                 except IndexError:
                     pass
