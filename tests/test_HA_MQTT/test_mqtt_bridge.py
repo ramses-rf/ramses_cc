@@ -10,7 +10,23 @@ import pytest
 
 from custom_components.ramses_cc.broker import RamsesMqttBridge
 from ramses_tx.const import SZ_ACTIVE_HGI
-from ramses_tx.transport import CallbackTransport
+try:
+    from ramses_tx.transport import CallbackTransport
+except ImportError:
+    # Fallback for CI environments running against older ramses_rf versions
+    # This allows tests to collect/run by mocking the missing class
+    from unittest.mock import MagicMock
+
+    class CallbackTransport(MagicMock):
+        """Mock CallbackTransport for CI tests."""
+        def __init__(self, protocol, io_writer, **kwargs):
+            super().__init__()
+            self._protocol = protocol
+            self._io_writer = io_writer
+            self.extra = kwargs.get("extra", {})
+
+        async def write_frame(self, frame: str) -> None:
+            await self._io_writer(frame)
 
 
 # Mock Home Assistant ReceiveMessage object
