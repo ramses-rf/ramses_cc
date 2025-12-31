@@ -18,7 +18,6 @@ async def test_broker_waits_for_mqtt_client() -> None:
     entry = MagicMock()
     entry.options = {CONF_MQTT_USE_HA: True}
 
-    # FIX: Patch the Store
     with patch("custom_components.ramses_cc.broker.Store") as mock_store_cls:
         mock_store_instance = mock_store_cls.return_value
         mock_store_instance.async_load = AsyncMock(return_value={})
@@ -28,9 +27,9 @@ async def test_broker_waits_for_mqtt_client() -> None:
                 "custom_components.ramses_cc.broker.RamsesMqttBridge"
             ) as mock_bridge_cls,
             patch("custom_components.ramses_cc.broker.Gateway") as mock_gateway_cls,
-            # KEY FIX: Patch the function at its SOURCE definition so the patch always sticks
+            # KEY FIX: Point to the REAL Home Assistant MQTT component
             patch(
-                "custom_components.ramses_cc.mqtt.async_wait_for_mqtt_client",
+                "homeassistant.components.mqtt.async_wait_for_mqtt_client",
                 new_callable=AsyncMock,
             ) as mock_wait,
         ):
@@ -73,9 +72,9 @@ async def test_broker_aborts_if_mqtt_fails() -> None:
                 "custom_components.ramses_cc.broker.RamsesMqttBridge"
             ) as mock_bridge_cls,
             patch("custom_components.ramses_cc.broker.Gateway"),
-            # KEY FIX: Patch source definition with AsyncMock
+            # KEY FIX: Point to the REAL Home Assistant MQTT component
             patch(
-                "custom_components.ramses_cc.mqtt.async_wait_for_mqtt_client",
+                "homeassistant.components.mqtt.async_wait_for_mqtt_client",
                 new_callable=AsyncMock,
             ) as mock_wait,
         ):

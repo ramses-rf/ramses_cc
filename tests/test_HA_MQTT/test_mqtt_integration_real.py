@@ -108,9 +108,9 @@ async def test_mqtt_connection_and_data_flow(
             "homeassistant.requirements.async_process_requirements",
             side_effect=mock_req,
         ),
-        # KEY FIX: Force MQTT wait to return True so broker allows publishing
+        # KEY FIX: Point to REAL Home Assistant MQTT component
         patch(
-            "custom_components.ramses_cc.mqtt.async_wait_for_mqtt_client",
+            "homeassistant.components.mqtt.async_wait_for_mqtt_client",
             return_value=True,
         ),
     ):
@@ -137,11 +137,9 @@ async def test_mqtt_connection_and_data_flow(
             broker.client._protocol.connection_made(broker.client._transport)
 
         # --- PHASE 1: VERIFY SUBSCRIPTION ---
-        # FIX: Relaxed check. Pass if ANY subscription starts with TOPIC_ROOT
         found_subscription = False
         all_subs = []
         for call in mqtt_mock.async_subscribe.call_args_list:
-            # call.args[0] is usually the topic string
             topic = call.args[0] if call.args else ""
             all_subs.append(topic)
             if str(topic).startswith(TOPIC_ROOT):
@@ -192,9 +190,9 @@ async def test_service_call_end_to_end(
             "homeassistant.requirements.async_process_requirements",
             side_effect=mock_req,
         ),
-        # KEY FIX: Force MQTT to be seen as "Connected" so circuit breaker allows sending
+        # KEY FIX: Point to REAL Home Assistant MQTT component
         patch(
-            "custom_components.ramses_cc.mqtt.async_wait_for_mqtt_client",
+            "homeassistant.components.mqtt.async_wait_for_mqtt_client",
             return_value=True,
         ),
     ):
