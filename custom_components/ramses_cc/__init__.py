@@ -139,6 +139,7 @@ from .schemas import (
     SVCS_RAMSES_CLIMATE,
     SVCS_RAMSES_NUMBER,
     SVCS_RAMSES_REMOTE,
+    SVCS_RAMSES_SENSOR,
     SVCS_RAMSES_WATER_HEATER,
 )
 
@@ -183,7 +184,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     for entity_domain, services in (
         (Platform.CLIMATE, SVCS_RAMSES_CLIMATE),
         (Platform.REMOTE, SVCS_RAMSES_REMOTE),
-        # (Platform.SENSOR, SVCS_RAMSES_SENSOR),  # Not defined
+        (Platform.SENSOR, SVCS_RAMSES_SENSOR),
         (Platform.WATER_HEATER, SVCS_RAMSES_WATER_HEATER),
         (Platform.NUMBER, SVCS_RAMSES_NUMBER),
     ):
