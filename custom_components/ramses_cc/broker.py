@@ -1712,7 +1712,9 @@ class RamsesMqttBridge:
             ):  # Skip state messages from ramses_esp_eth loaded device
                 return
 
-            _LOGGER.debug(f"Received MQTT message: topic={msg.topic}, payload={msg.payload}")
+            _LOGGER.debug(
+                f"Received MQTT message: topic={msg.topic}, payload={msg.payload}"
+            )
 
             # Check if this is a 'rx' topic (incoming data)
             if not msg.topic.endswith("/rx"):
@@ -1773,12 +1775,18 @@ class RamsesMqttBridge:
                         # to set the "Active HGI"
                         current_hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
                         if not current_hgi:
-                            _LOGGER.info(f"Inferred active HGI from MQTT topic: {device_id}")
+                            _LOGGER.info(
+                                f"Inferred active HGI from MQTT topic: {device_id}"
+                            )
                             self._transport._extra[SZ_ACTIVE_HGI] = device_id
                         elif current_hgi != device_id:
-                            _LOGGER.warning(f"HGI conflict detected: topic implies {device_id} but active HGI is {current_hgi}")
+                            _LOGGER.warning(
+                                f"HGI conflict detected: topic implies {device_id} but active HGI is {current_hgi}"
+                            )
                         else:
-                            _LOGGER.debug(f"Confirmed active HGI matches MQTT topic: {device_id}")
+                            _LOGGER.debug(
+                                f"Confirmed active HGI matches MQTT topic: {device_id}"
+                            )
 
                 except IndexError:
                     pass
