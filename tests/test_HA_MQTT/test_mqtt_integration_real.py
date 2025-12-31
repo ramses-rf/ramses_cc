@@ -7,6 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import paho.mqtt.client as mqtt_client
 import pytest
+
+# KEY IMPORT: We need this to signal the bridge that MQTT is ready
+from homeassistant.components.mqtt import MQTT_CONNECTED
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import (  # type: ignore
     MockConfigEntry,
@@ -108,7 +111,6 @@ async def test_mqtt_connection_and_data_flow(
             "homeassistant.requirements.async_process_requirements",
             side_effect=mock_req,
         ),
-        # KEY FIX: Point to REAL Home Assistant MQTT component
         patch(
             "homeassistant.components.mqtt.async_wait_for_mqtt_client",
             return_value=True,
@@ -122,6 +124,10 @@ async def test_mqtt_connection_and_data_flow(
         mock_gateway._protocol = mock_protocol
 
         assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        # FIX: Fire connection event so Bridge unpauses the transport
+        hass.bus.async_fire(MQTT_CONNECTED)
         await hass.async_block_till_done()
         await asyncio.sleep(0.1)
 
@@ -190,13 +196,16 @@ async def test_service_call_end_to_end(
             "homeassistant.requirements.async_process_requirements",
             side_effect=mock_req,
         ),
-        # KEY FIX: Point to REAL Home Assistant MQTT component
         patch(
             "homeassistant.components.mqtt.async_wait_for_mqtt_client",
             return_value=True,
         ),
     ):
         assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        # FIX: Fire connection event so Bridge unpauses the transport
+        hass.bus.async_fire(MQTT_CONNECTED)
         await hass.async_block_till_done()
         await asyncio.sleep(0.1)
 
