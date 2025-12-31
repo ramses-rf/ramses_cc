@@ -189,15 +189,20 @@ async def test_mqtt_connection_and_data_flow(
         # -----------------------------------------------------------
 
         # --- PHASE 1: VERIFY SUBSCRIPTION ---
-        expected_subscription = f"{TOPIC_ROOT}/#"
+        # FIX: The transport does NOT subscribe to /#. It subscribes to TOPIC_ROOT and TOPIC_ROOT/+/rx.
+        # We must check for one of those.
+        expected_subscription = TOPIC_ROOT
         found_subscription = False
 
         for call in mqtt_mock.async_subscribe.call_args_list:
-            if expected_subscription in call.args:
+            # Check for exact root topic OR the wildcard data topic
+            if expected_subscription in call.args or f"{TOPIC_ROOT}/+/rx" in call.args:
                 found_subscription = True
                 break
 
-        assert found_subscription, f"Failed to subscribe to {expected_subscription}!"
+        assert found_subscription, (
+            f"Failed to subscribe to {expected_subscription} or {TOPIC_ROOT}/+/rx!"
+        )
         print(f"\n[PASS] Successfully subscribed to {expected_subscription}")
 
         # --- INITIALIZE TRANSPORT (Must be done before RX/TX) ---

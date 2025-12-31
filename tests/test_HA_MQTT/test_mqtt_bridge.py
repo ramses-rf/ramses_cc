@@ -30,6 +30,11 @@ except ImportError:
         async def write_frame(self, frame: str) -> None:
             await self._io_writer(frame)
 
+        # FIX: Added this method which was missing and causing the AttributeError
+        def get_extra_info(self, name: str, default: Any = None) -> Any:
+            """Return extra info from the internal dict."""
+            return self.extra.get(name, default)
+
 
 # Mock Home Assistant ReceiveMessage object
 class MockMQTTMessage:
@@ -50,12 +55,15 @@ async def bridge_env() -> dict[str, Any]:
     with patch(
         "custom_components.ramses_cc.broker.CallbackTransport"
     ) as mock_transport_cls:
+        # Create a mock that behaves like an instance of CallbackTransport
         mock_transport = AsyncMock(spec=CallbackTransport)
-        mock_transport._extra = {}  # Emulate the extra dict
-        # Fix: ensure get_extra_info returns values from the dict
-        mock_transport.get_extra_info.side_effect = lambda k: mock_transport._extra.get(
-            k
+
+        # Manually attach the extra dict and the get_extra_info method to the instance mock
+        mock_transport._extra = {}
+        mock_transport.get_extra_info.side_effect = (
+            lambda k, default=None: mock_transport._extra.get(k, default)
         )
+
         mock_transport_cls.return_value = mock_transport
 
         bridge = RamsesMqttBridge(hass, topic_root="RAMSES/TEST")
