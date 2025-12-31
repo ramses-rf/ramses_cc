@@ -199,6 +199,8 @@ async def test_service_call_end_to_end(
         ),
         # KEY FIX: Force MQTT to report True so bridge unpauses protocol immediately
         patch("homeassistant.components.mqtt.is_connected", return_value=True),
+        # TEST PATCHES TO AVOID SCHEMA ISSUES
+        patch("ramses_rf.gateway.SCH_GLOBAL_SCHEMAS", side_effect=lambda x: x),
     ):
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
