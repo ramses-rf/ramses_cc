@@ -20,11 +20,23 @@ if not hasattr(ramses_tx.transport, "CallbackTransport"):
     class MockCallbackTransport(MagicMock):
         """Mock transport to satisfy broker.py imports."""
 
-        # FIX 1: Make io_writer optional (default to None) so tests can instantiate it easily
-        def __init__(self, protocol: Any, io_writer: Any = None, **kwargs: Any) -> None:
+        # FIX: Accept generic *args and **kwargs to handle any constructor signature
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__()
-            self._protocol = protocol
-            self._io_writer = io_writer
+
+            # Extract protocol (usually the first arg)
+            if args:
+                self._protocol = args[0]
+            else:
+                self._protocol = kwargs.get("protocol")
+
+            # FIX: Look for 'callback' (used by broker.py) OR 'io_writer'
+            self._io_writer = kwargs.get("callback") or kwargs.get("io_writer")
+
+            # Fallback: check 2nd arg if it exists
+            if not self._io_writer and len(args) > 1:
+                self._io_writer = args[1]
+
             self.extra = kwargs.get("extra", {})
 
         async def write_frame(self, frame: str) -> None:
@@ -34,11 +46,8 @@ if not hasattr(ramses_tx.transport, "CallbackTransport"):
         def get_extra_info(self, name: str, default: Any = None) -> Any:
             return self.extra.get(name, default)
 
-        # FIX 2: Define all methods the Broker calls.
-        # Even if they do nothing, they must exist to pass 'AttributeError' checks.
-
+        # Required interface methods
         def receive_frame(self, frame: str) -> None:
-            # If a test needs to simulate data arriving at the protocol, it happens here
             if self._protocol and hasattr(self._protocol, "data_received"):
                 self._protocol.data_received(frame)
 
