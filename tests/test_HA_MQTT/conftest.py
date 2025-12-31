@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 try:
     import ramses_tx.transport
 except ImportError:
+    # If the module doesn't exist at all, mock it
     ramses_tx = MagicMock()
     sys.modules["ramses_tx"] = ramses_tx
     sys.modules["ramses_tx.transport"] = MagicMock()
@@ -30,6 +31,19 @@ if not hasattr(ramses_tx.transport, "CallbackTransport"):
 
         def get_extra_info(self, name: str, default: Any = None) -> Any:
             return self.extra.get(name, default)
+
+        # --- FIX: Add missing transport methods ---
+        def pause_reading(self) -> None:
+            pass
+
+        def resume_reading(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+        def abort(self) -> None:
+            pass
 
     # Inject the mock class into the real module
     ramses_tx.transport.CallbackTransport = MockCallbackTransport
