@@ -10,16 +10,18 @@ import pytest
 
 from custom_components.ramses_cc.broker import RamsesMqttBridge
 from ramses_tx.const import SZ_ACTIVE_HGI
+
 try:
     from ramses_tx.transport import CallbackTransport
 except ImportError:
     # Fallback for CI environments running against older ramses_rf versions
     # This allows tests to collect/run by mocking the missing class
-    from unittest.mock import MagicMock
 
-    class CallbackTransport(MagicMock):
+    class CallbackTransport(MagicMock):  # type: ignore[no-redef]
         """Mock CallbackTransport for CI tests."""
-        def __init__(self, protocol, io_writer, **kwargs):
+
+        def __init__(self, protocol: Any, io_writer: Any, **kwargs: Any) -> None:
+            """Initialize the mock transport."""
             super().__init__()
             self._protocol = protocol
             self._io_writer = io_writer
