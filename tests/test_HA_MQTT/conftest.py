@@ -20,7 +20,7 @@ if not hasattr(ramses_tx.transport, "CallbackTransport"):
     class MockCallbackTransport(MagicMock):
         """Mock transport to satisfy broker.py imports."""
 
-        # FIX: Accept generic *args and **kwargs to handle any constructor signature
+        # Accept generic *args and **kwargs to handle any constructor signature
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__()
 
@@ -30,7 +30,7 @@ if not hasattr(ramses_tx.transport, "CallbackTransport"):
             else:
                 self._protocol = kwargs.get("protocol")
 
-            # FIX: Look for 'callback' (used by broker.py) OR 'io_writer'
+            # Look for 'callback' (used by broker.py) OR 'io_writer'
             self._io_writer = kwargs.get("callback") or kwargs.get("io_writer")
 
             # Fallback: check 2nd arg if it exists
@@ -46,8 +46,8 @@ if not hasattr(ramses_tx.transport, "CallbackTransport"):
         def get_extra_info(self, name: str, default: Any = None) -> Any:
             return self.extra.get(name, default)
 
-        # Required interface methods
-        def receive_frame(self, frame: str) -> None:
+        # FIX: Added **kwargs to accept 'dtm' and other optional args
+        def receive_frame(self, frame: str, **kwargs: Any) -> None:
             if self._protocol and hasattr(self._protocol, "data_received"):
                 self._protocol.data_received(frame)
 
