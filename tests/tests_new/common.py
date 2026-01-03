@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from homeassistant.util.json import JsonObjectType
 from homeassistant.util.yaml import parse_yaml
-from pytest_homeassistant_custom_component.common import (
+from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
     load_fixture,
     load_json_object_fixture,
 )
