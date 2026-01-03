@@ -1,16 +1,34 @@
 {
     "config": {
         "abort": {
-            "single_instance_allowed": "Already configured. Only a single configuration possible."
+            "single_instance_allowed": "Already configured. Only a single configuration possible.",
+            "mqtt_not_setup": "The MQTT integration is not set up in Home Assistant."
         },
         "error": {
             "invalid_gateway_config": "Invalid ramses_rf config: {error_detail}",
             "invalid_port_config": "Invalid serial port config: {error_detail}",
             "invalid_regex": "Invalid regular expression: {error_detail}",
             "invalid_schema": "Invalid schema: {error_detail}",
-            "invalid_traits": "Invalid device traits: {error_detail}"
+            "invalid_traits": "Invalid device traits: {error_detail}",
+            "mqtt_not_setup": "The official MQTT integration is not set up in Home Assistant. Please configure it first."
         },
         "step": {
+            "user": {
+                "title": "Select Connection Method",
+                "menu_options": {
+                    "serial": "USB / Serial Stick (HGI80/Evofw3)",
+                    "mqtt_ha": "Home Assistant MQTT (Recommended)",
+                    "mqtt_direct": "Direct MQTT (Legacy/Paho)"
+                }
+            },
+            "menu": {
+                "title": "Select Connection Method",
+                "menu_options": {
+                    "serial": "USB / Serial Stick (HGI80/Evofw3)",
+                    "mqtt_ha": "Home Assistant MQTT (Recommended)",
+                    "mqtt_direct": "Direct MQTT (Legacy/Paho)"
+                }
+            },
             "init": {
                 "menu_options": {
                     "choose_serial_port": "Serial port",
@@ -25,6 +43,13 @@
                 "title": "Choose serial port",
                 "data": {
                     "port_name": "Serial device path"
+                }
+            },
+            "mqtt_ha": {
+                "title": "Home Assistant MQTT",
+                "description": "This uses the MQTT broker already configured in Home Assistant.\n\nEnsure your device is publishing to the topic below.",
+                "data": {
+                    "mqtt_topic": "Topic Root (e.g. RAMSES/GATEWAY)"
                 }
             },
             "mqtt_config": {
@@ -115,12 +140,12 @@
         "step": {
             "init": {
                 "menu_options": {
-                    "choose_serial_port": "Serial port",
-                    "config": "Gateway configuration",
-                    "schema": "System schema and known devices",
-                    "advanced_features": "Advanced features",
-                    "packet_log": "Packet log",
-                    "clear_cache": "Clear cache"
+                    "choose_serial_port": "Change Connection / Port",
+                    "config": "Gateway Configuration",
+                    "schema": "Schema & Discovery",
+                    "advanced_features": "Advanced Features",
+                    "packet_log": "Packet Logging",
+                    "clear_cache": "Clear Cache / Reset"
                 }
             },
             "choose_serial_port": {
