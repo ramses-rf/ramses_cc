@@ -7,6 +7,7 @@ TODO: add tests routing a service call via a (mocked) device
 """
 
 # import logging
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -34,7 +35,9 @@ class TestBoundDeviceFunctionality:
     """
 
     @pytest.fixture(autouse=True)
-    async def setup_bound_device_fixture(self, hass: HomeAssistant):
+    async def setup_bound_device_fixture(
+        self, hass: HomeAssistant
+    ) -> AsyncGenerator[None]:
         """Set up test environment for bound device operations.
 
         This fixture runs before each test method and sets up:

@@ -44,7 +44,7 @@ extensions = [
 pygments_style = "sphinx"  # enable syntax highlighting
 
 templates_path = ["_templates"]
-exclude_patterns = []
+exclude_patterns: list[str] = []
 
 # Language
 language = "en"
