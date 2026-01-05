@@ -1,5 +1,5 @@
 # Requirements to dev the source code
-# - last checked/updated: 2025-11-26 (c.f. HA 2025.11.2)
+# - last checked/updated: 2026-01-05 (c.f. HA 2025.12.5)
 #
 
 # requirements (dependencies) are in manifest.json
