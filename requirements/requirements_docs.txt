@@ -6,7 +6,8 @@
 
 # used for generating docs
 # (Note: markdown-it-py==3.x for myst-parser 4.0.1)
-# (Note: sphinx 8.2.3. for furo 2025.9.25)
+# (Note: sphinx <10 for furo 2025.12.19)
+# (Note: sphinx <9 for myst-parser 4.0.1)
     furo==2025.12.19
     markdown-it-py==3.0.0
     myst-parser==4.0.1
