@@ -202,34 +202,33 @@ async def test_broker_fan_setup(
         assert mock_fire.call_args[0][1]["value"] == 19.5
 
 
-async def test_param_validation_not_hex(mock_broker: RamsesBroker) -> None:
-    """Test validation error for non-hex parameter ID.
+async def test_param_validation_logic(mock_broker: RamsesBroker) -> None:
+    """Test validation logic in broker helper methods.
+
+    Uses try-except blocks to avoid Mypy unreachable code errors with pytest.raises.
 
     :param mock_broker: The mock broker fixture.
     """
     # 1. Invalid Parameter ID - Not Hex
-    with pytest.raises(ValueError):
+    try:
         mock_broker._get_param_id({"param_id": "ZZ"})
+        pytest.fail("Should have raised ValueError for non-hex param_id")
+    except ValueError:
+        pass
 
-
-async def test_param_validation_too_long(mock_broker: RamsesBroker) -> None:
-    """Test validation error for too long parameter ID.
-
-    :param mock_broker: The mock broker fixture.
-    """
     # 2. Invalid Parameter ID - Too Long
-    with pytest.raises(ValueError):
+    try:
         mock_broker._get_param_id({"param_id": "123"})
+        pytest.fail("Should have raised ValueError for long param_id")
+    except ValueError:
+        pass
 
-
-async def test_param_validation_valid(mock_broker: RamsesBroker) -> None:
-    """Test valid parameters in broker helper methods.
-
-    :param mock_broker: The mock broker fixture.
-    """
-    # 1. Valid Parameter ID
+    # 3. Valid Parameter ID
     assert mock_broker._get_param_id({"param_id": "75"}) == "75"
+    assert (
+        mock_broker._get_param_id({"param_id": 75}) == "4B"
+    )  # Hex 4B is Int 75 (if passed as int/string mix up)
 
-    # 2. Device Resolution (Target to ID)
+    # 4. Device Resolution (Target to ID)
     assert mock_broker._resolve_device_id({"device_id": FAN_ID}) == FAN_ID
     assert mock_broker._resolve_device_id({"device_id": [FAN_ID]}) == FAN_ID
