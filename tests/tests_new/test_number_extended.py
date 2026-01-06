@@ -66,15 +66,27 @@ async def test_number_icon_logic(
     assert entity.icon == "mdi:timer-sand"
 
     # 2. Specific parameter icons
-    # Temperature icon
     entity._is_pending = False
-    entity._attr_native_unit_of_measurement = "°C"
-    assert entity.icon == "mdi:thermometer"
 
-    # Boost mode icon (param 95)
+    # We must mock native_value to return a value so it doesn't trigger
+    # ramses_cc_icon_off logic or early returns.
+    with patch.object(RamsesNumberParam, "native_value", return_value=21.0):
+        # Temperature icon branch
+        entity._attr_native_unit_of_measurement = "°C"
+        assert entity.icon == "mdi:thermometer"
+
+        # Percentage branch
+        entity._attr_native_unit_of_measurement = "%"
+        entity.entity_description = RamsesNumberEntityDescription(
+            key="param_52", ramses_rf_attr="52", unit_of_measurement="%"
+        )
+        assert entity.icon == "mdi:gauge"
+
+    # 3. Boost mode icon (param 95)
     desc_boost = RamsesNumberEntityDescription(key="param_95", ramses_rf_attr="95")
     entity_boost = RamsesNumberParam(mock_broker, mock_fan_device, desc_boost)
-    assert entity_boost.icon == "mdi:fan-speed-3"
+    with patch.object(RamsesNumberParam, "native_value", return_value=80.0):
+        assert entity_boost.icon == "mdi:fan-speed-3"
 
 
 async def test_async_set_native_value_paths(
@@ -129,11 +141,9 @@ async def test_create_parameter_entities_registry_branch(
         ) as mock_get_desc,
         patch("homeassistant.helpers.entity_registry.async_get") as mock_ent_reg,
     ):
-        # Setup one description
         desc = RamsesNumberEntityDescription(key="param_01", ramses_rf_attr="01")
         mock_get_desc.return_value = [desc]
 
-        # Simulate entity already exists in registry
         mock_reg = MagicMock()
         mock_reg.async_get_entity_id.return_value = "number.existing_entity"
         mock_ent_reg.return_value = mock_reg
@@ -141,7 +151,7 @@ async def test_create_parameter_entities_registry_branch(
         entities = create_parameter_entities(mock_broker, mock_fan_device)
 
         assert len(entities) == 1
-        assert not mock_reg.async_get_or_create.called  # Should skip creation
+        assert not mock_reg.async_get_or_create.called
 
 
 async def test_get_param_descriptions_precision(mock_fan_device: MagicMock) -> None:
@@ -153,8 +163,8 @@ async def test_get_param_descriptions_precision(mock_fan_device: MagicMock) -> N
     """
     with patch(
         "custom_components.ramses_cc.number._2411_PARAMS_SCHEMA",
-        {"75": {"precision": "0.1"}},
+        {"75": {"precision": "0.1", "description": "Comfort"}},
     ):
         descriptions = get_param_descriptions(mock_fan_device)
         assert descriptions[0].precision == 0.1
-        assert descriptions[0].mode == "slider"  # Forced for param 75
+        assert descriptions[0].mode == "slider"
