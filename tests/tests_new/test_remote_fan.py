@@ -4,7 +4,7 @@ This module tests the Remote entity and the Number entities used for
 fan parameter overrides.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
