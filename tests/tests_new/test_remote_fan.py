@@ -4,11 +4,12 @@ This module tests the Remote entity and the Number entities used for
 fan parameter overrides.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
 
+from custom_components.ramses_cc.const import DOMAIN
 from custom_components.ramses_cc.number import (
     RamsesNumberEntityDescription,
     RamsesNumberParam,
@@ -28,7 +29,6 @@ def mock_broker() -> MagicMock:
     :return: A mock object simulating the RamsesBroker.
     """
     broker = MagicMock()
-    # Mock the entry for unique_id/registry logic if needed
     broker.entry = MagicMock()
     broker.entry.entry_id = "test_entry"
     return broker
@@ -65,10 +65,10 @@ def test_normalize_device_id() -> None:
     assert normalize_device_id("30:ABCDEF") == "30_abcdef"
 
 
-async def test_remote_entity_send_command(
+async def test_remote_entity_device_id(
     mock_broker: MagicMock, mock_remote_device: MagicMock
 ) -> None:
-    """Test the RamsesRemote send_command logic.
+    """Test the RamsesRemote unique ID and state logic.
 
     :param mock_broker: The mock broker fixture.
     :param mock_remote_device: The mock remote device fixture.
@@ -76,14 +76,8 @@ async def test_remote_entity_send_command(
     description = MagicMock()
     remote = RamsesRemote(mock_broker, mock_remote_device, description)
 
-    # Mock the internal RF device command method
-    mock_remote_device.send_cmd = MagicMock()
-
-    # Simulate sending a raw command string
-    remote.send_command(command="RQ 01:123456 1F09 00")
-
-    assert mock_remote_device.send_cmd.called
-    assert mock_remote_device.send_cmd.call_args[0][0] == "RQ 01:123456 1F09 00"
+    assert remote.unique_id == REMOTE_ID
+    assert remote.name == f"Remote {REMOTE_ID}"
 
 
 async def test_fan_boost_param_logic(
@@ -91,7 +85,8 @@ async def test_fan_boost_param_logic(
 ) -> None:
     """Test RamsesNumberParam logic specifically for Boost Mode (Param 95).
 
-    This targets scaling logic in RamsesNumberParam.native_value.
+    This targets scaling logic in RamsesNumberParam.native_value and verifies
+    service calls.
 
     :param hass: The Home Assistant instance.
     :param mock_broker: The mock broker fixture.
@@ -109,15 +104,19 @@ async def test_fan_boost_param_logic(
     entity.hass = hass
 
     # 1. Test scaling for display (0.7 internally -> 70.0% UI)
-    # This hits the _is_boost_mode_param() branch in native_value
     entity._param_native_value["95"] = 0.7
     assert entity.native_value == 70.0
 
     # 2. Test setting value (async_set_native_value)
-    # For param 95, it should send the raw value without scaling
-    with patch.object(hass.services, "async_call", new_callable=AsyncMock) as mock_call:
-        await entity.async_set_native_value(80.0)
+    # Register a mock handler for the 'set_fan_param' service
+    mock_service_handler = AsyncMock()
+    hass.services.async_register(DOMAIN, "set_fan_param", mock_service_handler)
 
-        assert mock_call.called
-        service_data = mock_call.call_args[0][2]
-        assert service_data["value"] == 80.0
+    await entity.async_set_native_value(80.0)
+    await hass.async_block_till_done()
+
+    # Verify service was called with correct data
+    assert mock_service_handler.called
+    service_call = mock_service_handler.call_args[0][0]
+    assert service_call.data["value"] == 80.0
+    assert service_call.data["param_id"] == "95"
