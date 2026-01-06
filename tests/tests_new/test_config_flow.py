@@ -16,7 +16,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.ramses_cc.const import DOMAIN
-from custom_components.ramses_cc.schemas import SZ_CONFIG, SZ_PORT_NAME, SZ_SERIAL_PORT
+from custom_components.ramses_cc.schemas import SZ_CONFIG, SZ_SERIAL_PORT
+from ramses_tx.schemas import SZ_PORT_NAME
 
 # Constants used in the tests
 CONF_MANUAL_PATH = "Enter Manually..."
