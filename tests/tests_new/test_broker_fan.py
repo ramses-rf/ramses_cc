@@ -202,8 +202,8 @@ async def test_broker_fan_setup(
         assert mock_fire.call_args[0][1]["value"] == 19.5
 
 
-async def test_param_validation_invalid(mock_broker: RamsesBroker) -> None:
-    """Test validation errors in broker helper methods.
+async def test_param_validation_not_hex(mock_broker: RamsesBroker) -> None:
+    """Test validation error for non-hex parameter ID.
 
     :param mock_broker: The mock broker fixture.
     """
@@ -211,6 +211,12 @@ async def test_param_validation_invalid(mock_broker: RamsesBroker) -> None:
     with pytest.raises(ValueError):
         mock_broker._get_param_id({"param_id": "ZZ"})
 
+
+async def test_param_validation_too_long(mock_broker: RamsesBroker) -> None:
+    """Test validation error for too long parameter ID.
+
+    :param mock_broker: The mock broker fixture.
+    """
     # 2. Invalid Parameter ID - Too Long
     with pytest.raises(ValueError):
         mock_broker._get_param_id({"param_id": "123"})
