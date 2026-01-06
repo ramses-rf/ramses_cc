@@ -4,7 +4,10 @@ This module targets command database management, learning, sending,
 and fan parameter coordination in remote.py.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -32,7 +35,11 @@ def mock_broker(hass: HomeAssistant) -> MagicMock:
     broker.hass = hass
     broker._remotes = {}
     broker._fan_bound_to_remote = {REM_ID: FAN_ID}
+
+    # Mock the semaphore as an async context manager
     broker._sem = MagicMock()
+    broker._sem.__aenter__ = AsyncMock()
+    broker._sem.__aexit__ = AsyncMock()
 
     # Methods that are awaited must be AsyncMock
     broker.client.async_send_cmd = AsyncMock()
@@ -118,3 +125,49 @@ async def test_remote_fan_parameter_services(
     args = mock_broker.async_set_fan_param.call_args[0][0]
     assert args["device_id"] == FAN_ID
     assert args["value"] == 20.0
+
+
+async def test_remote_learn_command_success(
+    hass: HomeAssistant, mock_broker: MagicMock, mock_remote_device: MagicMock
+) -> None:
+    """Test the successful learning of a command via event bus listener.
+
+    This targets the async_learn_command loop and event listeners by patching
+    the bus listener registration.
+
+    :param hass: The Home Assistant instance.
+    :param mock_broker: The mock broker fixture.
+    :param mock_remote_device: The mock remote device fixture.
+    """
+    remote = RamsesRemote(
+        mock_broker, mock_remote_device, RamsesRemoteEntityDescription()
+    )
+    remote.hass = hass
+
+    # Prepare real data dictionary
+    learn_payload = {"src": REM_ID, "code": "22F1", "packet": "learned_pkt_123"}
+    mock_event = MagicMock()
+    mock_event.data = learn_payload
+
+    # Patch async_listen on the bus instance specifically for this test
+    # instead of using patch.object which fails on read-only attributes.
+    with patch("homeassistant.core.EventBus.async_listen") as mock_listen:
+        # Start learning task
+        task = asyncio.create_task(remote.async_learn_command("test_cmd", timeout=1))
+
+        # Give the task a moment to register the listener
+        await asyncio.sleep(0.1)
+
+        # Verify and trigger the captured listener/filter
+        assert mock_listen.called
+        # async_listen call: (event_type, listener, event_filter)
+        _, listener, event_filter = mock_listen.call_args[0]
+
+        # Simulate a bus event matching the criteria
+        if event_filter(mock_event):
+            listener(mock_event)
+
+        await task
+
+    # Verify command was captured as a string
+    assert remote._commands.get("test_cmd") == "learned_pkt_123"
