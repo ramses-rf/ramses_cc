@@ -6,7 +6,7 @@ and converted into configuration entries.
 """
 
 from collections.abc import Iterator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.config_entries import SOURCE_USER
@@ -237,9 +237,11 @@ async def test_options_flow_clear_cache(hass: HomeAssistant) -> None:
     # We mock the Store to avoid file I/O errors and simulate data present
     with patch("custom_components.ramses_cc.config_flow.Store") as mock_store:
         mock_instance = mock_store.return_value
-        mock_instance.async_load.return_value = {
-            "client_state": {"schema": {}, "packets": {}}
-        }
+        # Use AsyncMock for async methods so they can be awaited
+        mock_instance.async_load = AsyncMock(
+            return_value={"client_state": {"schema": {}, "packets": {}}}
+        )
+        mock_instance.async_save = AsyncMock()
 
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
