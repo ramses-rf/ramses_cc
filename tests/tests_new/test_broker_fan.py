@@ -159,15 +159,17 @@ async def test_number_entity_logic(
     with patch.object(hass.services, "async_call") as mock_service:
         await entity.async_set_native_value(22.0)
 
-        # Check pending state - simple assertion to avoid MyPy unreachable error
-        assert entity._is_pending
-        assert entity._pending_value == 22.0
-        assert entity.icon == "mdi:timer-sand"
-
         # Verify service call
         mock_service.assert_called_once()
         assert mock_service.call_args[1]["service"] == "set_fan_param"
         assert mock_service.call_args[1]["service_data"]["value"] == 22.0
+
+        # Check pending state
+        # Mypy incorrectly infers _is_pending is always False here because it can't see
+        # the side effects of async_set_native_value. We suppress the unreachable error.
+        assert entity._is_pending is True  # type: ignore[unreachable]
+        assert entity._pending_value == 22.0
+        assert entity.icon == "mdi:timer-sand"
 
 
 async def test_broker_fan_setup(
