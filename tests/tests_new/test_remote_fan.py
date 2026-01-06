@@ -1,7 +1,7 @@
-"""Tests for ramses_cc remote platform and fan rate entities.
+"""Tests for ramses_cc remote platform and fan parameter entities.
 
-This module tests the Remote entity (for sending commands) and the
-Number entities specifically used for Fan Rate overrides.
+This module tests the Remote entity and the Number entities used for
+fan parameter overrides.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -10,8 +10,9 @@ import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.ramses_cc.number import (
-    RamsesFanRateNumber,
     RamsesNumberEntityDescription,
+    RamsesNumberParam,
+    normalize_device_id,
 )
 from custom_components.ramses_cc.remote import RamsesRemote
 
@@ -27,7 +28,9 @@ def mock_broker() -> MagicMock:
     :return: A mock object simulating the RamsesBroker.
     """
     broker = MagicMock()
-    broker.async_set_fan_rate = AsyncMock()
+    # Mock the entry for unique_id/registry logic if needed
+    broker.entry = MagicMock()
+    broker.entry.entry_id = "test_entry"
     return broker
 
 
@@ -52,8 +55,14 @@ def mock_fan_device() -> MagicMock:
     device = MagicMock()
     device.id = FAN_ID
     device._SLUG = "FAN"
-    device.boost_inf = None
+    device.get_fan_param = MagicMock(return_value=None)
     return device
+
+
+def test_normalize_device_id() -> None:
+    """Test the device ID normalization helper."""
+    assert normalize_device_id("01:123456") == "01_123456"
+    assert normalize_device_id("30:ABCDEF") == "30_abcdef"
 
 
 async def test_remote_entity_send_command(
@@ -77,36 +86,38 @@ async def test_remote_entity_send_command(
     assert mock_remote_device.send_cmd.call_args[0][0] == "RQ 01:123456 1F09 00"
 
 
-async def test_fan_rate_entity_logic(
+async def test_fan_boost_param_logic(
     hass: HomeAssistant, mock_broker: MagicMock, mock_fan_device: MagicMock
 ) -> None:
-    """Test RamsesFanRateNumber speed override logic in number.py.
+    """Test RamsesNumberParam logic specifically for Boost Mode (Param 95).
 
-    This targets the missing lines in number.py related to fan rate overrides.
+    This targets scaling logic in RamsesNumberParam.native_value.
 
     :param hass: The Home Assistant instance.
     :param mock_broker: The mock broker fixture.
     :param mock_fan_device: The mock fan device fixture.
     """
     desc = RamsesNumberEntityDescription(
-        key="fan_rate",
+        key="param_95",
+        ramses_rf_attr="95",
         min_value=0,
-        max_value=100,
-        native_step=1,
+        max_value=1.0,
+        unit_of_measurement="%",
     )
 
-    entity = RamsesFanRateNumber(mock_broker, mock_fan_device, desc)
+    entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
     entity.hass = hass
 
-    # 1. Test state from device (simulating override state)
-    mock_fan_device.boost_inf = {"speed": 0.5}  # 50%
-    assert entity.native_value == 50.0
+    # 1. Test scaling for display (0.7 internally -> 70.0% UI)
+    # This hits the _is_boost_mode_param() branch in native_value
+    entity._param_native_value["95"] = 0.7
+    assert entity.native_value == 70.0
 
-    # 2. Test setting rate (async_set_native_value)
-    await entity.async_set_native_value(80.0)
+    # 2. Test setting value (async_set_native_value)
+    # For param 95, it should send the raw value without scaling
+    with patch.object(hass.services, "async_call", new_callable=AsyncMock) as mock_call:
+        await entity.async_set_native_value(80.0)
 
-    # Verify broker call
-    mock_broker.async_set_fan_rate.assert_called_once()
-    call_args = mock_broker.async_set_fan_rate.call_args[0][0]
-    assert call_args["device_id"] == FAN_ID
-    assert call_args["value"] == 0.8  # 80% converted to 0.8
+        assert mock_call.called
+        service_data = mock_call.call_args[0][2]
+        assert service_data["value"] == 80.0
