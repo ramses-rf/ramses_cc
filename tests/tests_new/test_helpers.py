@@ -78,3 +78,18 @@ def test_ramses_to_ha_id_mapping(hass: HomeAssistant) -> None:
 
     result = ramses_device_id_to_ha_device_id(hass, RAMSES_ID)
     assert result == device.id
+
+
+def test_ha_to_ramses_id_wrong_domain(hass: HomeAssistant) -> None:
+    """Test mapping when the device registry entry belongs to another domain."""
+
+    config_entry = MockConfigEntry(domain="not_ramses", entry_id="other_entry")
+    config_entry.add_to_hass(hass)
+
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={("not_ramses", "some_id")},
+    )
+
+    assert ha_device_id_to_ramses_device_id(hass, device.id) is None
