@@ -33,9 +33,13 @@ def mock_broker(hass: HomeAssistant) -> MagicMock:
     broker._remotes = {}
     broker._fan_bound_to_remote = {REM_ID: FAN_ID}
     broker._sem = MagicMock()
+
+    # Methods that are awaited must be AsyncMock
     broker.client.async_send_cmd = AsyncMock()
     broker.async_get_fan_param = AsyncMock()
     broker.async_set_fan_param = AsyncMock()
+    broker.async_update = AsyncMock()
+
     return broker
 
 
@@ -86,6 +90,7 @@ async def test_remote_send_command_logic(
     await remote.async_send_command("boost", num_repeats=2, delay_secs=0.01)
 
     assert mock_broker.client.async_send_cmd.call_count == 2
+    assert mock_broker.async_update.called
     sent_cmd = mock_broker.client.async_send_cmd.call_args[0][0]
     assert isinstance(sent_cmd, Command)
 
