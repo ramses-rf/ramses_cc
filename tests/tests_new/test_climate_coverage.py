@@ -10,10 +10,10 @@ from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.components.climate import (
-    HVACAction,
-    HVACMode,
     PRESET_AWAY,
     PRESET_NONE,
+    HVACAction,
+    HVACMode,
 )
 
 from custom_components.ramses_cc.climate import (
