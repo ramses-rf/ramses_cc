@@ -6,7 +6,7 @@ and converted into configuration entries.
 """
 
 from collections.abc import Iterator
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from homeassistant.config_entries import SOURCE_USER
@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry  # type: ignore
 
+from custom_components.ramses_cc.config_flow import CONF_MQTT_PATH, get_usb_ports
 from custom_components.ramses_cc.const import DOMAIN
 from custom_components.ramses_cc.schemas import SZ_CONFIG, SZ_SERIAL_PORT
 from ramses_tx.schemas import SZ_PORT_NAME
@@ -88,7 +89,6 @@ async def test_full_user_flow(hass: HomeAssistant) -> None:
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        # Removed "restore_cache": False as it is not part of this flow step schema
         user_input={"enforce_known_list": False},
     )
 
@@ -115,6 +115,48 @@ async def test_full_user_flow(hass: HomeAssistant) -> None:
     assert result["title"] == "RAMSES RF"
     assert result["data"] == {}
     assert result["options"][SZ_SERIAL_PORT][SZ_PORT_NAME] == "/dev/ttyUSB0"
+
+
+async def test_mqtt_flow(hass: HomeAssistant) -> None:
+    """Test the MQTT configuration flow.
+
+    This targets lines 192-263 in config_flow.py.
+    """
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+
+    # 1. Select "MQTT Broker..."
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={SZ_PORT_NAME: CONF_MQTT_PATH},
+    )
+
+    # 2. MQTT Config Form
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "mqtt_config"
+
+    # 3. Enter MQTT Details
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            "host": "localhost",
+            "port": 1883,
+            "username": "user",
+            "password": "pass",
+        },
+    )
+
+    # 4. Returns to configure_serial_port (with MQTT URL pre-filled internally)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "configure_serial_port"
+
+    # 5. Continue through the rest of the flow
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={},
+    )
+    assert result["step_id"] == "config"
 
 
 async def test_options_flow(hass: HomeAssistant) -> None:
@@ -164,3 +206,84 @@ async def test_options_flow(hass: HomeAssistant) -> None:
     # 3. Create Entry (Save)
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SCAN_INTERVAL] == 120
+
+
+async def test_options_flow_clear_cache(hass: HomeAssistant) -> None:
+    """Test clearing the cache via options flow.
+
+    This targets lines 689-730 in config_flow.py.
+    """
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="ramses_cc_test_cache",
+        data={},
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            CONF_SCAN_INTERVAL: 60,
+            SZ_CONFIG: {},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    # 1. Select Clear Cache
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={"next_step_id": "clear_cache"},
+    )
+
+    # 2. Confirm Clear
+    # We mock the Store to avoid file I/O errors and simulate data present
+    with patch("custom_components.ramses_cc.config_flow.Store") as mock_store:
+        mock_instance = mock_store.return_value
+        mock_instance.async_load.return_value = {
+            "client_state": {"schema": {}, "packets": {}}
+        }
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"clear_schema": True, "clear_packets": True},
+        )
+
+    # 3. Assert Flow Aborts (Cache Cleared)
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "cache_cleared"
+
+
+def test_get_usb_ports_logic() -> None:
+    """Test the synchronous get_usb_ports helper.
+
+    This targets lines 73-88 in config_flow.py.
+    """
+    with (
+        patch(
+            "custom_components.ramses_cc.config_flow.list_ports.comports"
+        ) as mock_comports,
+        patch(
+            "custom_components.ramses_cc.config_flow.usb.usb_device_from_port"
+        ) as mock_usb_dev,
+        patch(
+            "custom_components.ramses_cc.config_flow.usb.get_serial_by_id"
+        ) as mock_get_serial,
+        patch(
+            "custom_components.ramses_cc.config_flow.usb.human_readable_device_name"
+        ) as mock_human,
+    ):
+        mock_port = MagicMock()
+        mock_port.vid = 1234
+        mock_port.pid = 5678
+        mock_port.device = "/dev/ttyUSB0"
+        mock_port.serial_number = "123"
+        mock_port.manufacturer = "Acme"
+        mock_port.description = "Device"
+
+        mock_comports.return_value = [mock_port]
+        mock_usb_dev.return_value.vid = "1234"
+        mock_usb_dev.return_value.pid = "5678"
+        mock_get_serial.return_value = "/dev/serial/by-id/usb-Acme_Device_123"
+        mock_human.return_value = "Acme Device"
+
+        ports = get_usb_ports()
+        assert "/dev/serial/by-id/usb-Acme_Device_123" in ports
+        assert ports["/dev/serial/by-id/usb-Acme_Device_123"] == "Acme Device"
