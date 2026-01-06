@@ -5,7 +5,7 @@ options menu (OptionsFlow), ensuring that user inputs are correctly processed
 and converted into configuration entries.
 """
 
-from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import patch
 
@@ -16,18 +16,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.ramses_cc.const import DOMAIN
-from custom_components.ramses_cc.schemas import (
-    SZ_CONFIG,
-    SZ_PORT_NAME,
-    SZ_SERIAL_PORT,
-)
+from custom_components.ramses_cc.schemas import SZ_CONFIG, SZ_PORT_NAME, SZ_SERIAL_PORT
 
 # Constants used in the tests
 CONF_MANUAL_PATH = "Enter Manually..."
 
 
 @pytest.fixture(autouse=True)
-def bypass_setup_fixture() -> Generator[None, None, None]:
+def bypass_setup_fixture() -> Iterator[None]:
     """Prevent actual setup of the integration during config flow tests."""
     with patch(
         "custom_components.ramses_cc.async_setup_entry",
@@ -55,8 +51,7 @@ class MockConfigEntry:
 
     def add_to_hass(self, hass: HomeAssistant) -> None:
         """Add this entry to hass."""
-        # type ignore required because we are writing to a private attribute for testing
-        hass.config_entries._entries[self.entry_id] = self  # type: ignore[attr-defined]
+        hass.config_entries._entries[self.entry_id] = self
 
 
 async def test_full_user_flow(hass: HomeAssistant) -> None:
