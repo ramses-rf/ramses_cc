@@ -159,8 +159,8 @@ async def test_number_entity_logic(
     with patch.object(hass.services, "async_call") as mock_service:
         await entity.async_set_native_value(22.0)
 
-        # Check pending state
-        assert entity._is_pending is True
+        # Check pending state - simple assertion to avoid MyPy unreachable error
+        assert entity._is_pending
         assert entity._pending_value == 22.0
         assert entity.icon == "mdi:timer-sand"
 
