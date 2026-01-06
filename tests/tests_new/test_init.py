@@ -14,6 +14,7 @@ from syrupy import SnapshotAssertion
 from custom_components.ramses_cc import (
     RamsesEntity,
     RamsesEntityDescription,
+    async_register_domain_services,
     async_unload_entry,
 )
 from custom_components.ramses_cc.const import DOMAIN
@@ -37,6 +38,8 @@ def mock_broker(hass: HomeAssistant) -> MagicMock:
     broker = MagicMock()
     broker.hass = hass
     broker.async_unload_platforms = AsyncMock(return_value=True)
+    broker.async_bind_device = AsyncMock()
+    broker.async_set_fan_param = AsyncMock()
     broker._entities = {}
     return broker
 
@@ -146,3 +149,38 @@ async def test_ramses_entity_added_to_hass(
     await entity.async_added_to_hass()
 
     assert mock_broker._entities["unique_32_123456"] == entity
+
+
+async def test_init_service_wrappers(
+    hass: HomeAssistant, mock_broker: MagicMock
+) -> None:
+    """Exercise the service wrapper functions in __init__.py.
+
+    This targets the async_register_domain_services and the associated
+    wrapper functions like async_bind_device.
+
+    :param hass: The Home Assistant instance.
+    :param mock_broker: The mock broker fixture.
+    """
+    entry = MagicMock()
+    # Register the services
+    async_register_domain_services(hass, entry, mock_broker)
+
+    # 1. Call bind_device service with valid hex code and None value
+    # The schema requires offer keys to be 4-digit hex codes. The value should be None.
+    await hass.services.async_call(
+        DOMAIN,
+        "bind_device",
+        {"device_id": DEVICE_ID, "offer": {"1FC9": None}},
+        blocking=True,
+    )
+    assert mock_broker.async_bind_device.called
+
+    # 2. Call set_fan_param service
+    await hass.services.async_call(
+        DOMAIN,
+        "set_fan_param",
+        {"device_id": DEVICE_ID, "param_id": "01", "value": 1.0},
+        blocking=True,
+    )
+    assert mock_broker.async_set_fan_param.called
