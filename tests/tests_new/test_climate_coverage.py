@@ -1,14 +1,19 @@
-"""Tests for the ramses_cc climate platform to improve coverage."""
+"""Tests for the ramses_cc climate platform to improve coverage.
+
+This module contains tests specifically designed to hit edge cases and logic branches
+in the climate entity implementations (Controller, Zone, HVAC) that are not covered
+by the standard happy-path tests.
+"""
 
 from datetime import timedelta
 from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.components.climate import (
-    PRESET_AWAY,
-    PRESET_NONE,
     HVACAction,
     HVACMode,
+    PRESET_AWAY,
+    PRESET_NONE,
 )
 
 from custom_components.ramses_cc.climate import (
@@ -27,7 +32,11 @@ SZ_MODE = "mode"
 
 @pytest.fixture
 def mock_broker() -> MagicMock:
-    """Return a mock RamsesBroker."""
+    """Return a mock RamsesBroker.
+
+    :return: A mock object simulating the RamsesBroker with a mocked
+             async_post_update method.
+    """
     broker = MagicMock()
     broker.async_post_update = MagicMock()
     return broker
@@ -35,14 +44,25 @@ def mock_broker() -> MagicMock:
 
 @pytest.fixture
 def mock_description() -> MagicMock:
-    """Return a mock EntityDescription."""
+    """Return a mock EntityDescription.
+
+    :return: A mock object simulating the RamsesClimateEntityDescription.
+    """
     return MagicMock()
 
 
 async def test_controller_coverage(
     mock_broker: MagicMock, mock_description: MagicMock
 ) -> None:
-    """Test RamsesController specific edge cases."""
+    """Test RamsesController specific edge cases.
+
+    Tests initialization, exception handling for invalid temperatures,
+    HVAC action/mode logic, and preset mode setting, including verification
+    of the async_set_system_mode logic.
+
+    :param mock_broker: The mock broker fixture.
+    :param mock_description: The mock description fixture.
+    """
     mock_device = MagicMock()
     mock_device.id = "01:123456"
     mock_device.zones = []
@@ -87,6 +107,8 @@ async def test_controller_coverage(
     assert controller.hvac_mode == HVACMode.AUTO
 
     # 5. Test set_hvac_mode and set_preset_mode
+    # SAVE ORIGINAL METHOD so we can restore it later
+    original_set_mode = controller.async_set_system_mode
     controller.async_set_system_mode = MagicMock()
 
     controller.set_hvac_mode(HVACMode.HEAT)
@@ -95,6 +117,9 @@ async def test_controller_coverage(
     controller.set_preset_mode(PRESET_AWAY)
     controller.async_set_system_mode.assert_called_with(SystemMode.AWAY)
 
+    # RESTORE ORIGINAL METHOD
+    controller.async_set_system_mode = original_set_mode
+
     # 6. Test async_set_system_mode logic
     # Test strict schema check call and logic
     mock_device.set_mode = MagicMock()
@@ -102,15 +127,22 @@ async def test_controller_coverage(
     # Call with duration
     duration = timedelta(hours=1)
     controller.async_set_system_mode(SystemMode.AUTO, duration=duration)
-    # We verify set_mode was called. The specific calculation of 'until'
-    # uses datetime.now(), so we just check it was called.
+    # We verify set_mode was called.
     assert mock_device.set_mode.called
 
 
 async def test_zone_coverage(
     mock_broker: MagicMock, mock_description: MagicMock
 ) -> None:
-    """Test RamsesZone specific edge cases."""
+    """Test RamsesZone specific edge cases.
+
+    Tests HVAC mode logic (including invalid modes and off/frost logic),
+    preset mode inheritance from TCS, and temperature setting logic with
+    durations.
+
+    :param mock_broker: The mock broker fixture.
+    :param mock_description: The mock description fixture.
+    """
     mock_device = MagicMock()
     mock_device.id = "04:123456"
     mock_device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AUTO}
@@ -175,7 +207,13 @@ async def test_zone_coverage(
 async def test_hvac_coverage(
     mock_broker: MagicMock, mock_description: MagicMock
 ) -> None:
-    """Test RamsesHvac specific edge cases."""
+    """Test RamsesHvac specific edge cases.
+
+    Tests HVAC mode determination based on fan info (off/low/null).
+
+    :param mock_broker: The mock broker fixture.
+    :param mock_description: The mock description fixture.
+    """
     mock_device = MagicMock()
     mock_device.id = "30:123456"
     mock_device.fan_info = None
