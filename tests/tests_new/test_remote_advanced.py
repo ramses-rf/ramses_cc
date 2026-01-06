@@ -4,7 +4,7 @@ This module targets coverage for remote platform setup and internal
 scaling logic in number entities.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -52,17 +52,23 @@ async def test_remote_platform_setup(
     mock_remote._SLUG = "REM"
     mock_broker.devices = [mock_remote]
 
-    # Target async_setup_entry in remote.py
-    await async_setup_entry(hass, mock_broker.entry, async_add_entities)
+    # Mock async_get_current_platform to avoid RuntimeError
+    with patch(
+        "custom_components.ramses_cc.remote.async_get_current_platform"
+    ) as mock_get_platform:
+        mock_get_platform.return_value = MagicMock()
 
-    # Verify that the discovery callback was registered and entities were added
-    assert mock_broker.async_register_platform.called
+        # Target async_setup_entry in remote.py
+        await async_setup_entry(hass, mock_broker.entry, async_add_entities)
 
-    # Simulate the callback being triggered with the remote device
-    add_devices_callback = mock_broker.async_register_platform.call_args[0][1]
-    add_devices_callback([mock_remote])
+        # Verify that the discovery callback was registered
+        assert mock_broker.async_register_platform.called
 
-    assert async_add_entities.called
+        # Simulate the callback being triggered with the remote device
+        add_devices_callback = mock_broker.async_register_platform.call_args[0][1]
+        add_devices_callback([mock_remote])
+
+        assert async_add_entities.called
 
 
 async def test_number_scaling_logic(
@@ -78,10 +84,10 @@ async def test_number_scaling_logic(
     device = MagicMock()
     device.id = "30:111111"
 
-    # Test Percentage Scaling
+    # Test Percentage Scaling using parameter 95 (which is scaled)
     desc_pct = RamsesNumberEntityDescription(
         key="test_pct",
-        ramses_rf_attr="52",
+        ramses_rf_attr="95",
         unit_of_measurement="%",
     )
     entity_pct = RamsesNumberParam(mock_broker, device, desc_pct)
