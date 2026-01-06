@@ -49,6 +49,7 @@ class MockConfigEntry:
         self.options = options
         self.entry_id = unique_id
         self.state = "loaded"
+        self.update_listeners: list[Any] = []
 
     def add_to_hass(self, hass: HomeAssistant) -> None:
         """Add this entry to hass."""
@@ -110,7 +111,8 @@ async def test_full_user_flow(hass: HomeAssistant) -> None:
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        user_input={"enforce_known_list": False, "restore_cache": False},
+        # Removed "restore_cache": False as it is not part of this flow step schema
+        user_input={"enforce_known_list": False},
     )
 
     # 5. Advanced Features Step
