@@ -112,8 +112,8 @@ jobs:
           file-path: code-coverage-results.md
           comment-tag: code-coverage-results.md  # replaces existing by this name
           mode: recreate
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+# or:
 #      - name: Create Coverage Badge
 #        # from: https://github.com/marketplace/actions/coverage-py-badge
 #        uses: tj-actions/coverage-badge-py@v2
