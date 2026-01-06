@@ -10,7 +10,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.ramses_cc.number import (
-    RamsesFanRate,
+    RamsesFanRateNumber,
     RamsesNumberEntityDescription,
 )
 from custom_components.ramses_cc.remote import RamsesRemote
@@ -52,6 +52,7 @@ def mock_fan_device() -> MagicMock:
     device = MagicMock()
     device.id = FAN_ID
     device._SLUG = "FAN"
+    device.boost_inf = None
     return device
 
 
@@ -79,9 +80,9 @@ async def test_remote_entity_send_command(
 async def test_fan_rate_entity_logic(
     hass: HomeAssistant, mock_broker: MagicMock, mock_fan_device: MagicMock
 ) -> None:
-    """Test RamsesFanRate speed override logic in number.py.
+    """Test RamsesFanRateNumber speed override logic in number.py.
 
-    This targets the missing lines 671-719 in number.py.
+    This targets the missing lines in number.py related to fan rate overrides.
 
     :param hass: The Home Assistant instance.
     :param mock_broker: The mock broker fixture.
@@ -94,16 +95,14 @@ async def test_fan_rate_entity_logic(
         native_step=1,
     )
 
-    entity = RamsesFanRate(mock_broker, mock_fan_device, desc)
+    entity = RamsesFanRateNumber(mock_broker, mock_fan_device, desc)
     entity.hass = hass
 
     # 1. Test state from device (simulating override state)
-    # Line 685: uses device.boost_inf (example attribute for speed)
     mock_fan_device.boost_inf = {"speed": 0.5}  # 50%
     assert entity.native_value == 50.0
 
     # 2. Test setting rate (async_set_native_value)
-    # This targets lines 705-719
     await entity.async_set_native_value(80.0)
 
     # Verify broker call
