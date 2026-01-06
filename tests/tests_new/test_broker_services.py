@@ -85,14 +85,15 @@ async def test_broker_service_registration(
     :param hass: The Home Assistant instance.
     :param mock_broker: The mock broker fixture.
     """
-    # Simulate the setup call that triggers registration
-    with patch.object(hass.services, "async_register") as mock_reg:
-        mock_broker.async_register_services()
+    # Trigger the registration logic
+    mock_broker.async_register_services()
 
-        # Verify specific services were registered
-        registered_services = [call[0][1] for call in mock_reg.call_args_list]
-        assert "get_fan_param" in registered_services
-        assert "set_fan_param" in registered_services
+    # Verify services were registered in the Home Assistant ServiceRegistry
+    # ServiceRegistry stores services in a nested dict: {domain: {service_name: handler}}
+    services = hass.services.async_services()
+    assert DOMAIN in services
+    assert "get_fan_param" in services[DOMAIN]
+    assert "set_fan_param" in services[DOMAIN]
 
 
 async def test_broker_device_lookup_fail(mock_broker: RamsesBroker) -> None:
