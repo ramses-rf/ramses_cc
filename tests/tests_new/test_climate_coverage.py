@@ -125,8 +125,9 @@ async def test_controller_coverage(
     mock_device.set_mode = MagicMock()
 
     # Call with duration
+    # Use ECO_BOOST as AUTO does not accept duration in the schema
     duration = timedelta(hours=1)
-    controller.async_set_system_mode(SystemMode.AUTO, duration=duration)
+    controller.async_set_system_mode(SystemMode.ECO_BOOST, duration=duration)
     # We verify set_mode was called.
     assert mock_device.set_mode.called
 
