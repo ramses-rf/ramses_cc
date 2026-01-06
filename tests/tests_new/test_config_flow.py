@@ -5,7 +5,9 @@ options menu (OptionsFlow), ensuring that user inputs are correctly processed
 and converted into configuration entries.
 """
 
-from unittest.mock import MagicMock, patch
+from collections.abc import Generator
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import SOURCE_USER
@@ -16,7 +18,6 @@ from homeassistant.data_entry_flow import FlowResultType
 from custom_components.ramses_cc.const import DOMAIN
 from custom_components.ramses_cc.schemas import (
     SZ_CONFIG,
-    SZ_PORT_CONFIG,
     SZ_PORT_NAME,
     SZ_SERIAL_PORT,
 )
@@ -26,13 +27,36 @@ CONF_MANUAL_PATH = "Enter Manually..."
 
 
 @pytest.fixture(autouse=True)
-def bypass_setup_fixture():
+def bypass_setup_fixture() -> Generator[None, None, None]:
     """Prevent actual setup of the integration during config flow tests."""
     with patch(
         "custom_components.ramses_cc.async_setup_entry",
         return_value=True,
     ):
         yield
+
+
+class MockConfigEntry:
+    """Minimal mock for ConfigEntry to support options flow tests."""
+
+    def __init__(
+        self,
+        domain: str,
+        unique_id: str,
+        data: dict[str, Any],
+        options: dict[str, Any],
+    ) -> None:
+        self.domain = domain
+        self.unique_id = unique_id
+        self.data = data
+        self.options = options
+        self.entry_id = unique_id
+        self.state = "loaded"
+
+    def add_to_hass(self, hass: HomeAssistant) -> None:
+        """Add this entry to hass."""
+        # type ignore required because we are writing to a private attribute for testing
+        hass.config_entries._entries[self.entry_id] = self  # type: ignore[attr-defined]
 
 
 async def test_full_user_flow(hass: HomeAssistant) -> None:
@@ -165,19 +189,3 @@ async def test_options_flow(hass: HomeAssistant) -> None:
     # 3. Create Entry (Save)
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SCAN_INTERVAL] == 120
-
-
-class MockConfigEntry:
-    """Minimal mock for ConfigEntry to support options flow tests."""
-
-    def __init__(self, domain, unique_id, data, options):
-        self.domain = domain
-        self.unique_id = unique_id
-        self.data = data
-        self.options = options
-        self.entry_id = unique_id
-        self.state = "loaded"
-
-    def add_to_hass(self, hass):
-        """Add this entry to hass."""
-        hass.config_entries._entries[self.entry_id] = self
