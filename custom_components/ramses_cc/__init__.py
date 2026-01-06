@@ -22,7 +22,7 @@ import sys
 ENABLE_DEV_HOOK = False  # Set to true to enable the dev hook
 DEV_LIB_PATH = "/config/deps/ramses_rf/src"
 
-if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
+if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):  # pragma: no cover
     # Insert at index 0 so it takes precedence over system libraries
     sys.path.insert(0, DEV_LIB_PATH)
 
@@ -384,7 +384,7 @@ class RamsesEntity(Entity):
         # but only self is expected:
         #     def async_write_ha_state(self) -> None:
 
-        self.hass.loop.call_later(delay, self.async_write_ha_state)
+        self.hass.loop.call_later(delay, self.async_write_ha_state)  # pragma: no cover
 
 
 @dataclass(frozen=True, kw_only=True)
