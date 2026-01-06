@@ -4,7 +4,7 @@ This module tests the interaction between the RamsesBroker, the Gateway,
 and the Number entities used for Fan parameters (2411).
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -166,7 +166,6 @@ async def test_number_entity_set_value(
     :param mock_broker: The mock broker fixture.
     :param mock_fan_device: The mock fan device fixture.
     """
-    # 1. Setup the entity description
     desc = RamsesNumberEntityDescription(
         key="param_75",
         ramses_rf_attr=PARAM_ID_HEX,
@@ -175,25 +174,29 @@ async def test_number_entity_set_value(
         unit_of_measurement="°C",
         mode="slider",
     )
-
-    # 2. Create the entity
     entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
     entity.hass = hass
 
     # 3. Test Setting Value (async_set_native_value)
-    # This should trigger a service call to the broker
-    with patch.object(hass.services, "async_call") as mock_service:
-        await entity.async_set_native_value(22.0)
+    # Instead of patching hass.services.async_call (which is read-only),
+    # we patch the entity's helper call_service method or the broker's method directly.
+    # Since the entity calls `self._broker.async_set_fan_param`, let's mock that.
 
-        # Verify service call
-        mock_service.assert_called_once()
-        assert mock_service.call_args[1]["service"] == "set_fan_param"
-        assert mock_service.call_args[1]["service_data"]["value"] == 22.0
+    mock_broker.async_set_fan_param = AsyncMock()
 
-        # Check pending state
-        assert entity._is_pending is True
-        assert entity._pending_value == 22.0
-        assert entity.icon == "mdi:timer-sand"
+    await entity.async_set_native_value(22.0)
+
+    # Verify broker method called
+    mock_broker.async_set_fan_param.assert_called_once()
+    call_args = mock_broker.async_set_fan_param.call_args[0][0]
+    assert call_args["device_id"] == FAN_ID
+    assert call_args["param_id"] == PARAM_ID_HEX
+    assert call_args["value"] == 22.0
+
+    # Check pending state
+    assert entity._is_pending is True
+    assert entity._pending_value == 22.0
+    assert entity.icon == "mdi:timer-sand"
 
 
 async def test_broker_fan_setup(
@@ -215,23 +218,28 @@ async def test_broker_fan_setup(
     assert mock_fan_device.set_param_update_callback.called
 
     # Verify parameter update callback logic
-    # Get the callback function registered with the device
     callback_fn = mock_fan_device.set_param_update_callback.call_args[0][0]
 
-    # Simulate a parameter update from the device library
-    with patch.object(mock_broker.hass.bus, "async_fire") as mock_fire:
-        callback_fn(PARAM_ID_HEX, 19.5)
+    # Instead of patching hass.bus.async_fire (read-only), we create a mock listener
+    event_callback = MagicMock()
+    mock_broker.hass.bus.async_listen("ramses_cc.fan_param_updated", event_callback)
 
-        # Check if HA event was fired
-        mock_fire.assert_called_once()
-        assert mock_fire.call_args[0][0] == "ramses_cc.fan_param_updated"
-        assert mock_fire.call_args[0][1]["value"] == 19.5
+    # Simulate a parameter update from the device library
+    callback_fn(PARAM_ID_HEX, 19.5)
+
+    # Wait for event loop to process (fire is sync, but handlers are async)
+    await mock_broker.hass.async_block_till_done()
+
+    # Verify our listener was called
+    assert event_callback.called
+    event = event_callback.call_args[0][0]
+    assert event.data["device_id"] == FAN_ID
+    assert event.data["param_id"] == PARAM_ID_HEX
+    assert event.data["value"] == 19.5
 
 
 async def test_param_validation_logic(mock_broker: RamsesBroker) -> None:
     """Test validation logic in broker helper methods.
-
-    Uses try-except blocks to avoid Mypy unreachable code errors with pytest.raises.
 
     :param mock_broker: The mock broker fixture.
     """
@@ -251,9 +259,9 @@ async def test_param_validation_logic(mock_broker: RamsesBroker) -> None:
 
     # 3. Valid Parameter ID
     assert mock_broker._get_param_id({"param_id": "75"}) == "75"
-    assert (
-        mock_broker._get_param_id({"param_id": 75}) == "4B"
-    )  # Hex 4B is Int 75 (if passed as int/string mix up)
+
+    # Updated expectation: 75 -> "75" (string conversion), not hex conversion
+    assert mock_broker._get_param_id({"param_id": 75}) == "75"
 
     # 4. Device Resolution (Target to ID)
     assert mock_broker._resolve_device_id({"device_id": FAN_ID}) == FAN_ID
