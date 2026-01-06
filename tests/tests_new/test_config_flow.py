@@ -6,7 +6,6 @@ and converted into configuration entries.
 """
 
 from collections.abc import Iterator
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -14,6 +13,7 @@ from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from pytest_homeassistant_custom_component.common import MockConfigEntry  # type: ignore
 
 from custom_components.ramses_cc.const import DOMAIN
 from custom_components.ramses_cc.schemas import SZ_CONFIG, SZ_SERIAL_PORT
@@ -31,29 +31,6 @@ def bypass_setup_fixture() -> Iterator[None]:
         return_value=True,
     ):
         yield
-
-
-class MockConfigEntry:
-    """Minimal mock for ConfigEntry to support options flow tests."""
-
-    def __init__(
-        self,
-        domain: str,
-        unique_id: str,
-        data: dict[str, Any],
-        options: dict[str, Any],
-    ) -> None:
-        self.domain = domain
-        self.unique_id = unique_id
-        self.data = data
-        self.options = options
-        self.entry_id = unique_id
-        self.state = "loaded"
-        self.update_listeners: list[Any] = []
-
-    def add_to_hass(self, hass: HomeAssistant) -> None:
-        """Add this entry to hass."""
-        hass.config_entries._entries[self.entry_id] = self
 
 
 async def test_full_user_flow(hass: HomeAssistant) -> None:
@@ -148,7 +125,7 @@ async def test_options_flow(hass: HomeAssistant) -> None:
     2. Opening the options menu.
     3. Changing the scan interval.
     """
-    # Create a mock config entry
+    # Create a mock config entry using the official test helper
     config_entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="ramses_cc_test",
