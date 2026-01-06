@@ -118,12 +118,12 @@ async def test_broker_set_fan_param(
     assert cmd.code == "2411"
 
 
-async def test_number_entity_logic(
+async def test_number_entity_state(
     hass: HomeAssistant,
     mock_broker: RamsesBroker,
     mock_fan_device: MagicMock,
 ) -> None:
-    """Test RamsesNumberParam entity logic in number.py.
+    """Test RamsesNumberParam entity initialization and state updates.
 
     :param hass: The Home Assistant instance.
     :param mock_broker: The mock broker fixture.
@@ -154,7 +154,33 @@ async def test_number_entity_logic(
     assert entity.native_value == 20.5
     assert entity.available is True
 
-    # 5. Test Setting Value (async_set_native_value)
+
+async def test_number_entity_set_value(
+    hass: HomeAssistant,
+    mock_broker: RamsesBroker,
+    mock_fan_device: MagicMock,
+) -> None:
+    """Test RamsesNumberParam set value logic.
+
+    :param hass: The Home Assistant instance.
+    :param mock_broker: The mock broker fixture.
+    :param mock_fan_device: The mock fan device fixture.
+    """
+    # 1. Setup the entity description
+    desc = RamsesNumberEntityDescription(
+        key="param_75",
+        ramses_rf_attr=PARAM_ID_HEX,
+        min_value=0,
+        max_value=35,
+        unit_of_measurement="°C",
+        mode="slider",
+    )
+
+    # 2. Create the entity
+    entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
+    entity.hass = hass
+
+    # 3. Test Setting Value (async_set_native_value)
     # This should trigger a service call to the broker
     with patch.object(hass.services, "async_call") as mock_service:
         await entity.async_set_native_value(22.0)
@@ -165,9 +191,7 @@ async def test_number_entity_logic(
         assert mock_service.call_args[1]["service_data"]["value"] == 22.0
 
         # Check pending state
-        # Mypy incorrectly infers _is_pending is always False here because it can't see
-        # the side effects of async_set_native_value. We suppress the unreachable error.
-        assert entity._is_pending is True  # type: ignore[unreachable]
+        assert entity._is_pending is True
         assert entity._pending_value == 22.0
         assert entity.icon == "mdi:timer-sand"
 
