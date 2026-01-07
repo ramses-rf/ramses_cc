@@ -4,7 +4,7 @@ This module tests the interaction between the RamsesBroker, the Gateway,
 and the Number entities used for Fan parameters (2411).
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -292,12 +292,13 @@ async def test_update_fan_params_sequence(
     # Define a tiny schema for testing (just 2 params) to avoid 30+ iterations
     tiny_schema = ["11", "22"]
 
-    # Patch the schema in the broker module where it is imported/used
-    with patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", tiny_schema):
-        # Patch sleep to be an instant no-op
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            call_data = {"device_id": FAN_ID}
-            await mock_broker._async_run_fan_param_sequence(call_data)
+    # Patch the schema AND asyncio.sleep in a single with-statement (SIM117)
+    with (
+        patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", tiny_schema),
+        patch("asyncio.sleep", new_callable=AsyncMock),
+    ):
+        call_data = {"device_id": FAN_ID}
+        await mock_broker._async_run_fan_param_sequence(call_data)
 
     # Verify that exactly 2 commands were sent (one for each param in tiny_schema)
     assert mock_gateway.async_send_cmd.call_count == 2
