@@ -275,3 +275,34 @@ async def test_param_validation_logic(mock_broker: RamsesBroker) -> None:
     # 4. Device Resolution (Target to ID)
     assert mock_broker._resolve_device_id({"device_id": FAN_ID}) == FAN_ID
     assert mock_broker._resolve_device_id({"device_id": [FAN_ID]}) == FAN_ID
+
+
+async def test_update_fan_params_sequence(
+    mock_broker: RamsesBroker, mock_gateway: MagicMock
+) -> None:
+    """Test the sequential update of fan parameters with mocked schema.
+
+    This test patches the parameter schema to a small subset and mocks asyncio.sleep
+    to ensure the test runs instantly without waiting for the 0.5s delay between
+    requests.
+
+    :param mock_broker: The mock broker fixture.
+    :param mock_gateway: The mock gateway fixture.
+    """
+    # Define a tiny schema for testing (just 2 params) to avoid 30+ iterations
+    tiny_schema = ["11", "22"]
+
+    # Patch the schema in the broker module where it is imported/used
+    with patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", tiny_schema):
+        # Patch sleep to be an instant no-op
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            call_data = {"device_id": FAN_ID}
+            await mock_broker._async_run_fan_param_sequence(call_data)
+
+    # Verify that exactly 2 commands were sent (one for each param in tiny_schema)
+    assert mock_gateway.async_send_cmd.call_count == 2
+
+    # Optional: Verify the calls were correct
+    calls = mock_gateway.async_send_cmd.call_args_list
+    assert calls[0][0][0].code == "2411"  # First command
+    assert calls[1][0][0].code == "2411"  # Second command
