@@ -27,7 +27,6 @@ from ramses_rf.schemas import (
     SZ_SYSTEM,
     SZ_ZONES,
 )
-from ramses_tx import SZ_BOUND_TO
 from ramses_tx.const import COMMAND_REGEX
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
