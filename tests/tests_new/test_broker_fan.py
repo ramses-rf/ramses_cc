@@ -278,7 +278,9 @@ async def test_param_validation_logic(mock_broker: RamsesBroker) -> None:
 
 
 async def test_update_fan_params_sequence(
-    mock_broker: RamsesBroker, mock_gateway: MagicMock
+    mock_broker: RamsesBroker,
+    mock_gateway: MagicMock,
+    mock_fan_device: MagicMock,  # <--- Added fixture here
 ) -> None:
     """Test the sequential update of fan parameters with mocked schema.
 
@@ -288,7 +290,11 @@ async def test_update_fan_params_sequence(
 
     :param mock_broker: The mock broker fixture.
     :param mock_gateway: The mock gateway fixture.
+    :param mock_fan_device: The mock fan device fixture.
     """
+    # Register the mock device so the broker can find the bound remote (source ID)
+    mock_broker._devices = [mock_fan_device]
+
     # Define a tiny schema for testing (just 2 params) to avoid 30+ iterations
     tiny_schema = ["11", "22"]
 
