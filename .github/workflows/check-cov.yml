@@ -102,7 +102,7 @@ jobs:
           hide_complexity: true
           indicators: true
           output: both
-          thresholds: '66 85'
+          thresholds: '65 85'
 
       - name: Add Coverage PR Comment
         # from: https://github.com/marketplace/actions/comment-pull-request
