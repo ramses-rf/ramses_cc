@@ -101,7 +101,6 @@ SCH_ADVANCED_FEATURES = vol.Schema(
 
 # Define the traits for FAN devices
 FAN_TRAITS = {
-    vol.Optional(SZ_BOUND_TO): _SCH_DEVICE_ID,
     vol.Optional(CONF_COMMANDS): dict,
 }
 
