@@ -289,3 +289,133 @@ def test_get_usb_ports_logic() -> None:
         ports = get_usb_ports()
         assert "/dev/serial/by-id/usb-Acme_Device_123" in ports
         assert ports["/dev/serial/by-id/usb-Acme_Device_123"] == "Acme Device"
+
+
+async def test_configure_serial_port_validation_error(hass: HomeAssistant) -> None:
+    """Test that an invalid serial port configuration stays on the same step with errors.
+
+    This specifically tests the fix in lines 306-308 of config_flow.py, ensuring
+    the flow does not proceed if validation fails.
+    """
+    # 1. Start the flow and get to the configure_serial_port step
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: CONF_MANUAL_PATH},
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "configure_serial_port"
+
+    # 2. Submit an invalid configuration (e.g., baudrate as a string instead of int)
+    # This should trigger a vol.Invalid error in SCH_SERIAL_PORT_CONFIG
+    invalid_input = {
+        SZ_PORT_NAME: "/dev/ttyUSB0",
+        SZ_SERIAL_PORT: {"baudrate": "not_an_int"},
+    }
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input=invalid_input,
+    )
+
+    # 3. Assert that we are still on the same step and have an error
+    # Because of the indentation fix, it should NOT return async_step_config()
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "configure_serial_port"
+    assert SZ_SERIAL_PORT in result["errors"]
+    assert result["errors"][SZ_SERIAL_PORT] == "invalid_port_config"
+
+
+async def test_configure_serial_port_missing_port_name(hass: HomeAssistant) -> None:
+    """Test that the flow handles a missing port_name in options correctly.
+
+    This targets the 'if port_name is None' block and ensures the flow stays
+    on the current step due to the indentation fix.
+    """
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+
+    # 1. Reach the configure_serial_port step
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports", return_value={}
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: CONF_MANUAL_PATH},
+        )
+
+    # 2. Access the actual flow handler
+    flow_handler = hass.config_entries.flow._progress.get(result["flow_id"])
+    # Corrupt internal options so retrieved port_name is None
+    flow_handler.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = None
+
+    # 3. Modify the flow's current step schema to make port_name optional
+    # This bypasses the 'required key not provided' error in async_configure
+    import voluptuous as vol
+
+    current_step = flow_handler.cur_step
+    old_schema = current_step["data_schema"]
+    # Create a new schema where everything is optional
+    new_schema = vol.Schema({vol.Optional(k): v for k, v in old_schema.schema.items()})
+    current_step["data_schema"] = new_schema
+
+    # 4. Submit without port_name to trigger the 'else' branch (line 321)
+    with patch(
+        "custom_components.ramses_cc.config_flow._LOGGER.error"
+    ) as mock_log_error:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_SERIAL_PORT: {}},
+        )
+
+    # 5. Assertions
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "configure_serial_port"
+    assert result["errors"][SZ_PORT_NAME] == "port_name_required"
+    mock_log_error.assert_called_with("ERROR: port_name is None!")
+
+
+async def test_options_flow_configure_serial_port(hass: HomeAssistant) -> None:
+    """Test the serial port configuration via the options flow."""
+    port_path = "/dev/ttyUSB0"
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: port_path}},
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    # 1. Open Menu and Choose Serial Port
+    # We patch here so the FORM returned by async_configure has the correct schema options
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={port_path: "USB Device"},
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"next_step_id": "choose_serial_port"},
+        )
+
+        # 2. Submit Choice
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: port_path},
+        )
+
+    # 3. Submit valid data in configure_serial_port
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={SZ_SERIAL_PORT: {}},
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY

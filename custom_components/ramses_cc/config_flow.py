@@ -303,9 +303,9 @@ class BaseRamsesFlow(FlowHandler):
                 if not errors:
                     _LOGGER.debug(f"DEBUG: Final config = {config}")
                     self.options[SZ_SERIAL_PORT] = config
-                if self._initial_setup:
-                    return await self.async_step_config()
-                return self._async_save()
+                    if self._initial_setup:
+                        return await self.async_step_config()
+                    return self._async_save()
         else:
             suggested_values = {
                 SZ_PORT_NAME: self.options[SZ_SERIAL_PORT].get(SZ_PORT_NAME),
