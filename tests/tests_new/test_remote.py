@@ -7,6 +7,7 @@ and fan parameter coordination in remote.py.
 from __future__ import annotations
 
 import asyncio
+import contextlib  # Add this import at the top of the file
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -144,10 +145,11 @@ async def test_remote_learn_command_success(
     )
     remote.hass = hass
 
-    # Prepare real data dictionary
+    # Prepare the payload dictionary
     learn_payload = {"src": REM_ID, "code": "22F1", "packet": "learned_pkt_123"}
-    mock_event = MagicMock()
-    mock_event.data = learn_payload
+
+    # We no longer need to wrap this in a MagicMock() representing an Event
+    # because the filter now takes the dict directly.
 
     # Patch async_listen on the bus instance specifically for this test
     # instead of using patch.object which fails on read-only attributes.
@@ -164,10 +166,52 @@ async def test_remote_learn_command_success(
         _, listener, event_filter = mock_listen.call_args[0]
 
         # Simulate a bus event matching the criteria
-        if event_filter(mock_event):
+        # Pass the payload directly to the filter and listener
+        if event_filter(learn_payload):  # Pass dict directly
+            # The listener still expects an Event object with a .data attr
+            mock_event = MagicMock()
+            mock_event.data = learn_payload
             listener(mock_event)
 
         await task
 
     # Verify command was captured as a string
     assert remote._commands.get("test_cmd") == "learned_pkt_123"
+
+
+async def test_remote_learn_filter_logic(
+    mock_broker: MagicMock, mock_remote_device: MagicMock
+) -> None:
+    """Thoroughly test the event_filter logic for various packet scenarios.
+
+    This ensures the filter only allows specific HVAC codes from the correct source.
+    """
+    remote = RamsesRemote(
+        mock_broker, mock_remote_device, RamsesRemoteEntityDescription()
+    )
+
+    # We use a patch to capture the event_filter function from inside async_learn_command
+    with patch("homeassistant.core.EventBus.async_listen") as mock_listen:
+        # Start learning task briefly to register the listener
+        task = asyncio.create_task(remote.async_learn_command("test_cmd", timeout=1))
+        await asyncio.sleep(0.1)
+
+        # Capture the filter from the async_listen call
+        _, _, event_filter = mock_listen.call_args[0]
+
+        # 1. Valid packet (HVAC code 22F1 from correct source)
+        valid_data = {"src": REM_ID, "code": "22F1"}
+        assert event_filter(valid_data) is True
+
+        # 2. Invalid Source
+        wrong_src = {"src": "99:999999", "code": "22F1"}
+        assert event_filter(wrong_src) is False
+
+        # 3. Invalid Code (e.g., a temperature code 30C9)
+        wrong_code = {"src": REM_ID, "code": "30C9"}
+        assert event_filter(wrong_code) is False
+
+        # Clean up the task using contextlib.suppress to ignore the CancelledError
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task

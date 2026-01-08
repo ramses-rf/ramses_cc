@@ -144,14 +144,21 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             await self.async_delete_command(command)
 
         @callback
-        def event_filter(event: Event) -> bool:
-            """Return True if the listener callable should run."""
+        def event_filter(event_data: dict[str, Any]) -> bool:
+            """Return True if the listener callable should run.
+            :param event_data: The data payload of the event (dict).
+            :return: True if the event matches the filter.
+            """
+
             codes = ("22F1", "22F3", "22F7")
-            return event.data["src"] == self._device.id and event.data["code"] in codes
+            return event_data["src"] == self._device.id and event_data["code"] in codes
 
         @callback
         def listener(event: Event) -> None:
-            """Save the command to storage."""
+            """Save the command to storage.
+
+            :param event: The event object.
+            """
             # if event.data["packet"] in self._commands.values():  # TODO
             #     raise DuplicateError
             self._commands[command[0]] = event.data["packet"]
