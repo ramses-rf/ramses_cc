@@ -1,16 +1,34 @@
 {
     "config": {
         "abort": {
-            "single_instance_allowed": "Ramses RF is al geconfigureerd. Slechts één configuratie wordt ondersteund."
+            "single_instance_allowed": "Ramses RF is al geconfigureerd. Slechts één configuratie wordt ondersteund.",
+            "mqtt_not_setup": "De MQTT integratie is niet ingesteld in Home Assistant."
         },
         "error": {
             "invalid_gateway_config": "Ongeldige ramses_rf configuratie: {error_detail}",
             "invalid_port_config": "Ongeldige seriële-poortconfiguratie: {error_detail}",
             "invalid_regex": "Ongeldige reguliere expressie: {error_detail}",
             "invalid_schema": "Ongeldig schema: {error_detail}",
-            "invalid_traits": "Ongeldige device-kenmerken: {error_detail}"
+            "invalid_traits": "Ongeldige device-kenmerken: {error_detail}",
+            "mqtt_not_setup": "De officiële MQTT integratie is niet ingesteld in Home Assistant. Configureer deze eerst."
         },
         "step": {
+            "user": {
+                "title": "Selecteer Verbindingsmethode",
+                "menu_options": {
+                    "serial": "USB / Seriële Stick (HGI80/Evofw3)",
+                    "mqtt_ha": "Home Assistant MQTT (Aanbevolen)",
+                    "mqtt_direct": "Directe MQTT (Legacy/Paho)"
+                }
+            },
+            "menu": {
+                "title": "Selecteer Verbindingsmethode",
+                "menu_options": {
+                    "serial": "USB / Seriële Stick (HGI80/Evofw3)",
+                    "mqtt_ha": "Home Assistant MQTT (Aanbevolen)",
+                    "mqtt_direct": "Directe MQTT (Legacy/Paho)"
+                }
+            },
             "init": {
                 "menu_options": {
                     "choose_serial_port": "Seriële poort",
@@ -27,6 +45,13 @@
                     "port_name": "Pad naar seriële poort"
                 }
             },
+            "mqtt_ha": {
+                "title": "Home Assistant MQTT",
+                "description": "Dit gebruikt de MQTT-broker die al in Home Assistant is geconfigureerd.\n\nZorg ervoor dat je apparaat publiceert naar het onderstaande onderwerp.",
+                "data": {
+                    "mqtt_topic": "Onderwerp Root (bijv. RAMSES/GATEWAY)"
+                }
+            },
             "mqtt_config": {
                 "title": "MQTT-configuratie",
                 "description": "Vul de verbindingsgegevens van je MQTT-broker in.",
@@ -38,10 +63,10 @@
                 }
             },
             "configure_serial_port": {
-                "title": "Seriële-poortinstellingen",
+                "title": "Seriële-poortconfiguratie",
                 "data": {
                     "port_name": "Pad naar serieel apparaat",
-                    "serial_port": "Geavanceerde instellingen seriële poort"
+                    "serial_port": "Geavanceerde seriële-poortconfiguratie"
                 },
                 "data_description": {
                     "port_name": "Bijv. '/dev/cu.modem2', 'COM6' (Windows) of 'mqtt://user:pwd@homeassistant.local:1883'",
@@ -52,18 +77,18 @@
                 "title": "Gateway-configuratie",
                 "data": {
                     "scan_interval": "Scan-interval",
-                    "ramses_rf": "Geavanceerde instellingen ramses_rf gateway"
+                    "ramses_rf": "Geavanceerde ramses_rf gateway-configuratie"
                 },
                 "data_description": {
-                    "scan_interval": "Hoe vaak opvragen (pollen) voor wijzigingen? Advies: waarde tussen 60 en 180 s.",
+                    "scan_interval": "Hoe vaak opvragen (pollen) voor wijzigingen? Advies: waarde tussen 60 en 180s.",
                     "ramses_rf": "Voor standaardgebruik niet vereist."
                 }
             },
             "schema": {
-                "title": "Systeemschema en erkende devices",
+                "title": "Systeemschema en erkende apparaten",
                 "description": "Zie voor meer info en voorbeelden de [wiki](https://github.com/zxdavb/ramses_cc/wiki/) onder het kopje Configuration.",
                 "data": {
-                    "schema": "Systeemschema(s)",
+                    "schema": "Systeemschema('s)",
                     "known_list": "Erkende device_id's",
                     "enforce_known_list": "Accepteer alleen berichten van erkende device ID's",
                     "log_all_mqtt": "Log alle MQTT-topics",
@@ -97,98 +122,6 @@
                 },
                 "data_description": {
                     "file_name": "Pad naar het packet-logbestand. Bewaarde backups krijgen deze bestandsnaam + een achtervoegsel."
-                }
-            }
-        }
-    },
-    "options": {
-        "abort": {
-            "cache_cleared": "Cache gewist."
-        },
-        "error": {
-            "invalid_gateway_config": "Ongeldige ramses_rf configuratie: {error_detail}",
-          "invalid_port_config": "Ongeldige seriële poort-configuratie: {error_detail}",
-            "invalid_regex": "Ongeldige reguliere expressie: {error_detail}",
-            "invalid_schema": "Ongeldig schema: {error_detail}",
-            "invalid_traits": "Ongeldige device-kenmerken: {error_detail}"
-        },
-        "step": {
-            "init": {
-                "menu_options": {
-                    "choose_serial_port": "Seriële poort",
-                    "config": "Gateway-configuratie",
-                    "schema": "Systeemschema en erkende devices",
-                    "advanced_features": "Geavanceerde opties",
-                    "packet_log": "Packet-log",
-                    "clear_cache": "Cache beheren"
-                }
-            },
-            "choose_serial_port": {
-                "title": "Selecteer de seriële poort",
-                "data": {
-                    "port_name": "Pad naar serieel apparaat"
-                }
-            },
-            "configure_serial_port": {
-                "title": "Seriële-poortconfiguratie",
-                "data": {
-                    "port_name": "Pad naar serieel apparaat",
-                    "serial_port": "Geavanceerde seriële-poortconfiguratie"
-                },
-                "data_description": {
-                    "port_name": "Bijv. '/dev/cu.modem2', 'COM6' of 'mqtt://user:pwd@homeassistant.local:1883'",
-                    "serial_port": "Voor standaardgebruik niet vereist, behalve voor nanoCUL: 'baudrate: 57600'"
-                }
-            },
-            "config": {
-                "title": "Gateway-configuratie",
-                "data": {
-                    "scan_interval": "Scan-interval",
-                    "ramses_rf": "Geavanceerde ramses_rf gateway-configuratie"
-                },
-                "data_description": {
-                    "scan_interval": "Hoe vaak opvragen (pollen) voor wijzigingen? Advies: waarde tussen 60 en 180s.",
-                    "ramses_rf": "Voor standaardgebruik niet vereist."
-                }
-            },
-            "schema": {
-                "title": "Systeemschema en erkende apparaten",
-                "description": "Zie voor meer info en voorbeelden de [wiki](https://github.com/zxdavb/ramses_cc/wiki/) onder het kopje Configuration.",
-                "data": {
-                    "schema": "Systeemschema('s)",
-                    "known_list": "Erkende device_id's",
-                    "enforce_known_list": "Accepteer alleen berichten van erkende device ID's",
-                    "log_all_mqtt": "Log alle MQTT-topics",
-                    "sqlite_index": "Gebruik SQLite MessageIndex"
-                },
-                "data_description": {
-                    "schema": "Een mapping van systeem device-ID's naar hun schema's. Houd dit eenvoudig en vermeld alleen devices die niet automatisch verschijnen.",
-                    "known_list": "Een mapping van erkende device-ID's en (optioneel) hun kenmerken.",
-                    "enforce_known_list": "Aanbevolen zodra alle device-ID's zijn ingevuld, omdat het RAMSES II-protocol geen foutcorrectie biedt en corrupte device-ID's vaak voorkomen.",
-                    "log_all_mqtt": "Toon alle topics van de MQTT broker in de systeemconsole.",
-                    "sqlite_index": "In ontwikkeling! Kan berichten missen en fouten geven met Evohome. (herstart vereist)"
-                }
-            },
-            "advanced_features": {
-                "title": "Geavanceerde opties",
-                "data": {
-                    "send_packet": "Schakel send_packet service in om maatwerk-berichten te versturen",
-                    "message_events": "Stuur events voor berichten die voldoen aan een reguliere expressie"
-                },
-                "data_description": {
-                    "message_events": "Vul een reguliere expressie in waar berichten aan moeten voldoen, bijv. `RP.* 10:` zal events sturen voor alle berichten van een OTB."
-                }
-            },
-            "packet_log": {
-                "title": "Berichten-logboek",
-                "description": "Optioneel berichten-logbestand voor oplossen van problemen en ontwikkeling van de integratie.",
-                "data": {
-                    "file_name": "Bestandsnaam berichten-logbestanden",
-                    "rotate_bytes": "Maximumgrootte van elk berichten-logbestanden",
-                    "rotate_backups": "Aantal te bewaren berichten-logbestanden"
-                },
-                "data_description": {
-                    "file_name": "Pad naar het berichten-logbestand. Bewaarde backups gebruiken deze naam + een achtervoegsel."
                 }
             },
             "clear_cache": {

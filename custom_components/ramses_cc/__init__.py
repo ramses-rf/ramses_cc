@@ -19,40 +19,97 @@ import sys
 # If a local copy of ramses_rf exists, use it instead of the system installed version.
 # This allows for testing changes without rebuilding the container.
 
-ENABLE_DEV_HOOK = False  # Set to true to enable the dev hook
-DEV_LIB_PATH = "/config/deps/ramses_rf/src"
+ENABLE_DEV_HOOK = True  # Set to true to enable the dev hook
+DEV_LIB_PATH = "/config/dev_lib/"
 
-if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):  # pragma: no cover
-    # Insert at index 0 so it takes precedence over system libraries
-    sys.path.insert(0, DEV_LIB_PATH)
+if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):
+    # 1. Insert local path at the top of sys.path at index 0
+    #    This ensures any FUTURE imports find the local version first.
+    if DEV_LIB_PATH not in sys.path:
+        sys.path.insert(0, DEV_LIB_PATH)
 
+        logging.getLogger(__name__).warning(
+            "SECURITY WARNING: 'ramses_rf' is being loaded from a local development path: %s. "
+            "Do not use this in a production environment unless you understand the risks.",
+            DEV_LIB_PATH,
+        )
+
+    # 2. NUCLEAR OPTION: Identify modules that were ALREADY loaded by the system
+    #    (e.g. by config_flow.py loading before this file)
+    modules_to_unload = [
+        m
+        for m in sys.modules
+        if m.startswith("ramses_rf")
+        or m.startswith("ramses_tx")
+        or m.startswith("ramses_cli")
+    ]
+
+    # 3. Force unload them
+    for module_name in modules_to_unload:
+        del sys.modules[module_name]
+
+    # 4. Log the intervention
+    if modules_to_unload:
+        module_names_str = ", ".join(modules_to_unload)
+        logging.getLogger(__name__).warning(
+            "DEV HOOK: Unloaded %d system modules to force local reload from %s: %s",
+            len(modules_to_unload),
+            DEV_LIB_PATH,
+            module_names_str,
+        )
+    else:
+        logging.getLogger(__name__).warning(
+            "DEV HOOK: Loaded directly from %s (No system modules needed unloading).",
+            DEV_LIB_PATH,
+        )
+elif ENABLE_DEV_HOOK:
     logging.getLogger(__name__).warning(
-        "SECURITY WARNING: 'ramses_rf' is being loaded from a local development path: %s. "
-        "Do not use this in a production environment unless you understand the risks.",
+        "Development hook is enabled but development library path does not exist: %s",
         DEV_LIB_PATH,
     )
+
+# --- END DEVELOPMENT HOOK ---
 # ------------------------
 
+
+import inspect
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
 import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant import config_entries
-from homeassistant.components.climate import DOMAIN as CLIMATE_ENTITY_DOMAIN
-from homeassistant.components.number import DOMAIN as NUMBER_ENTITY_DOMAIN
-from homeassistant.components.remote import DOMAIN as REMOTE_ENTITY_DOMAIN
-from homeassistant.components.sensor import DOMAIN as SENSOR_ENTITY_DOMAIN
-from homeassistant.components.water_heater import DOMAIN as WATERHEATER_ENTITY_DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv, service
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.service import verify_domain_control
 from homeassistant.helpers.typing import ConfigType
+
+# Compatibility Shim for verify_domain_control
+# Old signature: (hass, domain)
+# New signature: (domain)
+# We inspect the signature to decide how to call it.
+try:
+    _sig = inspect.signature(verify_domain_control)
+    if "hass" in _sig.parameters:
+        # Old style
+        def verify_domain_control_compat(hass: HomeAssistant, domain: str) -> Any:
+            return verify_domain_control(hass, domain)
+    else:
+        # New style
+        def verify_domain_control_compat(hass: HomeAssistant, domain: str) -> Any:
+            return verify_domain_control(domain)
+except Exception:
+    # Fallback to safe default (likely old style if inspection fails)
+    def verify_domain_control_compat(hass: HomeAssistant, domain: str) -> Any:
+        return verify_domain_control(hass, domain)
+
+
+from homeassistant.helpers import service
 
 from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_tx import exceptions as exc
@@ -68,13 +125,17 @@ from .const import (
 from .schemas import (
     SCH_BIND_DEVICE,
     SCH_DOMAIN_CONFIG,
+    SCH_GET_FAN_PARAM_DOMAIN,
     SCH_NO_SVC_PARAMS,
     SCH_SEND_PACKET,
     SCH_SET_FAN_PARAM_DOMAIN,
+    SCH_UPDATE_FAN_PARAMS_DOMAIN,
     SVC_BIND_DEVICE,
     SVC_FORCE_UPDATE,
+    SVC_GET_FAN_PARAM,
     SVC_SEND_PACKET,
     SVC_SET_FAN_PARAM,
+    SVC_UPDATE_FAN_PARAMS,
     SVCS_RAMSES_CLIMATE,
     SVCS_RAMSES_NUMBER,
     SVCS_RAMSES_REMOTE,
@@ -121,11 +182,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # register all platform services during async_setup, since 2025.10, see
     # https://developers.home-assistant.io/blog/2025/09/25/entity-services-api-changes
     for entity_domain, services in (
-        (CLIMATE_ENTITY_DOMAIN, SVCS_RAMSES_CLIMATE),
-        (REMOTE_ENTITY_DOMAIN, SVCS_RAMSES_REMOTE),
-        (SENSOR_ENTITY_DOMAIN, SVCS_RAMSES_SENSOR),
-        (WATERHEATER_ENTITY_DOMAIN, SVCS_RAMSES_WATER_HEATER),
-        (NUMBER_ENTITY_DOMAIN, SVCS_RAMSES_NUMBER),
+        (Platform.CLIMATE, SVCS_RAMSES_CLIMATE),
+        (Platform.REMOTE, SVCS_RAMSES_REMOTE),
+        (Platform.SENSOR, SVCS_RAMSES_SENSOR),
+        (Platform.WATER_HEATER, SVCS_RAMSES_WATER_HEATER),
+        (Platform.NUMBER, SVCS_RAMSES_NUMBER),
     ):
         for key, schema in services.items():
             _LOGGER.debug(
@@ -134,14 +195,23 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 key,
                 schema,
             )
-            service.async_register_platform_entity_service(
-                hass,
-                DOMAIN,
-                key,
-                entity_domain=entity_domain,
-                schema=schema,
-                func=f"async_{key}",
-            )
+            try:
+                service.async_register_platform_entity_service(
+                    hass,
+                    DOMAIN,
+                    key,
+                    entity_domain=entity_domain,
+                    schema=schema,
+                    func=f"async_{key}",
+                )
+            except AttributeError:
+                _LOGGER.warning(
+                    "Registering %s entity service %s failed: "
+                    "async_register_platform_entity_service not found. "
+                    "(This method may require Home Assistant 2025.10+)",
+                    entity_domain,
+                    key,
+                )
 
     return True
 
@@ -257,33 +327,29 @@ def async_register_domain_services(
 ) -> None:
     """Set up the handlers for the domain-wide services."""
 
-    @verify_domain_control(DOMAIN)  # TODO: is a work in progress
+    @verify_domain_control_compat(hass, DOMAIN)
     async def async_bind_device(call: ServiceCall) -> None:
         await broker.async_bind_device(call)
 
-    @verify_domain_control(DOMAIN)
+    @verify_domain_control_compat(hass, DOMAIN)
     async def async_force_update(call: ServiceCall) -> None:
         await broker.async_force_update(call)
 
-    @verify_domain_control(DOMAIN)
+    @verify_domain_control_compat(hass, DOMAIN)
     async def async_send_packet(call: ServiceCall) -> None:
         await broker.async_send_packet(call)
 
-    @verify_domain_control(DOMAIN)
+    @verify_domain_control_compat(hass, DOMAIN)
     async def async_set_fan_param(call: ServiceCall) -> None:
         await broker.async_set_fan_param(call)
 
-    # @verify_domain_control(DOMAIN)
-    # async def async_get_fan_param(call: ServiceCall) -> None:
-    #     await broker.async_get_fan_param(call)
-    #
-    # @verify_domain_control(DOMAIN)
-    # async def async_set_fan_param(call: ServiceCall) -> None:
-    #     await broker.async_set_fan_param(call)
-    #
-    # @verify_domain_control(DOMAIN)
-    # async def async_update_fan_params(call: ServiceCall) -> None:
-    #     await broker._async_run_fan_param_sequence(call)
+    @verify_domain_control_compat(hass, DOMAIN)
+    async def async_get_fan_param(call: ServiceCall) -> None:
+        await broker.async_get_fan_param(call)
+
+    @verify_domain_control_compat(hass, DOMAIN)
+    async def async_update_fan_params(call: ServiceCall) -> None:
+        await broker._async_run_fan_param_sequence(call)
 
     hass.services.async_register(
         DOMAIN, SVC_BIND_DEVICE, async_bind_device, schema=SCH_BIND_DEVICE
@@ -297,18 +363,15 @@ def async_register_domain_services(
     )
 
     # general access fan_param services for code
-    # hass.services.async_register(
-    #     DOMAIN, SVC_GET_FAN_PARAM, async_get_fan_param, schema=SCH_GET_FAN_PARAM_DOMAIN
-    # )
-    # hass.services.async_register(
-    #     DOMAIN, SVC_SET_FAN_PARAM, async_set_fan_param, schema=SCH_SET_FAN_PARAM_DOMAIN
-    # )
-    # hass.services.async_register(
-    #     DOMAIN,
-    #     SVC_UPDATE_FAN_PARAMS,
-    #     async_update_fan_params,
-    #     schema=SCH_UPDATE_FAN_PARAMS_DOMAIN,
-    # )
+    hass.services.async_register(
+        DOMAIN, SVC_GET_FAN_PARAM, async_get_fan_param, schema=SCH_GET_FAN_PARAM_DOMAIN
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SVC_UPDATE_FAN_PARAMS,
+        async_update_fan_params,
+        schema=SCH_UPDATE_FAN_PARAMS_DOMAIN,
+    )
 
     # Advanced features
     if entry.options.get(CONF_ADVANCED_FEATURES, {}).get(CONF_SEND_PACKET):

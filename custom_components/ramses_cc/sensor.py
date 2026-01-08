@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from types import UnionType
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -235,10 +234,10 @@ class RamsesSensorEntityDescription(RamsesEntityDescription, SensorEntityDescrip
     state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT
 
     # integration-specific attributes
+    ramses_rf_attr: str
     ramses_cc_class: type[RamsesSensor] = RamsesSensor
     ramses_cc_icon_off: str | None = None  # no SensorEntityDescription.icon_off attr
-    ramses_rf_attr: str
-    ramses_rf_class: type[RamsesRFEntity] | UnionType = RamsesRFEntity
+    ramses_rf_class: type[RamsesRFEntity] | Any = RamsesRFEntity
 
 
 SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (

@@ -1,4 +1,10 @@
-"""Constants for RAMSES integration."""
+"""
+Constants for RAMSES integration.
+
+This module defines global constants, configuration keys, dispatcher signals,
+entity attributes, and enumeration classes used throughout the RAMSES_CC integration.
+It serves as a central repository for static string definitions and operational modes.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +25,9 @@ CONF_ADVANCED_FEATURES: Final = "advanced_features"
 CONF_COMMANDS: Final = "commands"
 CONF_DEV_MODE: Final = "dev_mode"
 CONF_MESSAGE_EVENTS: Final = "message_events"
+CONF_MQTT_TOPIC = "RAMSES/GATEWAY"
+CONF_MQTT_USE_HA = "mqtt_use_ha"
+CONF_PACKET_SOURCE = "packet_source"
 CONF_RAMSES_RF: Final = "ramses_rf"
 CONF_SCHEMA: Final = "schema"
 CONF_SEND_PACKET: Final = "send_packet"
@@ -76,14 +85,24 @@ PRESET_PERMANENT: Final = "permanent"
 
 # Volume Flow Rate units, these specific unit are not defined in HA v2024.1
 class UnitOfVolumeFlowRate(StrEnum):
-    """Volume flow rate units (defined by integration)."""
+    """
+    Volume flow rate units defined by the integration.
+
+    These units are used to represent flow rates within the RAMSES system
+    where standard Home Assistant definitions may be missing or insufficient.
+    """
 
     LITERS_PER_MINUTE: Final = "L/min"
     LITERS_PER_SECOND: Final = "L/s"
 
 
 class SystemMode(StrEnum):
-    """System modes."""
+    """
+    Enumeration of available system-wide operating modes.
+
+    These modes represent the global state of the central controller, affecting
+    how schedules and demands are processed across the entire system.
+    """
 
     AUTO: Final = "auto"
     AWAY: Final = "away"
@@ -96,7 +115,12 @@ class SystemMode(StrEnum):
 
 
 class ZoneMode(StrEnum):
-    """Zone modes."""
+    """
+    Enumeration of available zone-specific operating modes.
+
+    These modes represent the state of individual heating zones, defining
+    overrides or adherence to programmed schedules.
+    """
 
     SCHEDULE: Final = "follow_schedule"
     ADVANCED: Final = "advanced_override"  # until the next setpoint
