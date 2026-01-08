@@ -7,7 +7,7 @@ from typing import Any, Final
 from unittest.mock import patch
 
 import pytest
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
@@ -192,3 +192,41 @@ async def test_services_import(
         # await _test_names(hass, entry, rf)
     finally:
         assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@patch("custom_components.ramses_cc.broker._CALL_LATER_DELAY", 0)
+async def test_startup_with_unbound_fan(hass: HomeAssistant, rf: VirtualRf) -> None:
+    """Test that the integration starts up correctly with an unbound fan.
+
+    This verifies that the configuration schema accepts 'bound: None'
+    and that the integration loads successfully.
+    """
+
+    # Define a config with a Fan explicitly set to bound: None
+    config = {
+        "serial_port": {"port_name": rf.ports[0]},
+        "ramses_rf": {"disable_discovery": True},
+        "known_list": {
+            "30:123456": {  # A Fan Device
+                "class": "FAN",
+                "bound": None,  # <--- The unbind value
+            }
+        },
+    }
+
+    # 1. Setup the integration with this config
+    # If the schema rejected None, this would fail.
+    assert await async_setup_component(hass, DOMAIN, {DOMAIN: config})
+    await hass.async_block_till_done()
+
+    # 2. Verify the entry is loaded
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+    assert entries[0].state == ConfigEntryState.LOADED
+
+    # 3. Verify the broker exists (Proof of life)
+    broker = hass.data[DOMAIN][entries[0].entry_id]
+
+    # Create a list of IDs strings from the objects, then check that list
+    device_ids = [d.id for d in broker._devices]
+    assert "18:006402" in device_ids  # The Gateway should be present

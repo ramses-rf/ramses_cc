@@ -52,6 +52,16 @@ TEST_CONFIGS = {
         "ramses_rf": {"disable_discovery": True},
         "packet_log": {"file_name": "packet.log", "rotate_backups": 7},
     },
+    "config_fan_unbind": {
+        "serial_port": {"port_name": None},
+        "ramses_rf": {"disable_discovery": True},
+        "known_list": {
+            "30:123456": {  # A Fan Device
+                "class": "FAN",
+                "bound": None,  # <--- This is what your PR allows
+            }
+        },
+    },
 }
 
 

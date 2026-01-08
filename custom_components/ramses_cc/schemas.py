@@ -27,6 +27,7 @@ from ramses_rf.schemas import (
     SZ_SYSTEM,
     SZ_ZONES,
 )
+from ramses_tx import SZ_BOUND_TO
 from ramses_tx.const import COMMAND_REGEX
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
@@ -100,6 +101,7 @@ SCH_ADVANCED_FEATURES = vol.Schema(
 
 # Define the traits for FAN devices
 FAN_TRAITS = {
+    vol.Optional(SZ_BOUND_TO): vol.Any(None, _SCH_DEVICE_ID),
     vol.Optional(CONF_COMMANDS): dict,
 }
 
