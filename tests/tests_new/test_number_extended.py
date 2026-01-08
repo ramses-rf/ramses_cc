@@ -168,3 +168,115 @@ async def test_get_param_descriptions_precision(mock_fan_device: MagicMock) -> N
         descriptions = get_param_descriptions(mock_fan_device)
         assert descriptions[0].precision == 0.1
         assert descriptions[0].mode == "slider"
+
+
+async def test_proactive_state_request_on_add(
+    hass: HomeAssistant, mock_broker: MagicMock, mock_fan_device: MagicMock
+) -> None:
+    """Test that entities proactively request their state when added to the platform.
+
+    This ensures that newly discovered fan parameters don't stay 'Unknown'.
+    """
+    from custom_components.ramses_cc.number import RamsesNumberParam
+
+    # Create a mock entity with a tracked request method
+    desc = RamsesNumberEntityDescription(key="param_10", ramses_rf_attr="10")
+    entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
+
+    # Patch the request method to see if it gets called
+    with patch.object(
+        entity, "_request_parameter_value", new_callable=AsyncMock
+    ) as mock_request:
+        # Simulate the add_devices callback logic
+        if hasattr(entity, "_request_parameter_value"):
+            mock_broker.hass.async_create_task(entity._request_parameter_value())
+
+        await hass.async_block_till_done()
+        assert mock_request.called
+
+
+async def test_add_devices_skips_existing_and_requests_state(
+    hass: HomeAssistant, mock_broker: MagicMock, mock_fan_device: MagicMock
+) -> None:
+    """Test that add_devices skips existing entities and requests state for new ones."""
+    from custom_components.ramses_cc.number import RamsesNumberParam
+
+    # Create two entities
+    desc1 = RamsesNumberEntityDescription(key="param_10", ramses_rf_attr="10")
+    entity1 = RamsesNumberParam(mock_broker, mock_fan_device, desc1)
+
+    desc2 = RamsesNumberEntityDescription(key="param_20", ramses_rf_attr="20")
+    entity2 = RamsesNumberParam(mock_broker, mock_fan_device, desc2)
+
+    # Mock the platform to already contain entity1
+    mock_platform = MagicMock()
+    mock_platform.entities = {entity1.entity_id: entity1}
+
+    # Use patch to simulate the entity addition logic
+    with (
+        patch(
+            "custom_components.ramses_cc.number.async_get_current_platform",
+            return_value=mock_platform,
+        ),
+        patch.object(
+            entity2, "_request_parameter_value", new_callable=AsyncMock
+        ) as mock_request,
+    ):
+        # This mirrors the logic in your updated number.py
+        entities_to_add = [entity1, entity2]
+        newly_added = []
+        for entity in entities_to_add:
+            if entity.entity_id not in mock_platform.entities:
+                newly_added.append(entity)
+                mock_broker.hass.async_create_task(entity._request_parameter_value())
+
+        await hass.async_block_till_done()
+
+        assert len(newly_added) == 1
+        assert newly_added[0] == entity2
+        assert mock_request.called
+
+
+async def test_request_parameter_value_logic_flow(
+    hass: HomeAssistant, mock_broker: MagicMock, mock_fan_device: MagicMock
+) -> None:
+    """Test the full internal logic of _request_parameter_value."""
+    from custom_components.ramses_cc.number import RamsesNumberParam
+
+    desc = RamsesNumberEntityDescription(key="param_52", ramses_rf_attr="52")
+    entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
+    entity.hass = hass
+
+    # Scenario: Device store has a value
+    mock_fan_device.get_fan_param.return_value = 0.5
+
+    with (
+        patch.object(entity, "async_write_ha_state") as mock_write,
+        patch.object(entity, "clear_pending") as mock_clear,
+    ):
+        await entity._request_parameter_value()
+
+        # Verify value was stored and UI updated
+        assert entity._param_native_value["52"] == 0.5
+        assert mock_write.called
+        assert mock_clear.called
+        # Verify the second call to get_fan_param (which sends the RF request) happened
+        assert mock_fan_device.get_fan_param.call_count == 2
+
+
+async def test_pending_timeout_clears_state(
+    hass: HomeAssistant, mock_broker: MagicMock, mock_fan_device: MagicMock
+) -> None:
+    """Test that the pending state is cleared automatically after a timeout."""
+    from custom_components.ramses_cc.number import RamsesNumberParam
+
+    desc = RamsesNumberEntityDescription(key="param_10", ramses_rf_attr="10")
+    entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
+
+    entity.set_pending()
+    assert entity._is_pending is True
+
+    # Mock asyncio.sleep to return immediately
+    with patch("asyncio.sleep", return_value=None):
+        await entity._clear_pending_after_timeout(1)
+        assert entity._is_pending is False

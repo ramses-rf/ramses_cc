@@ -153,6 +153,11 @@ async def async_setup_entry(
             if entities_to_add:
                 _LOGGER.debug("Adding %d new entities directly", len(entities_to_add))
                 async_add_entities(entities_to_add)
+
+                # Request values for these entities too
+                for entity in entities_to_add:
+                    if hasattr(entity, "_request_parameter_value"):
+                        broker.hass.async_create_task(entity._request_parameter_value())
             return
 
         # Otherwise, process as devices and create entities
