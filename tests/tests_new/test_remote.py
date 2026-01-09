@@ -239,6 +239,41 @@ async def test_remote_learn_filter_logic(
             await task
 
 
+async def test_remote_learn_cleanup_on_timeout(
+    hass: HomeAssistant, mock_broker: MagicMock, mock_remote_device: MagicMock
+) -> None:
+    """Test that the event listener is removed even if learning times out.
+
+    This targets the cleanup logic (try...finally) in async_learn_command.
+
+    :param hass: The Home Assistant instance.
+    :param mock_broker: The mock broker fixture.
+    :param mock_remote_device: The mock remote device fixture.
+    """
+    remote = RamsesRemote(
+        mock_broker, mock_remote_device, RamsesRemoteEntityDescription()
+    )
+    remote.hass = hass
+
+    # Mock the unsubscribe callback returned by async_listen
+    mock_unsubscribe = MagicMock()
+
+    with patch(
+        "homeassistant.core.EventBus.async_listen", return_value=mock_unsubscribe
+    ):
+        # Run learn command with a very short timeout
+        await remote.async_learn_command("timeout_cmd", timeout=0.01)
+
+    # Assert that the unsubscribe callback was called
+    mock_unsubscribe.assert_called_once()
+
+    # Verify that the command was NOT added
+    assert "timeout_cmd" not in remote._commands
+
+    # Verify broker state was reset
+    assert mock_broker.learn_device_id is None
+
+
 async def test_fan_param_methods(
     hass: HomeAssistant,
     caplog: pytest.LogCaptureFixture,

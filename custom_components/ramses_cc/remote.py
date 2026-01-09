@@ -6,7 +6,6 @@ import asyncio
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime as dt, timedelta
 from typing import Any
 
 from homeassistant.components.remote import (
@@ -143,9 +142,13 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         if command[0] in self._commands:
             await self.async_delete_command(command)
 
+        # Event to signal when the command is received
+        learn_event = asyncio.Event()
+
         @callback
         def event_filter(event_data: dict[str, Any]) -> bool:
             """Return True if the listener callable should run.
+
             :param event_data: The data payload of the event (dict).
             :return: True if the event matches the filter.
             """
@@ -162,6 +165,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             # if event.data["packet"] in self._commands.values():  # TODO
             #     raise DuplicateError
             self._commands[command[0]] = event.data["packet"]
+            learn_event.set()
 
         with self._broker._sem:
             self._broker.learn_device_id = self._device.id
@@ -169,14 +173,17 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
                 f"{DOMAIN}_learn", listener, event_filter
             )
 
-            dt_expires = dt.now() + timedelta(seconds=timeout)
-            while dt.now() < dt_expires:
-                await asyncio.sleep(0.005)
-                if self._commands.get(command[0]):
-                    break
-
-            self._broker.learn_device_id = None
-            remove_listener()
+            try:
+                await asyncio.wait_for(learn_event.wait(), timeout=timeout)
+            except TimeoutError:
+                _LOGGER.warning(
+                    "Timeout (start=%s) waiting for command '%s'",
+                    timeout,
+                    command[0],
+                )
+            finally:
+                self._broker.learn_device_id = None
+                remove_listener()
 
     async def async_send_command(
         self,
