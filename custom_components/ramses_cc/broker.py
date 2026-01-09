@@ -810,19 +810,36 @@ class RamsesBroker:
 
         cmd = self.client.create_cmd(**kwargs)
 
-        # HACK: to fix the device_id when GWY announcing, will be:
-        #    I --- 18:000730 18:006402 --:------ 0008 002 00C3  # because src != dst
-        # ... should be:
-        #    I --- 18:000730 --:------ 18:006402 0008 002 00C3  # 18:730 is sentinel
-        if cmd.src.id == "18:000730" and cmd.dst.id == self.client.hgi.id:
-            try:
-                pkt_addrs(self.client.hgi.id + cmd._frame[16:37])
-            except PacketAddrSetInvalid:
-                cmd._addrs[1], cmd._addrs[2] = cmd._addrs[2], cmd._addrs[1]
-                cmd._repr = None
+        self._adjust_sentinel_packet(cmd)
 
         await self.client.async_send_cmd(cmd)
         async_call_later(self.hass, _CALL_LATER_DELAY, self.async_update)
+
+    def _adjust_sentinel_packet(self, cmd: Command) -> None:
+        """Fix address positioning for specific sentinel packets (18:000730).
+
+        This checks if the packet addresses are valid for the HGI gateway and
+        swaps address 1 and address 2 if necessary to ensure protocol compliance.
+
+        :param cmd: The command object to check and adjust
+        :type cmd: Command
+        """
+        # HACK: to fix the device_id when GWY announcing.
+        # Current: I --- 18:000730 18:006402 --:------ 0008 002 00C3
+        # Target:  I --- 18:000730 --:------ 18:006402 0008 002 00C3
+        if cmd.src.id != "18:000730" or cmd.dst.id != self.client.hgi.id:
+            return
+
+        try:
+            # Validate if the current address structure is acceptable
+            pkt_addrs(self.client.hgi.id + cmd._frame[16:37])
+        except PacketAddrSetInvalid:
+            # If invalid, swap addr1 and addr2 to correct the structure
+            cmd._addrs[1], cmd._addrs[2] = cmd._addrs[2], cmd._addrs[1]
+            cmd._repr = None  # Invalidate cached representation
+            _LOGGER.debug(
+                "Swapped addresses for sentinel packet 18:000730 to maintain protocol validity"
+            )
 
     # fan_param (2411) private and service methods.
     # Called from climate.py and remote.py as service @callback, or directly with dict (only)
