@@ -326,7 +326,10 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         if parent:
             kwargs[ATTR_DEVICE_ID] = parent
             kwargs["from_id"] = self._device.id  # replaces manual from_id entry
-            self._broker.get_all_fan_params(kwargs)
+            # Run synchronous I/O function in the executor to avoid blocking the loop
+            await self.hass.async_add_executor_job(
+                self._broker.get_all_fan_params, kwargs
+            )
         else:
             _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
 

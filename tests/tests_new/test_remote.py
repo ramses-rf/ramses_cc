@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -208,3 +209,68 @@ async def test_remote_learn_filter_logic(
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+
+
+async def test_fan_param_methods(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test fan parameter methods for bound and unbound scenarios (PR 1 verification)."""
+    entity_id = "remote.test_remote"
+    device_id = "12:123456"
+    fan_id = "18:654321"
+
+    # 1. Setup Mock Broker first
+    mock_broker = MagicMock()
+    mock_broker._fan_bound_to_remote = {device_id: fan_id}
+
+    mock_broker.async_get_fan_param = AsyncMock()
+    mock_broker.async_set_fan_param = AsyncMock()
+    mock_broker.get_all_fan_params = MagicMock()
+
+    # 2. Setup Remote Entity
+    mock_device = MagicMock()
+    mock_device.id = device_id
+    mock_device.unique_id = "unique_id"
+
+    remote = RamsesRemote(
+        mock_broker,
+        mock_device,
+        MagicMock(),
+    )
+    remote.entity_id = entity_id
+    remote.hass = hass
+
+    kwargs = {"key": "value"}
+
+    # --- Test 1: Async Get ---
+    await remote.async_get_fan_rem_param(**kwargs)
+    mock_broker.async_get_fan_param.assert_awaited()
+    call_args = mock_broker.async_get_fan_param.call_args[0][0]
+    assert call_args["device_id"] == fan_id
+
+    # --- Test 2: Async Set ---
+    await remote.async_set_fan_rem_param(**kwargs)
+    mock_broker.async_set_fan_param.assert_awaited()
+
+    # --- Test 3: Update Params  ---
+    # Create a completed Future to simulate the return value of async_add_executor_job
+    future: asyncio.Future[None] = asyncio.Future()
+    future.set_result(None)
+
+    with patch.object(hass, "async_add_executor_job", return_value=future) as mock_exec:
+        await remote.async_update_fan_rem_params(**kwargs)
+
+        # VERIFICATION: Check that async_add_executor_job was called with the sync method
+        expected_kwargs = {"key": "value", "device_id": fan_id, "from_id": device_id}
+        mock_exec.assert_called_with(mock_broker.get_all_fan_params, expected_kwargs)
+
+    # --- Test 4: Unbound Scenarios ---
+    mock_broker._fan_bound_to_remote = {}
+    mock_broker.get_all_fan_params.reset_mock()
+
+    with caplog.at_level(logging.WARNING):
+        await remote.async_update_fan_rem_params(**kwargs)
+
+    assert f"REM {device_id} not bound to a FAN" in caplog.text
+    mock_broker.get_all_fan_params.assert_not_called()
