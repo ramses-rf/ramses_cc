@@ -47,8 +47,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements/requirements_test.txt
-          # Force install ramses_rf PR #375 to pick up schema fix for transport_constructor
-          pip install --force-reinstall git+https://github.com/ramses-rf/ramses_rf.git@refs/pull/375/head
 
       - name: Test with pytest
         env:
