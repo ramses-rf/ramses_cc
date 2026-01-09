@@ -15,6 +15,7 @@ from homeassistant.components.climate import (
     HVACAction,
     HVACMode,
 )
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.ramses_cc.climate import (
     RamsesController,
@@ -203,6 +204,17 @@ async def test_zone_coverage(
     zone.async_set_zone_mode.assert_called_with(
         mode=ZoneMode.TEMPORARY, setpoint=21.0, duration=timedelta(hours=1), until=None
     )
+
+    # 5. Test async_fake_zone_temp
+    # Case: No sensor (should raise HomeAssistantError)
+    mock_device.sensor = None
+    with pytest.raises(HomeAssistantError):
+        zone.async_fake_zone_temp(20.0)
+
+    # Case: Sensor exists
+    mock_device.sensor = MagicMock()
+    zone.async_fake_zone_temp(21.0)
+    assert mock_device.sensor.temperature == 21.0
 
 
 async def test_hvac_coverage(

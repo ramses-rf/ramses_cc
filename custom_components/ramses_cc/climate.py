@@ -29,6 +29,7 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PRECISION_HALVES, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import (
     AddEntitiesCallback,
     EntityPlatform,
@@ -454,7 +455,9 @@ class RamsesZone(RamsesEntity, ClimateEntity):
     def async_fake_zone_temp(self, temperature: float) -> None:
         """Cast the room temperature of this zone (if faked)."""
         if self._device.sensor is None:
-            raise  # TODO
+            raise HomeAssistantError(
+                f"Zone {self.entity_id} has no sensor to fake temperature on."
+            )
 
         self._device.sensor.temperature = temperature  # would accept None
 
