@@ -169,24 +169,43 @@ class RamsesBroker:
                 _LOGGER.warning("Failed to initialise with merged schema: %s", err)
 
         if not self.client:
-            self.client = self._create_client(config_schema)
+            try:
+                self.client = self._create_client(config_schema)
+            except (ValueError, vol.Invalid) as err:
+                _LOGGER.error(
+                    "Critical error: Failed to initialise client with config schema: %s",
+                    err,
+                )
+                raise ValueError(f"Failed to initialise RAMSES client: {err}") from err
 
         def cached_packets() -> dict[str, str]:  # dtm_str, packet_as_str
             msg_code_filter = ["313F"]  # ? 1FC9
             _known_list = self.options.get(SZ_KNOWN_LIST, {})
-            return {
-                dtm: pkt
-                for dtm, pkt in client_state.get(SZ_PACKETS, {}).items()
-                if dt.fromisoformat(dtm) > dt.now() - timedelta(days=1)
-                and pkt[41:45] not in msg_code_filter
-                and (
-                    not self.options[CONF_RAMSES_RF].get(SZ_ENFORCE_KNOWN_LIST)
-                    or pkt[11:20] in _known_list
-                    or pkt[21:30] in _known_list
-                )
-                # prevent adding unknown messages when known list is enforced
-                # also add filter for block_list?
-            }
+
+            packets = {}
+            for dtm, pkt in client_state.get(SZ_PACKETS, {}).items():
+                try:
+                    dt_obj = dt.fromisoformat(dtm)
+                except ValueError:
+                    _LOGGER.warning(
+                        "Ignoring cached packet with invalid timestamp: %s", dtm
+                    )
+                    continue
+
+                if (
+                    dt_obj > dt.now() - timedelta(days=1)
+                    and pkt[41:45] not in msg_code_filter
+                    and (
+                        not self.options[CONF_RAMSES_RF].get(SZ_ENFORCE_KNOWN_LIST)
+                        or pkt[11:20] in _known_list
+                        or pkt[21:30] in _known_list
+                    )
+                    # prevent adding unknown messages when known list is enforced
+                    # also add filter for block_list?
+                ):
+                    packets[dtm] = pkt
+
+            return packets
 
         # NOTE: Warning: 'Detected blocking call to sleep inside the event loop'
         # - in pyserial: rfc2217.py, in Serial.open(): `time.sleep(0.05)`
