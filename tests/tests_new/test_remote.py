@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,6 +19,7 @@ from custom_components.ramses_cc.remote import (
     RamsesRemoteEntityDescription,
 )
 from ramses_tx.command import Command
+from ramses_tx.const import Priority
 
 # Constants
 REM_ID = "32:111111"
@@ -86,21 +88,64 @@ async def test_remote_command_db_management(
 async def test_remote_send_command_logic(
     mock_broker: MagicMock, mock_remote_device: MagicMock
 ) -> None:
-    """Test sending a stored command.
+    """Test sending a stored command using native QoS arguments.
 
-    This targets async_send_command and repeat logic.
+    This verifies that async_send_command delegates repeats to the client
+    rather than looping manually.
     """
     desc = RamsesRemoteEntityDescription()
     remote = RamsesRemote(mock_broker, mock_remote_device, desc)
     await remote.async_add_command("boost", VALID_PKT)
 
-    # Execute send with 2 repeats
-    await remote.async_send_command("boost", num_repeats=2, delay_secs=0.01)
+    # Execute send with 2 repeats and specific delay
+    # Note: 2 repeats means send once + repeat twice = 3 transmissions total in ramses_rf logic?
+    # Actually, num_repeats in async_send_cmd usually means "extra" sends.
+    # But here we just verify the arguments are passed through.
+    await remote.async_send_command("boost", num_repeats=2, delay_secs=0.05)
 
-    assert mock_broker.client.async_send_cmd.call_count == 2
-    assert mock_broker.async_update.called
-    sent_cmd = mock_broker.client.async_send_cmd.call_args[0][0]
+    # Expectation: Called ONCE, with QoS parameters passed in kwargs
+    assert mock_broker.client.async_send_cmd.call_count == 1
+
+    call_args = mock_broker.client.async_send_cmd.call_args
+    sent_cmd = call_args[0][0]
+    kwargs = call_args[1]
+
     assert isinstance(sent_cmd, Command)
+    assert kwargs["priority"] == Priority.HIGH
+    assert kwargs["num_repeats"] == 2
+    assert kwargs["gap_duration"] == 0.05  # delay_secs mapped to gap_duration
+
+    assert mock_broker.async_update.called
+
+
+async def test_remote_send_command_exception_handling(
+    caplog: pytest.LogCaptureFixture,
+    mock_broker: MagicMock,
+    mock_remote_device: MagicMock,
+) -> None:
+    """Test that exceptions during send do not bubble up and stop execution.
+
+    This ensures that even if ramses_rf raises a TimeoutError, async_update
+    is still called and the automation flow isn't aborted.
+    """
+    desc = RamsesRemoteEntityDescription()
+    remote = RamsesRemote(mock_broker, mock_remote_device, desc)
+    await remote.async_add_command("boost", VALID_PKT)
+
+    # Simulate a TimeoutError from the underlying client
+    mock_broker.client.async_send_cmd.side_effect = TimeoutError("Simulated Timeout")
+
+    # Capture logs to verify the warning
+    with caplog.at_level(logging.WARNING):
+        # This should NOT raise an exception
+        await remote.async_send_command("boost")
+
+    # Verify the exception was logged
+    assert "Error sending command" in caplog.text
+    assert "Simulated Timeout" in caplog.text
+
+    # Verify async_update was still called
+    mock_broker.async_update.assert_called_once()
 
 
 async def test_remote_fan_parameter_services(
@@ -131,15 +176,7 @@ async def test_remote_fan_parameter_services(
 async def test_remote_learn_command_success(
     hass: HomeAssistant, mock_broker: MagicMock, mock_remote_device: MagicMock
 ) -> None:
-    """Test the successful learning of a command via event bus listener.
-
-    This targets the async_learn_command loop and event listeners by patching
-    the bus listener registration.
-
-    :param hass: The Home Assistant instance.
-    :param mock_broker: The mock broker fixture.
-    :param mock_remote_device: The mock remote device fixture.
-    """
+    """Test the successful learning of a command via event bus listener."""
     remote = RamsesRemote(
         mock_broker, mock_remote_device, RamsesRemoteEntityDescription()
     )
@@ -157,10 +194,9 @@ async def test_remote_learn_command_success(
 
         assert mock_listen.called
         # Retrieve the registered listener and filter from the call args
-        # async_listen signature: (event_type, listener, event_filter)
         _, listener, event_filter = mock_listen.call_args[0]
 
-        # Simulate a bus event: the filter accepts a dict, the listener expects an Event
+        # Simulate a bus event
         if event_filter(learn_payload):
             mock_event = MagicMock()
             mock_event.data = learn_payload
@@ -168,31 +204,25 @@ async def test_remote_learn_command_success(
 
         await task
 
-    # Verify command was captured as a string
+    # Verify command was captured
     assert remote._commands.get("test_cmd") == "learned_pkt_123"
 
 
 async def test_remote_learn_filter_logic(
     mock_broker: MagicMock, mock_remote_device: MagicMock
 ) -> None:
-    """Thoroughly test the event_filter logic for various packet scenarios.
-
-    This ensures the filter only allows specific HVAC codes from the correct source.
-    """
+    """Thoroughly test the event_filter logic for various packet scenarios."""
     remote = RamsesRemote(
         mock_broker, mock_remote_device, RamsesRemoteEntityDescription()
     )
 
-    # We use a patch to capture the event_filter function from inside async_learn_command
     with patch("homeassistant.core.EventBus.async_listen") as mock_listen:
-        # Start learning task briefly to register the listener
         task = asyncio.create_task(remote.async_learn_command("test_cmd", timeout=1))
         await asyncio.sleep(0.1)
 
-        # Capture the filter from the async_listen call
         _, _, event_filter = mock_listen.call_args[0]
 
-        # 1. Valid packet (HVAC code 22F1 from correct source)
+        # 1. Valid packet
         valid_data = {"src": REM_ID, "code": "22F1"}
         assert event_filter(valid_data) is True
 
@@ -200,11 +230,10 @@ async def test_remote_learn_filter_logic(
         wrong_src = {"src": "99:999999", "code": "22F1"}
         assert event_filter(wrong_src) is False
 
-        # 3. Invalid Code (e.g., a temperature code 30C9)
+        # 3. Invalid Code
         wrong_code = {"src": REM_ID, "code": "30C9"}
         assert event_filter(wrong_code) is False
 
-        # Clean up the task using contextlib.suppress to ignore the CancelledError
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task

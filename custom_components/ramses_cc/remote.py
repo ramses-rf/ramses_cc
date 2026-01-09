@@ -218,11 +218,25 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             raise TypeError(f"{self._device.id} is not configured for faking")
 
         cmd = Command(self._commands[command[0]])
-        for x in range(num_repeats):  # TODO: use ramses_rf's QoS
-            if x != 0:
-                await asyncio.sleep(delay_secs)
-            await self._broker.client.async_send_cmd(cmd, priority=Priority.HIGH)
 
+        try:
+            await self._broker.client.async_send_cmd(
+                cmd,
+                priority=Priority.HIGH,
+                num_repeats=num_repeats,
+                gap_duration=delay_secs,  # We map 'delay_secs' to 'gap_duration' in ramses_rf
+            )
+
+        except (TimeoutError, Exception) as err:
+            # Catch TimeoutError (from ramses_rf) and generic Exception to prevent bubbling
+            _LOGGER.warning(
+                "Error sending command '%s' to device %s: %s",
+                command[0],
+                self._device.id,
+                err,
+            )
+
+        # This will now execute even if the transmission failed
         await self._broker.async_update()
 
     async def async_add_command(
