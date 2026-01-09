@@ -7,7 +7,7 @@ and fan parameter coordination in remote.py.
 from __future__ import annotations
 
 import asyncio
-import contextlib  # Add this import at the top of the file
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -148,27 +148,20 @@ async def test_remote_learn_command_success(
     # Prepare the payload dictionary
     learn_payload = {"src": REM_ID, "code": "22F1", "packet": "learned_pkt_123"}
 
-    # We no longer need to wrap this in a MagicMock() representing an Event
-    # because the filter now takes the dict directly.
-
-    # Patch async_listen on the bus instance specifically for this test
-    # instead of using patch.object which fails on read-only attributes.
+    # Patch async_listen on the bus instance to intercept listener registration
     with patch("homeassistant.core.EventBus.async_listen") as mock_listen:
-        # Start learning task
         task = asyncio.create_task(remote.async_learn_command("test_cmd", timeout=1))
 
-        # Give the task a moment to register the listener
+        # Allow the task to register the listener
         await asyncio.sleep(0.1)
 
-        # Verify and trigger the captured listener/filter
         assert mock_listen.called
-        # async_listen call: (event_type, listener, event_filter)
+        # Retrieve the registered listener and filter from the call args
+        # async_listen signature: (event_type, listener, event_filter)
         _, listener, event_filter = mock_listen.call_args[0]
 
-        # Simulate a bus event matching the criteria
-        # Pass the payload directly to the filter and listener
-        if event_filter(learn_payload):  # Pass dict directly
-            # The listener still expects an Event object with a .data attr
+        # Simulate a bus event: the filter accepts a dict, the listener expects an Event
+        if event_filter(learn_payload):
             mock_event = MagicMock()
             mock_event.data = learn_payload
             listener(mock_event)
