@@ -112,10 +112,10 @@ async def test_controller_coverage(
     original_set_mode = controller.async_set_system_mode
     controller.async_set_system_mode = MagicMock()
 
-    controller.set_hvac_mode(HVACMode.HEAT)
+    await controller.async_set_hvac_mode(HVACMode.HEAT)
     controller.async_set_system_mode.assert_called_with(SystemMode.AUTO)
 
-    controller.set_preset_mode(PRESET_AWAY)
+    await controller.async_set_preset_mode(PRESET_AWAY)
     controller.async_set_system_mode.assert_called_with(SystemMode.AWAY)
 
     # RESTORE ORIGINAL METHOD
@@ -178,15 +178,15 @@ async def test_zone_coverage(
     zone.async_set_zone_mode = MagicMock()
 
     # Case: Auto
-    zone.set_hvac_mode(HVACMode.AUTO)
+    await zone.async_set_hvac_mode(HVACMode.AUTO)
     zone.async_reset_zone_mode.assert_called_once()
 
     # Case: Heat (Temporary override logic in this integration?)
-    zone.set_hvac_mode(HVACMode.HEAT)
+    await zone.async_set_hvac_mode(HVACMode.HEAT)
     zone.async_set_zone_mode.assert_called_with(mode=ZoneMode.PERMANENT, setpoint=25)
 
     # Case: Off (Sets frost mode)
-    zone.set_hvac_mode(HVACMode.OFF)
+    await zone.async_set_hvac_mode(HVACMode.OFF)
     # Verify it called set_zone_mode with the frost function
     assert zone.async_set_zone_mode.called
 
@@ -194,13 +194,13 @@ async def test_zone_coverage(
     zone.async_set_zone_mode = MagicMock()
 
     # Case: Just temperature (Advanced override)
-    zone.set_temperature(temperature=21.0)
+    await zone.async_set_temperature(temperature=21.0)
     zone.async_set_zone_mode.assert_called_with(
         mode=ZoneMode.ADVANCED, setpoint=21.0, duration=None, until=None
     )
 
     # Case: With Duration (Temporary override)
-    zone.set_temperature(temperature=21.0, duration=timedelta(hours=1))
+    await zone.async_set_temperature(temperature=21.0, duration=timedelta(hours=1))
     zone.async_set_zone_mode.assert_called_with(
         mode=ZoneMode.TEMPORARY, setpoint=21.0, duration=timedelta(hours=1), until=None
     )
