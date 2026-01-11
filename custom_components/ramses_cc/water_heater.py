@@ -69,11 +69,8 @@ async def async_setup_entry(
     broker.async_register_platform(platform, add_devices)
 
 
-# TODO(wi): fix sphinx error in this class:
-# AttributeError: type object 'RamsesWaterHeater' has no attribute '_RamsesWaterHeater__attr_temperature_unit'
-# skipping in sphinx_apidoc because of errors. BTW: same error as class RamsesNumberBase in number.py
 class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
-    """Representation of a Rames DHW controller.
+    """Representation of a Ramses DHW controller.
 
     This class provides control over RAMSES domestic hot water (DHW) zones,
     including temperature control and operating mode management.
