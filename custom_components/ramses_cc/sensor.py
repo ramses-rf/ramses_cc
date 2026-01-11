@@ -235,9 +235,10 @@ class RamsesSensorEntityDescription(RamsesEntityDescription, SensorEntityDescrip
 
     # integration-specific attributes
     ramses_rf_attr: str
+    ramses_rf_class: type[RamsesRFEntity] | Any = RamsesRFEntity
+
     ramses_cc_class: type[RamsesSensor] = RamsesSensor
     ramses_cc_icon_off: str | None = None  # no SensorEntityDescription.icon_off attr
-    ramses_rf_class: type[RamsesRFEntity] | Any = RamsesRFEntity
 
 
 SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
