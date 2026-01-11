@@ -13,6 +13,7 @@ from custom_components.ramses_cc.water_heater import (
     STATE_BOOST,
     RamsesWaterHeater,
 )
+from ramses_tx.exceptions import ProtocolSendFailed
 
 # Constants for testing
 TEST_DEVICE_ID = "10:123456"
@@ -308,3 +309,59 @@ async def test_async_set_dhw_mode_invalid_args(
             await water_heater.async_set_dhw_mode(mode="invalid_mode")
 
         assert excinfo.value.translation_key == "invalid_mode_args"
+
+
+async def test_error_handling_coverage_gap(
+    water_heater: RamsesWaterHeater, mock_device: MagicMock
+) -> None:
+    """Test error handling paths that were previously missed."""
+
+    # 1. Test ProtocolSendFailed suppression (logs error, does not raise)
+
+    # set_dhw_mode (async_set_dhw_mode)
+    mock_device.set_mode.side_effect = ProtocolSendFailed("RF transmission failed")
+    # FIX: ZoneMode.TEMPORARY requires active=True to pass schema validation
+    await water_heater.async_set_dhw_mode(mode=ZoneMode.TEMPORARY, active=True)
+    mock_device.set_mode.assert_awaited()
+
+    # reset_mode (async_reset_dhw_mode)
+    mock_device.reset_mode.side_effect = ProtocolSendFailed("RF transmission failed")
+    await water_heater.async_reset_dhw_mode()
+    mock_device.reset_mode.assert_awaited()
+
+    # reset_config (async_reset_dhw_params)
+    mock_device.reset_config.side_effect = ProtocolSendFailed("RF transmission failed")
+    await water_heater.async_reset_dhw_params()
+    mock_device.reset_config.assert_awaited()
+
+    # set_boost (async_set_dhw_boost)
+    mock_device.set_boost_mode.side_effect = ProtocolSendFailed(
+        "RF transmission failed"
+    )
+    await water_heater.async_set_dhw_boost()
+    mock_device.set_boost_mode.assert_awaited()
+
+    # set_config (async_set_dhw_params) - ProtocolSendFailed path
+    mock_device.set_config.side_effect = ProtocolSendFailed("RF transmission failed")
+    await water_heater.async_set_dhw_params(setpoint=50)
+    mock_device.set_config.assert_awaited()
+
+    # 2. Test ServiceValidationError mapping for methods not covered in test_backend_error_handling
+
+    # reset_config raising ValueError (async_reset_dhw_params)
+    mock_device.reset_config.side_effect = ValueError("Invalid config")
+    with pytest.raises(ServiceValidationError) as excinfo:
+        await water_heater.async_reset_dhw_params()
+    assert excinfo.value.translation_key == "error_reset_config"
+
+    # set_boost raising TypeError (async_set_dhw_boost)
+    mock_device.set_boost_mode.side_effect = TypeError("Invalid argument")
+    with pytest.raises(ServiceValidationError) as excinfo:
+        await water_heater.async_set_dhw_boost()
+    assert excinfo.value.translation_key == "error_set_boost"
+
+    # set_dhw_params raising ValueError (async_set_dhw_params)
+    mock_device.set_config.side_effect = ValueError("Value out of range")
+    with pytest.raises(ServiceValidationError) as excinfo:
+        await water_heater.async_set_dhw_params(setpoint=100)
+    assert excinfo.value.translation_key == "error_set_config"
