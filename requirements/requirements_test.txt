@@ -1,5 +1,5 @@
 # Requirements to test the source code
-# - last checked/updated: 2025-10-05 (c.f. HA 2025.10.0)
+# - last checked/updated: 2026-01-11 (c.f. HA 2026.1.0)
 #
 
 # may need to use this version of ramses_rf...
@@ -14,4 +14,4 @@
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest
   # coverage >= 7.10.6 included in next item
-  pytest_homeassistant_custom_component >= 0.13.297
+  pytest_homeassistant_custom_component >= 0.13.305
