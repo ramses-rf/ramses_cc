@@ -19,6 +19,7 @@ from homeassistant.components.water_heater import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import (
     AddEntitiesCallback,
     EntityPlatform,
@@ -157,9 +158,15 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
         """Return the temperature we try to reach."""
         return self._device.setpoint
 
-    def set_operation_mode(self, operation_mode: str) -> None:
-        """Set the operating mode of the water heater."""
-        active = until = None  # for STATE_AUTO
+    async def async_set_operation_mode(self, operation_mode: str) -> None:
+        """Set the operating mode of the water heater.
+
+        :param operation_mode: The target operation mode (e.g., auto, boost, on, off).
+        :raises ServiceValidationError: If the backend call fails.
+        """
+        active: bool | None = None
+        until: dt | None = None  # for STATE_AUTO
+
         if operation_mode == STATE_BOOST:
             active = True
             until = dt.now() + timedelta(hours=1)
@@ -168,49 +175,88 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
         elif operation_mode == STATE_ON:
             active = True
 
-        self.async_set_dhw_mode(
+        await self.async_set_dhw_mode(
             mode=MODE_HA_TO_RAMSES[operation_mode], active=active, until=until
         )
 
-    def set_temperature(self, temperature: float | None = None, **kwargs: Any) -> None:
-        """Set the target temperature of the water heater."""
-        self.async_set_dhw_params(setpoint=temperature)
+    async def async_set_temperature(
+        self, temperature: float | None = None, **kwargs: Any
+    ) -> None:
+        """Set the target temperature of the water heater.
+
+        :param temperature: The target temperature.
+        :param kwargs: Additional arguments.
+        :raises ServiceValidationError: If the backend call fails.
+        """
+        await self.async_set_dhw_params(setpoint=temperature)
 
     # the following methods are integration-specific service calls
 
     @callback
     def async_fake_dhw_temp(self, temperature: float) -> None:
         """Cast the temperature of this water heater (if faked)."""
-
         self._device.sensor.temperature = temperature  # would accept None
 
-    @callback
-    def async_reset_dhw_mode(self) -> None:
-        """Reset the operating mode of the water heater."""
-        self._device.reset_mode()
+    async def async_reset_dhw_mode(self) -> None:
+        """Reset the operating mode of the water heater.
+
+        :raises ServiceValidationError: If the backend call fails.
+        """
+        try:
+            await self._device.reset_mode()
+        except (TypeError, ValueError) as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="error_reset_mode",
+                translation_placeholders={"error": str(err)},
+            ) from err
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_reset_dhw_params(self) -> None:
-        """Reset the configuration of the water heater."""
-        self._device.reset_config()
+    async def async_reset_dhw_params(self) -> None:
+        """Reset the configuration of the water heater.
+
+        :raises ServiceValidationError: If the backend call fails.
+        """
+        try:
+            await self._device.reset_config()
+        except (TypeError, ValueError) as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="error_reset_config",
+                translation_placeholders={"error": str(err)},
+            ) from err
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_set_dhw_boost(self) -> None:
-        """Enable the water heater for an hour."""
-        self._device.set_boost_mode()
+    async def async_set_dhw_boost(self) -> None:
+        """Enable the water heater for an hour.
+
+        :raises ServiceValidationError: If the backend call fails.
+        """
+        try:
+            await self._device.set_boost_mode()
+        except (TypeError, ValueError) as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="error_set_boost",
+                translation_placeholders={"error": str(err)},
+            ) from err
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_set_dhw_mode(
+    async def async_set_dhw_mode(
         self,
         mode: str | None = None,
         active: bool | None = None,
         duration: timedelta | None = None,
         until: dt | None = None,
     ) -> None:
-        """Set the (native) operating mode of the water heater."""
+        """Set the (native) operating mode of the water heater.
+
+        :param mode: The mode to set (e.g., temporary, permanent).
+        :param active: Whether the mode is active.
+        :param duration: The duration for the mode.
+        :param until: The specific end time for the mode.
+        :raises ServiceValidationError: If the backend call fails or arguments are invalid.
+        """
         entry: dict[str, Any] = {"mode": mode}
         if active is not None:
             entry.update({"active": active})
@@ -219,43 +265,93 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
         if until is not None:
             entry.update({"until": until})
 
-        # strict, non-entity schema check
-        checked_entry = SCH_SET_DHW_MODE_EXTRA(entry)
+        try:
+            # strict, non-entity schema check
+            checked_entry = SCH_SET_DHW_MODE_EXTRA(entry)
+        except (ValueError, TypeError) as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="invalid_mode_args",
+                translation_placeholders={"error": str(err)},
+            ) from err
+
         # default `duration` of 1 hour updated by schema default, so can't use original
 
         if until is None and "duration" in checked_entry:
             until = dt.now() + checked_entry["duration"]  # move duration to until
-        self._device.set_mode(
-            mode=mode,
-            active=active,
-            until=until,
-        )
+
+        try:
+            await self._device.set_mode(
+                mode=mode,
+                active=active,
+                until=until,
+            )
+        except (TypeError, ValueError) as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="error_set_mode",
+                translation_placeholders={"error": str(err)},
+            ) from err
+
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_set_dhw_params(
+    async def async_set_dhw_params(
         self,
         setpoint: float | None = None,
         overrun: int | None = None,
         differential: float | None = None,
     ) -> None:
-        """Set the configuration of the water heater."""
-        self._device.set_config(
-            setpoint=setpoint,
-            overrun=overrun,
-            differential=differential,
-        )
+        """Set the configuration of the water heater.
+
+        :param setpoint: The target temperature setpoint.
+        :param overrun: The overrun time in minutes.
+        :param differential: The temperature differential.
+        :raises ServiceValidationError: If the backend call fails.
+        """
+        try:
+            await self._device.set_config(
+                setpoint=setpoint,
+                overrun=overrun,
+                differential=differential,
+            )
+        except (TypeError, ValueError) as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="error_set_config",
+                translation_placeholders={"error": str(err)},
+            ) from err
         self.async_write_ha_state_delayed()
 
     async def async_get_dhw_schedule(self) -> None:
-        """Get the latest weekly schedule of the DHW."""
+        """Get the latest weekly schedule of the DHW.
+
+        :raises ServiceValidationError: If the backend call fails or times out.
+        """
         # {{ state_attr('water_heater.stored_hw', 'schedule') }}
-        await self._device.get_schedule()
+        try:
+            await self._device.get_schedule()
+        except (TimeoutError, TypeError, ValueError) as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="error_get_schedule",
+                translation_placeholders={"error": str(err)},
+            ) from err
         self.async_write_ha_state()
 
     async def async_set_dhw_schedule(self, schedule: str) -> None:
-        """Set the weekly schedule of the DHW."""
-        await self._device.set_schedule(json.loads(schedule))
+        """Set the weekly schedule of the DHW.
+
+        :param schedule: The schedule as a JSON string.
+        :raises ServiceValidationError: If the backend call fails or JSON is invalid.
+        """
+        try:
+            await self._device.set_schedule(json.loads(schedule))
+        except (TypeError, ValueError, json.JSONDecodeError) as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="error_set_schedule",
+                translation_placeholders={"error": str(err)},
+            ) from err
 
 
 @dataclass(frozen=True, kw_only=True)
