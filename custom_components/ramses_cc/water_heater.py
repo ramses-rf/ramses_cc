@@ -29,6 +29,7 @@ from homeassistant.helpers.entity_platform import (
 from ramses_rf.system.heat import StoredHw
 from ramses_rf.system.zones import DhwZone
 from ramses_tx.const import SZ_ACTIVE, SZ_MODE, SZ_SYSTEM_MODE
+from ramses_tx.exceptions import ProtocolSendFailed
 
 from . import RamsesEntity, RamsesEntityDescription
 from .broker import RamsesBroker
@@ -207,6 +208,8 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
                 translation_key="error_reset_mode",
                 translation_placeholders={"error": str(err)},
             ) from err
+        except ProtocolSendFailed as err:
+            _LOGGER.error("Failed to reset DHW mode: %s", err)
         self.async_write_ha_state_delayed()
 
     async def async_reset_dhw_params(self) -> None:
@@ -222,6 +225,8 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
                 translation_key="error_reset_config",
                 translation_placeholders={"error": str(err)},
             ) from err
+        except ProtocolSendFailed as err:
+            _LOGGER.error("Failed to reset DHW params: %s", err)
         self.async_write_ha_state_delayed()
 
     async def async_set_dhw_boost(self) -> None:
@@ -237,6 +242,8 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
                 translation_key="error_set_boost",
                 translation_placeholders={"error": str(err)},
             ) from err
+        except ProtocolSendFailed as err:
+            _LOGGER.error("Failed to set DHW boost: %s", err)
         self.async_write_ha_state_delayed()
 
     async def async_set_dhw_mode(
@@ -289,6 +296,8 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
                 translation_key="error_set_mode",
                 translation_placeholders={"error": str(err)},
             ) from err
+        except ProtocolSendFailed as err:
+            _LOGGER.error("Failed to set DHW mode: %s", err)
 
         self.async_write_ha_state_delayed()
 
@@ -317,6 +326,8 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
                 translation_key="error_set_config",
                 translation_placeholders={"error": str(err)},
             ) from err
+        except ProtocolSendFailed as err:
+            _LOGGER.error("Failed to set DHW params: %s", err)
         self.async_write_ha_state_delayed()
 
     async def async_get_dhw_schedule(self) -> None:
@@ -327,7 +338,7 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
         # {{ state_attr('water_heater.stored_hw', 'schedule') }}
         try:
             await self._device.get_schedule()
-        except (TimeoutError, TypeError, ValueError) as err:
+        except (TimeoutError, TypeError, ValueError, ProtocolSendFailed) as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="error_get_schedule",
@@ -343,7 +354,12 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
         """
         try:
             await self._device.set_schedule(json.loads(schedule))
-        except (TypeError, ValueError, json.JSONDecodeError) as err:
+        except (
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+            ProtocolSendFailed,
+        ) as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="error_set_schedule",

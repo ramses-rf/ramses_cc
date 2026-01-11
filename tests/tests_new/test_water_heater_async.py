@@ -156,6 +156,18 @@ async def test_async_set_operation_mode_boost(
     assert abs((kwargs["until"] - (now + timedelta(hours=1))).total_seconds()) < 1.0
 
 
+async def test_async_set_operation_mode_on(
+    water_heater: RamsesWaterHeater, mock_device: MagicMock
+) -> None:
+    """Test setting operation mode to ON."""
+    await water_heater.async_set_operation_mode(STATE_ON)
+
+    mock_device.set_mode.assert_awaited_once()
+    _, kwargs = mock_device.set_mode.call_args
+    assert kwargs["mode"] == ZoneMode.PERMANENT
+    assert kwargs["active"] is True
+
+
 async def test_async_set_operation_mode_off(
     water_heater: RamsesWaterHeater, mock_device: MagicMock
 ) -> None:
