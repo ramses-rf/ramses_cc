@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.const import DOMAIN
@@ -330,16 +331,12 @@ async def test_broker_set_fan_param_no_binding(
     # This forces the broker to look for the bound remote
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX, "value": 21.5}
 
-    # 3. Expectation: It should NOT crash.
-    # It should likely log a warning or raise a specific friendly error,
-    # but NOT an AttributeError (which would be a crash).
-
-    # Depending on current implementation, it might just log a warning and return
-    # or raise a ValueError. Check broker.py logic.
-    # If the code handles it safely, this test passes.
-
-    # Example assertion (adjust based on actual broker.py behavior):
-    await mock_broker.async_set_fan_param(call_data)
+    # 3. Expectation: It SHOULD raise HomeAssistantError
+    # We use pytest.raises to catch it and verify the message (optional match)
+    with pytest.raises(
+        HomeAssistantError, match="Cannot set parameter: No valid source device"
+    ):
+        await mock_broker.async_set_fan_param(call_data)
 
     # Verify NO command was sent (because there is no source ID)
     mock_gateway.async_send_cmd.assert_not_called()
