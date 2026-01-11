@@ -264,8 +264,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
             )
 
         try:
-            # Removed @callback - now async and awaited to prevent SQLite threading issues
-            self.async_set_system_mode(target_mode)
+            await self.async_set_system_mode(target_mode)
         except vol.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -288,8 +287,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
             )
 
         try:
-            # Removed @callback - now async and awaited
-            self.async_set_system_mode(target_mode)
+            await self.async_set_system_mode(target_mode)
         except vol.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -308,14 +306,12 @@ class RamsesController(RamsesEntity, ClimateEntity):
         await self._device.get_faultlog(limit=num_entries, force_refresh=True)
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_reset_system_mode(self) -> None:
+    async def async_reset_system_mode(self) -> None:
         """Reset the (native) operating mode of the Controller."""
-        self._device.reset_mode()
+        await self._device.reset_mode()
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_set_system_mode(
+    async def async_set_system_mode(
         self,
         mode: str,
         period: timedelta | None = None,
@@ -349,7 +345,8 @@ class RamsesController(RamsesEntity, ClimateEntity):
             until = datetime.now() + period
         # duration and/or period are now in until
         assert mode is not None
-        self._device.set_mode(mode, until=until)  # note: mode is a positional argument
+        # note: mode is a positional argument
+        await self._device.set_mode(mode, until=until)
         self.async_write_ha_state_delayed()
 
 
@@ -507,18 +504,11 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         """
         try:
             if hvac_mode == HVACMode.AUTO:  # FollowSchedule
-                self.async_reset_zone_mode()  # Not awaited (callback) in original, but safe to await if async?
-                # Original async_reset_zone_mode is @callback, no await needed unless changed.
-                # However, for consistency and future proofing we treat calls here as potentially causing DB writes.
-                # The prompt asks to migrate set_hvac_mode to async def and await underlying calls.
-                # The underlying calls (async_reset_zone_mode) are currently @callback.
-                # To fully fix SQLite issues, those might need to be async too if they write to DB.
-                # Assuming ramses_rf.device.set_mode writes to DB.
-                pass
+                await self.async_reset_zone_mode()
             elif hvac_mode == HVACMode.HEAT:  # TemporaryOverride
-                self.async_set_zone_mode(mode=ZoneMode.PERMANENT, setpoint=25)
+                await self.async_set_zone_mode(mode=ZoneMode.PERMANENT, setpoint=25)
             else:  # HVACMode.OFF, PermanentOverride, temp = min
-                self.async_set_zone_mode(self._device.set_frost_mode)
+                await self.async_set_zone_mode(self._device.set_frost_mode)
         except vol.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -535,7 +525,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         :raises ServiceValidationError: If validation fails.
         """
         try:
-            self.async_set_zone_mode(
+            await self.async_set_zone_mode(
                 mode=PRESET_HA_TO_ZONE[preset_mode],
                 setpoint=self.target_temperature
                 if preset_mode != PRESET_NONE
@@ -575,7 +565,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             mode = ZoneMode.TEMPORARY
 
         try:
-            self.async_set_zone_mode(
+            await self.async_set_zone_mode(
                 mode=mode, setpoint=temperature, duration=duration, until=until
             )
         except vol.Invalid as err:
@@ -600,29 +590,25 @@ class RamsesZone(RamsesEntity, ClimateEntity):
 
         self._device.sensor.temperature = temperature  # would accept None
 
-    @callback
-    def async_reset_zone_config(self) -> None:
+    async def async_reset_zone_config(self) -> None:
         """Reset the configuration of the Zone."""
-        self._device.reset_config()
+        await self._device.reset_config()
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_reset_zone_mode(self) -> None:
+    async def async_reset_zone_mode(self) -> None:
         """Reset the (native) operating mode of the Zone."""
-        self._device.reset_mode()
+        await self._device.reset_mode()
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_set_zone_config(self, **kwargs: Any) -> None:
+    async def async_set_zone_config(self, **kwargs: Any) -> None:
         """Set the configuration of the Zone (min/max temp, etc.).
 
         :param kwargs: Config arguments.
         """
-        self._device.set_config(**kwargs)
+        await self._device.set_config(**kwargs)
         self.async_write_ha_state_delayed()
 
-    @callback
-    def async_set_zone_mode(
+    async def async_set_zone_mode(
         self,
         mode: str | None = None,
         setpoint: float | None = None,
@@ -650,7 +636,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
 
         if until is None and "duration" in checked_entry:
             until = datetime.now() + checked_entry["duration"]  # move duration to until
-        self._device.set_mode(
+        await self._device.set_mode(
             mode=mode,
             setpoint=setpoint,
             until=until,

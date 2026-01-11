@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from datetime import datetime as dt, timedelta as td
 from typing import Any, Final
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import voluptuous as vol
+from homeassistant.components.climate import HVACMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
     MockConfigEntry,
 )
@@ -25,6 +27,8 @@ from custom_components.ramses_cc import (
     SVC_SEND_PACKET,
 )
 from custom_components.ramses_cc.broker import RamsesBroker
+from custom_components.ramses_cc.climate import RamsesController, RamsesZone
+from custom_components.ramses_cc.const import SystemMode, ZoneMode
 from custom_components.ramses_cc.schemas import (
     SCH_DELETE_COMMAND,
     SCH_LEARN_COMMAND,
@@ -795,24 +799,23 @@ TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
 async def test_set_system_mode_good(
     hass: HomeAssistant, entry: ConfigEntry, idx: str
 ) -> None:
-    """
-    Confirm that valid params are acceptable to the entity service schema in HA +
-    to the (mocked) parsing checks in ramses_rf.gateway.Gateway.send_cmd
-    Replaces nested if-then-else not supported as entity-schema since HA 2025.09
-    """
+    """Confirm that valid params are acceptable to the entity service schema."""
 
     data = {
         "entity_id": "climate.01_145038",
         **TESTS_SET_SYSTEM_MODE_GOOD[idx],
     }
 
-    await _test_entity_service_call(
-        hass,
-        SVC_SET_SYSTEM_MODE,
-        data,
-        TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS[idx],
-        schemas=SVCS_RAMSES_CLIMATE,
-    )
+    # Patch async_send_cmd to prevent actual network traffic/protocol errors
+    # while still allowing the Command creation (which is what we assert on) to happen.
+    with patch("ramses_rf.gateway.Gateway.async_send_cmd", new_callable=AsyncMock):
+        await _test_entity_service_call(
+            hass,
+            SVC_SET_SYSTEM_MODE,
+            data,
+            TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS[idx],
+            schemas=SVCS_RAMSES_CLIMATE,
+        )
 
 
 @pytest.mark.parametrize("idx", TESTS_SET_SYSTEM_MODE_FAIL)
@@ -969,13 +972,16 @@ async def test_set_zone_mode_good(
         **TESTS_SET_ZONE_MODE_GOOD[idx],
     }
 
-    await _test_entity_service_call(
-        hass,
-        SVC_SET_ZONE_MODE,
-        data,
-        TESTS_SET_ZONE_MODE_GOOD_ASSERTS[idx],
-        schemas=SVCS_RAMSES_CLIMATE,
-    )
+    # Patch async_send_cmd to prevent actual network traffic/protocol errors
+    # while still allowing the Command creation (which is what we assert on) to happen.
+    with patch("ramses_rf.gateway.Gateway.async_send_cmd", new_callable=AsyncMock):
+        await _test_entity_service_call(
+            hass,
+            SVC_SET_ZONE_MODE,
+            data,
+            TESTS_SET_ZONE_MODE_GOOD_ASSERTS[idx],
+            schemas=SVCS_RAMSES_CLIMATE,
+        )
 
     # # without the mock, can confirm the params are acceptable to the library
     # _ = await hass.services.async_call(
@@ -1110,3 +1116,150 @@ async def test_svc_send_packet_with_impersonation(
 #             'climate', 'async_set_temperature', {"temperature": 25}
 #         )
 #     )
+
+
+########################################################################################
+# New tests for the climate async migration
+
+
+@pytest.fixture
+def mock_broker() -> MagicMock:
+    """Mock the RamsesBroker."""
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_evohome() -> MagicMock:
+    """Mock the Evohome device."""
+    device = MagicMock()
+    device.id = "01:123456"
+    device.set_mode = AsyncMock()
+    device.reset_mode = AsyncMock()
+    # Mocks for properties used in __init__ or properties
+    device.zones = []
+    device.system_mode = {
+        "system_mode": SystemMode.AUTO,
+    }
+    return device
+
+
+@pytest.fixture
+def mock_zone() -> MagicMock:
+    """Mock the Zone device."""
+    device = MagicMock()
+    device.id = "04:123456"
+    device.set_mode = AsyncMock()
+    device.reset_mode = AsyncMock()
+    device.set_config = AsyncMock()
+    device.reset_config = AsyncMock()
+    # Mocks for properties
+    device.temperature = 20.0
+    device.setpoint = 21.0
+    device.params = {}
+    device.idx = "01"
+    device.heating_type = "radiator"
+    device.mode = {"mode": ZoneMode.SCHEDULE, "setpoint": 21.0}
+    device.config = {"min_temp": 5.0, "max_temp": 35.0}
+    device.schedule = []
+    device.schedule_version = 1
+    # Linked TCS
+    tcs = MagicMock()
+    tcs.system_mode = {"system_mode": SystemMode.AUTO}
+    device.tcs = tcs
+    return device
+
+
+@patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
+async def test_controller_async_set_hvac_mode(
+    mock_init: MagicMock, mock_broker: MagicMock, mock_evohome: MagicMock
+) -> None:
+    """Test RamsesController.async_set_hvac_mode awaits set_mode."""
+    entity = RamsesController(mock_broker, mock_evohome, MagicMock())
+    entity._device = mock_evohome
+    entity.async_write_ha_state_delayed = MagicMock()
+
+    # Test Valid Mode
+    await entity.async_set_hvac_mode(HVACMode.OFF)
+    mock_evohome.set_mode.assert_awaited_once_with(SystemMode.HEAT_OFF, until=None)
+
+
+@patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
+async def test_controller_async_set_preset_mode(
+    mock_init: MagicMock, mock_broker: MagicMock, mock_evohome: MagicMock
+) -> None:
+    """Test RamsesController.async_set_preset_mode awaits set_mode."""
+    entity = RamsesController(mock_broker, mock_evohome, MagicMock())
+    entity._device = mock_evohome
+    entity.async_write_ha_state_delayed = MagicMock()
+
+    # Test Valid Preset
+    await entity.async_set_preset_mode("away")
+    mock_evohome.set_mode.assert_awaited_once_with(SystemMode.AWAY, until=None)
+
+
+@patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
+async def test_controller_validation_error(
+    mock_init: MagicMock, mock_broker: MagicMock, mock_evohome: MagicMock
+) -> None:
+    """Test validation errors raise ServiceValidationError."""
+    entity = RamsesController(mock_broker, mock_evohome, MagicMock())
+    entity._device = mock_evohome
+
+    # Mock set_mode to raise Voluptuous error
+    mock_evohome.set_mode.side_effect = vol.Invalid("Invalid mode")
+
+    with pytest.raises(ServiceValidationError):
+        await entity.async_set_hvac_mode(HVACMode.HEAT)
+
+
+@patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
+async def test_zone_async_set_hvac_mode(
+    mock_init: MagicMock, mock_broker: MagicMock, mock_zone: MagicMock
+) -> None:
+    """Test RamsesZone.async_set_hvac_mode awaits helpers."""
+    entity = RamsesZone(mock_broker, mock_zone, MagicMock())
+    entity._device = mock_zone
+    entity.async_write_ha_state_delayed = MagicMock()
+
+    # Test Auto (Reset Mode)
+    await entity.async_set_hvac_mode(HVACMode.AUTO)
+    mock_zone.reset_mode.assert_awaited_once()
+
+    # Test Heat (Set Permanent)
+    mock_zone.reset_mode.reset_mock()
+    await entity.async_set_hvac_mode(HVACMode.HEAT)
+    mock_zone.set_mode.assert_awaited_once_with(
+        mode=ZoneMode.PERMANENT, setpoint=25, until=None
+    )
+
+
+@patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
+async def test_zone_async_set_temperature(
+    mock_init: MagicMock, mock_broker: MagicMock, mock_zone: MagicMock
+) -> None:
+    """Test RamsesZone.async_set_temperature awaits set_mode."""
+    entity = RamsesZone(mock_broker, mock_zone, MagicMock())
+    entity._device = mock_zone
+    entity.async_write_ha_state_delayed = MagicMock()
+
+    await entity.async_set_temperature(temperature=22.5)
+    mock_zone.set_mode.assert_awaited()
+    # Verify kwargs were passed correctly (mode=ADVANCED inferred from args)
+    _, kwargs = mock_zone.set_mode.call_args
+    assert kwargs["setpoint"] == 22.5
+
+
+@patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
+async def test_zone_helpers_are_async(
+    mock_init: MagicMock, mock_broker: MagicMock, mock_zone: MagicMock
+) -> None:
+    """Verify helpers are awaitable."""
+    entity = RamsesZone(mock_broker, mock_zone, MagicMock())
+    entity._device = mock_zone
+    entity.async_write_ha_state_delayed = MagicMock()
+
+    await entity.async_reset_zone_config()
+    mock_zone.reset_config.assert_awaited_once()
+
+    await entity.async_set_zone_config(min_temp=10)
+    mock_zone.set_config.assert_awaited_once_with(min_temp=10)

@@ -77,6 +77,7 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
     mock_broker.async_register_platform.assert_called_once()
     callback_func = mock_broker.async_register_platform.call_args[0][1]
 
+    # Use spec mocks to ensure isinstance checks pass
     dev_evo = MagicMock(spec=Evohome)
     dev_zone = MagicMock(spec=Zone)
     dev_hvac = MagicMock(spec=HvacVentilator)
@@ -101,7 +102,7 @@ async def test_controller_properties_and_attributes(
     :param mock_broker: The mock broker fixture.
     :param mock_description: The mock description fixture.
     """
-    mock_device = MagicMock()
+    mock_device = MagicMock(spec=Evohome)
     mock_device.id = "01:123456"
     mock_device.zones = []
 
@@ -163,7 +164,7 @@ async def test_controller_modes_and_actions(
     :param mock_broker: The mock broker fixture.
     :param mock_description: The mock description fixture.
     """
-    mock_device = MagicMock()
+    mock_device = MagicMock(spec=Evohome)
     mock_device.id = "01:123456"
     mock_device.zones = []
     controller = RamsesController(mock_broker, mock_device, mock_description)
@@ -218,15 +219,20 @@ async def test_controller_services(
     :param mock_description: The mock description fixture.
     :param freezer: The freezer fixture to control time.
     """
-    mock_device = MagicMock()
+    mock_device = MagicMock(spec=Evohome)
     mock_device.id = "01:000001"
     mock_device.zones = []
+
+    # Update: Ensure async methods are AsyncMock (from new code)
+    mock_device.set_mode = AsyncMock()
+    mock_device.reset_mode = AsyncMock()
+    mock_device.get_faultlog = AsyncMock()
+
     controller = RamsesController(mock_broker, mock_device, mock_description)
     controller.async_write_ha_state_delayed = MagicMock()
 
     # 1. set_hvac_mode and set_preset_mode wrappers
     # Patch the instance method to verify it is called correctly
-    # NOTE: Changed to async_set_hvac_mode/preset_mode for PR 1
     with patch.object(controller, "async_set_system_mode") as mock_set_mode:
         await controller.async_set_hvac_mode(HVACMode.HEAT)
         mock_set_mode.assert_called_with(SystemMode.AUTO)
@@ -235,44 +241,43 @@ async def test_controller_services(
         mock_set_mode.assert_called_with(SystemMode.AWAY)
 
     # 2. async_set_system_mode with 'period' AND 'duration' logic
-    mock_device.set_mode = MagicMock()
     with patch("custom_components.ramses_cc.climate.SCH_SET_SYSTEM_MODE_EXTRA"):
         # Case A: Period None
-        controller.async_set_system_mode("auto", period=None)
-        mock_device.set_mode.assert_called_with("auto", until=None)
+        await controller.async_set_system_mode("auto", period=None)
+        # Update: use assert_awaited_with for async methods
+        mock_device.set_mode.assert_awaited_with("auto", until=None)
 
         # Set frozen time for duration/period calculations
         freezer.move_to("2023-01-01 12:00:00")
 
         # Case B: Duration provided (Coverage for lines 266 & 273)
         test_duration = timedelta(hours=1)
-        controller.async_set_system_mode("auto", duration=test_duration)
+        await controller.async_set_system_mode("auto", duration=test_duration)
 
         # 12:00 + 1h = 13:00
         expected_until_dur = datetime(2023, 1, 1, 13, 0, 0)
-        mock_device.set_mode.assert_called_with("auto", until=expected_until_dur)
+        mock_device.set_mode.assert_awaited_with("auto", until=expected_until_dur)
 
         # Case C: Period 0 (Next Day)
         zero_period = timedelta(0)
-        controller.async_set_system_mode("auto", period=zero_period)
-        mock_device.set_mode.assert_called_with(
+        await controller.async_set_system_mode("auto", period=zero_period)
+        mock_device.set_mode.assert_awaited_with(
             "auto", until=datetime(2023, 1, 2, 0, 0, 0)
         )
 
         # Case D: Standard Period
         std_period = timedelta(hours=2)
-        controller.async_set_system_mode("auto", period=std_period)
-        mock_device.set_mode.assert_called_with(
+        await controller.async_set_system_mode("auto", period=std_period)
+        mock_device.set_mode.assert_awaited_with(
             "auto", until=datetime(2023, 1, 1, 14, 0, 0)
         )
 
     # 3. Service Calls
-    controller.async_reset_system_mode()
-    mock_device.reset_mode.assert_called_once()
+    await controller.async_reset_system_mode()
+    mock_device.reset_mode.assert_awaited_once()
 
-    mock_device.get_faultlog = AsyncMock()
     await controller.async_get_system_faults(5)
-    mock_device.get_faultlog.assert_called_with(limit=5, force_refresh=True)
+    mock_device.get_faultlog.assert_awaited_with(limit=5, force_refresh=True)
 
 
 async def test_zone_properties_and_config(
@@ -283,6 +288,7 @@ async def test_zone_properties_and_config(
     :param mock_broker: The mock broker fixture.
     :param mock_description: The mock description fixture.
     """
+    # Removed spec=Zone because it blocks access to .tcs
     mock_device = MagicMock()
     mock_device.id = "04:123456"
     mock_device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AUTO}
@@ -325,6 +331,7 @@ async def test_zone_modes_and_actions(
     :param mock_broker: The mock broker fixture.
     :param mock_description: The mock description fixture.
     """
+    # Removed spec=Zone because it blocks access to .tcs
     mock_device = MagicMock()
     mock_device.id = "04:123456"
     mock_device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AUTO}
@@ -396,19 +403,29 @@ async def test_zone_methods_and_services(
     :param mock_description: The mock description fixture.
     :param freezer: The freezer fixture.
     """
+    # Removed spec=Zone because it blocks access to .tcs
     mock_device = MagicMock()
     mock_device.id = "04:000001"
     mock_device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AUTO}
+
+    # Update: Ensure async methods are AsyncMock (from new code)
+    mock_device.set_mode = AsyncMock()
+    mock_device.reset_mode = AsyncMock()
+    mock_device.set_config = AsyncMock()
+    mock_device.reset_config = AsyncMock()
+    mock_device.get_schedule = AsyncMock()
+    mock_device.set_schedule = AsyncMock()
+
     zone = RamsesZone(mock_broker, mock_device, mock_description)
     zone.async_write_ha_state_delayed = MagicMock()
+    zone.async_write_ha_state = MagicMock()
 
     # 1. set_hvac_mode
     # Mock async_set_zone_mode to verify calls
     with patch.object(zone, "async_set_zone_mode") as mock_set:
         # Mock async_reset_zone_mode only for this specific test block
-        zone.async_reset_zone_mode = MagicMock()
+        zone.async_reset_zone_mode = AsyncMock()
 
-        # NOTE: Updated to async_set_hvac_mode
         await zone.async_set_hvac_mode(HVACMode.AUTO)
         zone.async_reset_zone_mode.assert_called_once()
 
@@ -422,9 +439,8 @@ async def test_zone_methods_and_services(
 
     # 1a. Explicit coverage for async_reset_zone_mode body
     del zone.async_reset_zone_mode
-    mock_device.reset_mode = MagicMock()
-    zone.async_reset_zone_mode()
-    mock_device.reset_mode.assert_called_once()
+    await zone.async_reset_zone_mode()
+    mock_device.reset_mode.assert_awaited_once()
 
     # 2. set_preset_mode
     with patch.object(zone, "async_set_zone_mode") as mock_set:
@@ -459,23 +475,22 @@ async def test_zone_methods_and_services(
         )
 
     # 4. async_set_zone_mode internal logic (calculating 'until' from duration)
-    mock_device.set_mode = MagicMock()
     # We patch SCH_SET_ZONE_MODE_EXTRA to control schema validation return values
     with patch("custom_components.ramses_cc.climate.SCH_SET_ZONE_MODE_EXTRA") as m_sch:
         # Case: Just setpoint (schema returns input)
         m_sch.side_effect = lambda x: x
-        zone.async_set_zone_mode(setpoint=21.0)
-        mock_device.set_mode.assert_called_with(mode=None, setpoint=21.0, until=None)
+        await zone.async_set_zone_mode(setpoint=21.0)
+        mock_device.set_mode.assert_awaited_with(mode=None, setpoint=21.0, until=None)
 
         # Case: Duration provided (schema returns dict with duration)
         m_sch.side_effect = None
         m_sch.return_value = {"duration": timedelta(hours=1)}
         freezer.move_to("2023-01-01 12:00:00")
 
-        zone.async_set_zone_mode(mode="temp", duration=timedelta(hours=1))
+        await zone.async_set_zone_mode(mode="temp", duration=timedelta(hours=1))
 
         expected_until = datetime(2023, 1, 1, 13, 0, 0)
-        mock_device.set_mode.assert_called_with(
+        mock_device.set_mode.assert_awaited_with(
             mode="temp", setpoint=None, until=expected_until
         )
 
@@ -483,11 +498,11 @@ async def test_zone_methods_and_services(
         # if until is None and "duration" in checked_entry: -> False because until is NOT None
         m_sch.return_value = {"duration": timedelta(hours=1)}
         explicit_until = datetime(2023, 1, 1, 15, 0, 0)
-        zone.async_set_zone_mode(
+        await zone.async_set_zone_mode(
             mode="temp", duration=timedelta(hours=1), until=explicit_until
         )
         # Expectation: The loop calculation for until is SKIPPED, uses explicit_until
-        mock_device.set_mode.assert_called_with(
+        mock_device.set_mode.assert_awaited_with(
             mode="temp", setpoint=None, until=explicit_until
         )
 
@@ -502,22 +517,17 @@ async def test_zone_methods_and_services(
     assert mock_device.sensor.temperature == 22.5
 
     # Config / Schedule
-    mock_device.reset_config = MagicMock()
-    mock_device.set_config = MagicMock()
-    zone.async_reset_zone_config()
-    mock_device.reset_config.assert_called_once()
-    zone.async_set_zone_config(min_temp=10)
-    mock_device.set_config.assert_called_with(min_temp=10)
+    await zone.async_reset_zone_config()
+    mock_device.reset_config.assert_awaited_once()
 
-    mock_device.get_schedule = AsyncMock()
-    mock_device.set_schedule = AsyncMock()
-    zone.async_write_ha_state = MagicMock()
+    await zone.async_set_zone_config(min_temp=10)
+    mock_device.set_config.assert_awaited_with(min_temp=10)
 
     await zone.async_get_zone_schedule()
-    mock_device.get_schedule.assert_called_once()
+    mock_device.get_schedule.assert_awaited_once()
 
     await zone.async_set_zone_schedule('{"day": 1}')
-    mock_device.set_schedule.assert_called_once()
+    mock_device.set_schedule.assert_awaited_once()
 
 
 async def test_hvac_properties_and_modes(
@@ -528,7 +538,7 @@ async def test_hvac_properties_and_modes(
     :param mock_broker: The mock broker fixture.
     :param mock_description: The mock description fixture.
     """
-    mock_device = MagicMock()
+    mock_device = MagicMock(spec=HvacVentilator)
     mock_device.id = "30:654321"
     mock_device.indoor_humidity = 0.55
     mock_device.indoor_temp = 21.5
@@ -538,8 +548,16 @@ async def test_hvac_properties_and_modes(
     hvac = RamsesHvac(mock_broker, mock_device, mock_description)
 
     # 1. async_added_to_hass
-    await hvac.async_added_to_hass()
-    mock_device.get_bound_rem.assert_called()
+    # Update: Use the patch context from the new code for cleaner testing
+    with patch(
+        "custom_components.ramses_cc.climate.RamsesEntity.async_added_to_hass",
+        new_callable=AsyncMock,
+    ) as mock_added:
+        await hvac.async_added_to_hass()
+        mock_added.assert_awaited()
+        # Ensure underlying method was called
+        mock_device.get_bound_rem.assert_called()
+        assert hvac._bound_rem == "30:987654"
 
     # 2. Properties
     assert hvac.current_humidity == 55
@@ -579,7 +597,7 @@ async def test_hvac_services(
     :param mock_broker: The mock broker fixture.
     :param mock_description: The mock description fixture.
     """
-    mock_device = MagicMock()
+    mock_device = MagicMock(spec=HvacVentilator)
     mock_device.id = "30:123456"
     hvac = RamsesHvac(mock_broker, mock_device, mock_description)
 
