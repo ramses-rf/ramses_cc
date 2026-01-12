@@ -316,17 +316,14 @@ async def test_fan_param_methods(
     await remote.async_set_fan_rem_param(**kwargs)
     mock_broker.async_set_fan_param.assert_awaited()
 
-    # --- Test 3: Update Params  ---
-    # Create a completed Future to simulate the return value of async_add_executor_job
-    future: asyncio.Future[None] = asyncio.Future()
-    future.set_result(None)
+    # --- Test 3: Update Params ---
+    # We no longer expect async_add_executor_job.
+    # The method should now be called directly on the loop.
+    await remote.async_update_fan_rem_params(**kwargs)
 
-    with patch.object(hass, "async_add_executor_job", return_value=future) as mock_exec:
-        await remote.async_update_fan_rem_params(**kwargs)
-
-        # VERIFICATION: Check that async_add_executor_job was called with the sync method
-        expected_kwargs = {"key": "value", "device_id": fan_id, "from_id": device_id}
-        mock_exec.assert_called_with(mock_broker.get_all_fan_params, expected_kwargs)
+    # VERIFICATION: Check that broker.get_all_fan_params was called directly
+    expected_kwargs = {"key": "value", "device_id": fan_id, "from_id": device_id}
+    mock_broker.get_all_fan_params.assert_called_with(expected_kwargs)
 
     # --- Test 4: Unbound Scenarios ---
     mock_broker._fan_bound_to_remote = {}
