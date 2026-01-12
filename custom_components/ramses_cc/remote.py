@@ -105,6 +105,16 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Delete commands from the database.
 
+        Usage:
+
+        .. code-block::
+
+            service: remote.delete_command
+            data:
+              command: boost
+            target:
+              entity_id: remote.device_id
+
         :param command: The command(s) to delete.
         :param kwargs: Arbitrary keyword arguments.
         """
@@ -124,6 +134,17 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         **kwargs: Any,
     ) -> None:
         """Learn a command from a device (remote) and add to the database.
+
+        Usage:
+
+        .. code-block::
+
+            service: remote.learn_command
+            data:
+              command: boost
+              timeout: 3
+            target:
+              entity_id: remote.device_id
 
         :param command: The command(s) to learn.
         :param timeout: Timeout in seconds, defaults to DEFAULT_TIMEOUT.
@@ -192,6 +213,18 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Send commands from a device (remote).
 
+        Usage:
+
+        .. code-block::
+
+            service: remote.send_command
+            data:
+              command: boost
+              delay_secs: 0.05
+              num_repeats: 3
+            target:
+              entity_id: remote.device_id
+
         :param command: The command(s) to send.
         :param num_repeats: Number of times to repeat the command.
         :param delay_secs: Delay between repeats (gap duration).
@@ -245,6 +278,17 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         **kwargs: Any,
     ) -> None:
         """Directly add (or replace) a command without RF learning.
+
+        Usage:
+
+        .. code-block::
+
+            service: remote.add_command
+            data:
+              command: boost
+              packet_string: "RQ --- 29:162275 30:123456 --:------ 22F1 003 000030"
+            target:
+              entity_id: remote.device_id
 
         :param command: The command name to add.
         :param packet_string: The raw packet string for the command.
