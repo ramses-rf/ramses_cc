@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import voluptuous as vol
 from homeassistant.components.climate import (
     PRESET_AWAY,
     PRESET_NONE,
@@ -12,7 +13,7 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.ramses_cc.climate import (
     RamsesController,
@@ -22,11 +23,12 @@ from custom_components.ramses_cc.climate import (
     ZoneMode,
     async_setup_entry,
 )
-from custom_components.ramses_cc.const import DOMAIN
+from custom_components.ramses_cc.const import DOMAIN, PRESET_PERMANENT, PRESET_TEMPORARY
 from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.system.heat import Evohome
 from ramses_rf.system.zones import Zone
 from ramses_tx.const import SZ_MODE, SZ_SETPOINT, SZ_SYSTEM_MODE
+from ramses_tx.exceptions import ProtocolSendFailed, TransportError
 
 # Constants
 SZ_HEAT_DEMAND = "heat_demand"
@@ -616,3 +618,195 @@ async def test_hvac_services(
     # async_update_fan_params
     await hvac.async_update_fan_params()
     mock_broker.get_all_fan_params.assert_called_with({"device_id": mock_device.id})
+
+
+async def test_error_handling(
+    mock_broker: MagicMock, mock_description: MagicMock
+) -> None:
+    """Test that protocol/transport errors are caught and re-raised as HomeAssistantError.
+
+    :param mock_broker: The mock broker fixture.
+    :param mock_description: The mock description fixture.
+    """
+    mock_device = MagicMock(spec=Evohome)
+    mock_device.id = "01:999999"
+    mock_device.zones = []
+    controller = RamsesController(mock_broker, mock_device, mock_description)
+    controller.async_write_ha_state_delayed = MagicMock()
+
+    # Define a list of methods and the mock target to fail
+    # (method_to_call, args, mock_method_name_on_device)
+    test_cases = [
+        (controller.async_reset_system_mode, [], "reset_mode"),
+        (controller.async_set_system_mode, ["auto"], "set_mode"),
+        (controller.async_get_system_faults, [5], "get_faultlog"),
+    ]
+
+    for method, args, device_method_name in test_cases:
+        # Case 1: ProtocolSendFailed
+        getattr(mock_device, device_method_name).side_effect = ProtocolSendFailed(
+            "Send failed"
+        )
+        with pytest.raises(HomeAssistantError, match="Failed to .*"):
+            await method(*args)
+
+        # Case 2: TimeoutError
+        getattr(mock_device, device_method_name).side_effect = TimeoutError("Timed out")
+        with pytest.raises(HomeAssistantError, match="Failed to .*"):
+            await method(*args)
+
+        # Case 3: TransportError
+        getattr(mock_device, device_method_name).side_effect = TransportError(
+            "Transport error"
+        )
+        with pytest.raises(HomeAssistantError, match="Failed to .*"):
+            await method(*args)
+
+    # Zone Error Handling
+    zone_device = MagicMock()
+    zone_device.id = "04:888888"
+    zone = RamsesZone(mock_broker, zone_device, mock_description)
+    zone.async_write_ha_state_delayed = MagicMock()
+    zone.async_write_ha_state = MagicMock()
+
+    zone_cases = [
+        (zone.async_reset_zone_mode, [], "reset_mode"),
+        (zone.async_reset_zone_config, [], "reset_config"),
+        (zone.async_set_zone_config, [], "set_config"),  # kwargs handling
+        (
+            zone.async_set_zone_mode,
+            [ZoneMode.SCHEDULE],
+            "set_mode",
+        ),  # Provide valid mode
+        (zone.async_get_zone_schedule, [], "get_schedule"),
+        (zone.async_set_zone_schedule, ["{}"], "set_schedule"),
+    ]
+
+    for method, args, device_method_name in zone_cases:
+        getattr(zone_device, device_method_name).side_effect = ProtocolSendFailed(
+            "Boom"
+        )
+        with pytest.raises(HomeAssistantError, match="Failed to .*"):
+            await method(*args)
+
+    # HVAC Error Handling (calls broker methods)
+    hvac_device = MagicMock(spec=HvacVentilator)
+    hvac_device.id = "30:777777"
+    hvac = RamsesHvac(mock_broker, hvac_device, mock_description)
+
+    # Broker failures
+    mock_broker.async_get_fan_param.side_effect = ProtocolSendFailed("Broker fail")
+    with pytest.raises(HomeAssistantError, match="Failed to get fan param"):
+        await hvac.async_get_fan_clim_param(param="p")
+
+    mock_broker.async_set_fan_param.side_effect = TimeoutError("Broker timeout")
+    with pytest.raises(HomeAssistantError, match="Failed to set fan param"):
+        await hvac.async_set_fan_clim_param(param="p", value=1)
+
+
+async def test_service_validation_errors(
+    mock_broker: MagicMock, mock_description: MagicMock
+) -> None:
+    """Test ServiceValidationError handling in Controller and Zone.
+
+    :param mock_broker: The mock broker fixture.
+    :param mock_description: The mock description fixture.
+    """
+    mock_device = MagicMock(spec=Evohome)
+    mock_device.id = "01:999999"
+    mock_device.zones = []
+    controller = RamsesController(mock_broker, mock_device, mock_description)
+
+    # 1. Invalid HVAC Mode
+    with pytest.raises(ServiceValidationError, match="invalid_hvac_mode"):
+        await controller.async_set_hvac_mode("invalid_mode")
+
+    # 2. Invalid Preset Mode
+    with pytest.raises(ServiceValidationError, match="invalid_preset_mode"):
+        await controller.async_set_preset_mode("invalid_preset")
+
+    # 3. vol.Invalid in async_set_hvac_mode
+    with (
+        patch.object(
+            controller, "async_set_system_mode", side_effect=vol.Invalid("Boom")
+        ),
+        pytest.raises(ServiceValidationError, match="validation_error"),
+    ):
+        await controller.async_set_hvac_mode(HVACMode.HEAT)
+
+    # 4. vol.Invalid in async_set_preset_mode
+    with (
+        patch.object(
+            controller, "async_set_system_mode", side_effect=vol.Invalid("Boom")
+        ),
+        pytest.raises(ServiceValidationError, match="validation_error"),
+    ):
+        await controller.async_set_preset_mode(PRESET_AWAY)
+
+    # Zone Validation Errors
+    mock_zone_dev = MagicMock()
+    mock_zone_dev.id = "04:123456"
+    zone = RamsesZone(mock_broker, mock_zone_dev, mock_description)
+
+    # 5. vol.Invalid in async_set_hvac_mode
+    # We patch async_set_zone_mode, which is called by async_set_hvac_mode
+    with (
+        patch.object(zone, "async_set_zone_mode", side_effect=vol.Invalid("Boom")),
+        pytest.raises(ServiceValidationError, match="validation_error"),
+    ):
+        await zone.async_set_hvac_mode(HVACMode.HEAT)
+
+    # 6. vol.Invalid in async_set_preset_mode
+    with (
+        patch.object(zone, "async_set_zone_mode", side_effect=vol.Invalid("Boom")),
+        pytest.raises(ServiceValidationError, match="validation_error"),
+    ):
+        await zone.async_set_preset_mode(PRESET_NONE)
+
+    # 7. vol.Invalid in async_set_temperature
+    with (
+        patch.object(zone, "async_set_zone_mode", side_effect=vol.Invalid("Boom")),
+        pytest.raises(ServiceValidationError, match="validation_error"),
+    ):
+        await zone.async_set_temperature(temperature=20)
+
+
+async def test_zone_extended_coverage(
+    mock_broker: MagicMock, mock_description: MagicMock, freezer: Any
+) -> None:
+    """Test extended Zone logic for presets and config edges.
+
+    :param mock_broker: The mock broker fixture.
+    :param mock_description: The mock description fixture.
+    :param freezer: The freezer fixture.
+    """
+    mock_device = MagicMock()
+    mock_device.id = "04:123456"
+    mock_device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AUTO}
+    mock_device.setpoint = 20.0
+
+    # Needs async mocks for the awaits
+    mock_device.set_mode = AsyncMock()
+
+    zone = RamsesZone(mock_broker, mock_device, mock_description)
+
+    # 1. Preset Temporary (1 hour duration)
+    with patch.object(zone, "async_set_zone_mode") as mock_set:
+        await zone.async_set_preset_mode(PRESET_TEMPORARY)
+        mock_set.assert_called_with(
+            mode=ZoneMode.TEMPORARY, setpoint=20.0, duration=timedelta(hours=1)
+        )
+
+    # 2. Preset Permanent
+    with patch.object(zone, "async_set_zone_mode") as mock_set:
+        await zone.async_set_preset_mode(PRESET_PERMANENT)
+        mock_set.assert_called_with(
+            mode=ZoneMode.PERMANENT, setpoint=20.0, duration=None
+        )
+
+    # 3. HVAC Mode logic when Config is None
+    # Code: if (self._device.config and setpoint <= min): return OFF
+    mock_device.config = None
+    mock_device.mode = {SZ_SETPOINT: 4.0, SZ_MODE: ZoneMode.ADVANCED}
+    # Should default to HEAT because config check fails (short-circuit)
+    assert zone.hvac_mode == HVACMode.HEAT

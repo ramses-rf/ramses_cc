@@ -41,6 +41,7 @@ from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.system.heat import Evohome
 from ramses_rf.system.zones import Zone
 from ramses_tx.const import SZ_MODE, SZ_SETPOINT, SZ_SYSTEM_MODE
+from ramses_tx.exceptions import ProtocolSendFailed, TransportError
 
 from . import RamsesEntity, RamsesEntityDescription
 from .broker import RamsesBroker
@@ -302,13 +303,23 @@ class RamsesController(RamsesEntity, ClimateEntity):
         """Get the nth latest fault log entries from the Controller.
 
         :param num_entries: Number of entries to fetch.
+        :raises HomeAssistantError: If the command fails.
         """
-        await self._device.get_faultlog(limit=num_entries, force_refresh=True)
+        try:
+            await self._device.get_faultlog(limit=num_entries, force_refresh=True)
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to get system faults: {err}") from err
         self.async_write_ha_state_delayed()
 
     async def async_reset_system_mode(self) -> None:
-        """Reset the (native) operating mode of the Controller."""
-        await self._device.reset_mode()
+        """Reset the (native) operating mode of the Controller.
+
+        :raises HomeAssistantError: If the command fails.
+        """
+        try:
+            await self._device.reset_mode()
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to reset system mode: {err}") from err
         self.async_write_ha_state_delayed()
 
     async def async_set_system_mode(
@@ -322,6 +333,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
         :param mode: The system mode to set.
         :param period: The period for the mode.
         :param duration: The duration for the mode.
+        :raises HomeAssistantError: If the command fails.
         """
         entry: dict[str, Any] = {"mode": mode}
         if period is not None:
@@ -346,7 +358,10 @@ class RamsesController(RamsesEntity, ClimateEntity):
         # duration and/or period are now in until
         assert mode is not None
         # note: mode is a positional argument
-        await self._device.set_mode(mode, until=until)
+        try:
+            await self._device.set_mode(mode, until=until)
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to set system mode: {err}") from err
         self.async_write_ha_state_delayed()
 
 
@@ -582,6 +597,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         """Cast the room temperature of this zone (if faked).
 
         :param temperature: The temperature to fake.
+        :raises HomeAssistantError: If the zone has no sensor.
         """
         if self._device.sensor is None:
             raise HomeAssistantError(
@@ -591,21 +607,37 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         self._device.sensor.temperature = temperature  # would accept None
 
     async def async_reset_zone_config(self) -> None:
-        """Reset the configuration of the Zone."""
-        await self._device.reset_config()
+        """Reset the configuration of the Zone.
+
+        :raises HomeAssistantError: If the command fails.
+        """
+        try:
+            await self._device.reset_config()
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to reset zone config: {err}") from err
         self.async_write_ha_state_delayed()
 
     async def async_reset_zone_mode(self) -> None:
-        """Reset the (native) operating mode of the Zone."""
-        await self._device.reset_mode()
+        """Reset the (native) operating mode of the Zone.
+
+        :raises HomeAssistantError: If the command fails.
+        """
+        try:
+            await self._device.reset_mode()
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to reset zone mode: {err}") from err
         self.async_write_ha_state_delayed()
 
     async def async_set_zone_config(self, **kwargs: Any) -> None:
         """Set the configuration of the Zone (min/max temp, etc.).
 
         :param kwargs: Config arguments.
+        :raises HomeAssistantError: If the command fails.
         """
-        await self._device.set_config(**kwargs)
+        try:
+            await self._device.set_config(**kwargs)
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to set zone config: {err}") from err
         self.async_write_ha_state_delayed()
 
     async def async_set_zone_mode(
@@ -621,6 +653,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         :param setpoint: The setpoint to set.
         :param duration: The duration.
         :param until: The until time.
+        :raises HomeAssistantError: If the command fails.
         """
         entry: dict[str, Any] = {"mode": mode}
         if setpoint is not None:
@@ -636,25 +669,38 @@ class RamsesZone(RamsesEntity, ClimateEntity):
 
         if until is None and "duration" in checked_entry:
             until = datetime.now() + checked_entry["duration"]  # move duration to until
-        await self._device.set_mode(
-            mode=mode,
-            setpoint=setpoint,
-            until=until,
-        )
+        try:
+            await self._device.set_mode(
+                mode=mode,
+                setpoint=setpoint,
+                until=until,
+            )
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to set zone mode: {err}") from err
         self.async_write_ha_state_delayed()
 
     async def async_get_zone_schedule(self) -> None:
-        """Get the latest weekly schedule of the Zone."""
+        """Get the latest weekly schedule of the Zone.
+
+        :raises HomeAssistantError: If the command fails.
+        """
         # {{ state_attr('climate.ramses_cc_01_145038_04', 'schedule') }}
-        await self._device.get_schedule()
+        try:
+            await self._device.get_schedule()
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to get zone schedule: {err}") from err
         self.async_write_ha_state()
 
     async def async_set_zone_schedule(self, schedule: str) -> None:
         """Set the weekly schedule of the Zone.
 
         :param schedule: The schedule json string.
+        :raises HomeAssistantError: If the command fails.
         """
-        await self._device.set_schedule(json.loads(schedule))
+        try:
+            await self._device.set_schedule(json.loads(schedule))
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to set zone schedule: {err}") from err
 
 
 class RamsesHvac(RamsesEntity, ClimateEntity):
@@ -783,6 +829,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         """Handle 'get_fan_param' service call.
 
         :param kwargs: Service arguments.
+        :raises HomeAssistantError: If the command fails.
         """
         _LOGGER.info(
             "Fan param read from climate entity %s (%s, id %s)",
@@ -791,13 +838,17 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
             self._device.id,
         )
         kwargs[ATTR_DEVICE_ID] = self._device.id
-        await self._broker.async_get_fan_param(kwargs)
+        try:
+            await self._broker.async_get_fan_param(kwargs)
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to get fan param: {err}") from err
 
     @callback
     async def async_set_fan_clim_param(self, **kwargs: Any) -> None:
         """Handle 'set_fan_param' service call.
 
         :param kwargs: Service arguments.
+        :raises HomeAssistantError: If the command fails.
         """
         _LOGGER.info(
             "Fan param write to climate entity %s (%s)",
@@ -805,7 +856,10 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
             self.__class__.__name__,
         )
         kwargs[ATTR_DEVICE_ID] = self._device.id
-        await self._broker.async_set_fan_param(kwargs)
+        try:
+            await self._broker.async_set_fan_param(kwargs)
+        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+            raise HomeAssistantError(f"Failed to set fan param: {err}") from err
 
     @callback
     async def async_update_fan_params(self, **kwargs: Any) -> None:
@@ -819,6 +873,8 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
             self.__class__.__name__,
         )
         kwargs[ATTR_DEVICE_ID] = self._device.id
+        # Note: This spawns a task and is not awaited, so simple try/except here
+        # won't catch exceptions from the task.
         self._broker.get_all_fan_params(kwargs)  # don't await
 
 
