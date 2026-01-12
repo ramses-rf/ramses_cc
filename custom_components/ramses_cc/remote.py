@@ -272,7 +272,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the remote device.
 
-        :param kwargs: Additional arguments.
+        :param kwargs: Additional arguments for the turn_off operation.
         """
         _LOGGER.debug("Turning off REM device %s", self._device.id)
         pass
@@ -280,7 +280,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the remote device.
 
-        :param kwargs: Additional arguments.
+        :param kwargs: Additional arguments for the turn_on operation.
         """
         _LOGGER.debug("Turning on REM device %s", self._device.id)
         pass
@@ -340,10 +340,10 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         if parent:
             kwargs[ATTR_DEVICE_ID] = parent
             kwargs["from_id"] = self._device.id  # replaces manual from_id entry
-            # Run synchronous I/O function in the executor to avoid blocking the loop
-            await self.hass.async_add_executor_job(
-                self._broker.get_all_fan_params, kwargs
-            )
+            # Call broker method directly on the loop.
+            # broker.get_all_fan_params internally calls loop.create_task().
+            # It is NOT blocking and must NOT be run in an executor.
+            self._broker.get_all_fan_params(kwargs)
         else:
             _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
 
