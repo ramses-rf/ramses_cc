@@ -38,7 +38,12 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up the remote platform."""
+    """Set up the remote platform.
+
+    :param hass: The Home Assistant instance.
+    :param entry: The config entry.
+    :param async_add_entities: Callback to add entities.
+    """
     broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
     platform: EntityPlatform = async_get_current_platform()
 
@@ -56,7 +61,7 @@ async def async_setup_entry(
 
 
 class RamsesRemote(RamsesEntity, RemoteEntity):
-    """Representation of a generic sensor."""
+    """Representation of a RAMSES RF remote."""
 
     _device: HvacRemote
 
@@ -71,7 +76,12 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         device: HvacRemote,
         entity_description: RamsesRemoteEntityDescription,
     ) -> None:
-        """Initialize a HVAC remote."""
+        """Initialize a HVAC remote.
+
+        :param broker: The RamsesBroker instance.
+        :param device: The backend device instance.
+        :param entity_description: The entity description.
+        """
         _LOGGER.info("Found %s", device.id)
         super().__init__(broker, device, entity_description)
 
@@ -82,7 +92,10 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the integration-specific state attributes."""
+        """Return the integration-specific state attributes.
+
+        :return: A dictionary of state attributes.
+        """
         return super().extra_state_attributes | {"commands": self._commands}
 
     async def async_delete_command(
@@ -92,17 +105,9 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Delete commands from the database.
 
-        Usage:
-
-        .. code-block::
-
-            service: remote.delete_command
-            data:
-              command: boost
-            target:
-              entity_id: remote.device_id
+        :param command: The command(s) to delete.
+        :param kwargs: Arbitrary keyword arguments.
         """
-
         # HACK to make ramses_cc call work as per HA service call
         command = [command] if isinstance(command, str) else list(command)
         # if len(command) != 1:
@@ -120,18 +125,11 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Learn a command from a device (remote) and add to the database.
 
-        Usage:
-
-        .. code-block::
-
-            service: remote.learn_command
-            data:
-              command: boost
-              timeout: 3
-            target:
-              entity_id: remote.device_id
+        :param command: The command(s) to learn.
+        :param timeout: Timeout in seconds, defaults to DEFAULT_TIMEOUT.
+        :param kwargs: Arbitrary keyword arguments.
+        :raises TypeError: If command argument is invalid.
         """
-
         # HACK to make ramses_cc call work as per HA service call
         command = [command] if isinstance(command, str) else list(command)
         if len(command) != 1:
@@ -152,7 +150,6 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             :param event_data: The data payload of the event (dict).
             :return: True if the event matches the filter.
             """
-
             codes = ("22F1", "22F3", "22F7")
             return event_data["src"] == self._device.id and event_data["code"] in codes
 
@@ -195,19 +192,14 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Send commands from a device (remote).
 
-        Usage:
-
-        .. code-block::
-
-            service: remote.send_command
-            data:
-              command: boost
-              delay_secs: 0.05
-              num_repeats: 3
-            target:
-              entity_id: remote.device_id
+        :param command: The command(s) to send.
+        :param num_repeats: Number of times to repeat the command.
+        :param delay_secs: Delay between repeats (gap duration).
+        :param hold_secs: Not supported.
+        :param kwargs: Arbitrary keyword arguments.
+        :raises TypeError: If hold_secs is provided or command format is invalid.
+        :raises LookupError: If the command is not known.
         """
-
         # HACK to make ramses_cc call work as per HA service call
         command = [command] if isinstance(command, str) else list(command)
         if len(command) != 1:
@@ -254,18 +246,12 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     ) -> None:
         """Directly add (or replace) a command without RF learning.
 
-        Usage:
-
-        .. code-block::
-
-            service: remote.add_command
-            data:
-              command: boost
-              packet_string: "RQ --- 29:162275 30:123456 --:------ 22F1 003 000030"
-            target:
-              entity_id: remote.device_id
+        :param command: The command name to add.
+        :param packet_string: The raw packet string for the command.
+        :param kwargs: Arbitrary keyword arguments.
+        :raises TypeError: If command format is invalid.
+        :raises ValueError: If packet_string is invalid.
         """
-
         command = [command] if isinstance(command, str) else list(command)
         if len(command) != 1:
             raise TypeError("must be exactly one command to add")
@@ -286,8 +272,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the remote device.
 
-        :param kwargs: Additional arguments for the turn_off operation
-        :type kwargs: Any
+        :param kwargs: Additional arguments.
         """
         _LOGGER.debug("Turning off REM device %s", self._device.id)
         pass
@@ -295,8 +280,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the remote device.
 
-        :param kwargs: Additional arguments for the turn_on operation
-        :type kwargs: Any
+        :param kwargs: Additional arguments.
         """
         _LOGGER.debug("Turning on REM device %s", self._device.id)
         pass
@@ -305,7 +289,10 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
 
     @callback
     async def async_get_fan_rem_param(self, **kwargs: Any) -> None:
-        """Handle 'get_fan_param' service call."""
+        """Handle 'get_fan_param' service call.
+
+        :param kwargs: Arbitrary keyword arguments.
+        """
         _LOGGER.info(
             "Fan param read via remote entity %s (%s, id %s)",
             self.entity_id,
@@ -322,7 +309,10 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
 
     @callback
     async def async_set_fan_rem_param(self, **kwargs: Any) -> None:
-        """Handle 'set_fan_param' service call."""
+        """Handle 'set_fan_param' service call.
+
+        :param kwargs: Arbitrary keyword arguments.
+        """
         _LOGGER.info(
             "Fan param write via remote entity %s (%s)",
             self.entity_id,
@@ -337,7 +327,10 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
 
     async def async_update_fan_rem_params(self, **kwargs: Any) -> None:
-        """Handle 'update_fan_params' service call."""
+        """Handle 'update_fan_params' service call.
+
+        :param kwargs: Arbitrary keyword arguments.
+        """
         _LOGGER.info(
             "Fan read all params via remote entity %s (%s)",
             self.entity_id,
