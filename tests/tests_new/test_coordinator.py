@@ -1,0 +1,294 @@
+"""Tests for the coordinator aspect of RamsesBroker (Lifecycle, Config, Updates)."""
+
+import asyncio
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+import voluptuous as vol
+from homeassistant.const import CONF_SCAN_INTERVAL, Platform
+
+from custom_components.ramses_cc.broker import SZ_CLIENT_STATE, SZ_SCHEMA, RamsesBroker
+from custom_components.ramses_cc.const import (
+    CONF_RAMSES_RF,
+    CONF_SCHEMA,
+    DOMAIN,
+    SIGNAL_NEW_DEVICES,
+)
+from ramses_rf.system import Evohome
+from ramses_tx.schemas import SZ_KNOWN_LIST, SZ_PORT_NAME, SZ_SERIAL_PORT
+
+# Constants
+FAN_ID = "30:111222"
+
+
+@pytest.fixture
+def mock_hass() -> MagicMock:
+    """Return a mock Home Assistant instance."""
+    hass = MagicMock()
+    hass.loop = AsyncMock()
+    hass.config_entries = MagicMock()
+    hass.config_entries.async_get_entry = MagicMock(return_value=None)
+
+    # Ensure these methods are AsyncMocks or return awaitables
+    hass.config_entries.async_forward_entry_setups = AsyncMock()
+    hass.config_entries.async_forward_entry_unload = AsyncMock(return_value=True)
+
+    # Fix: async_create_task must return an awaitable object (Future)
+    # because the broker code awaits the task it creates.
+    def _create_task(coro: Any) -> asyncio.Future[Any]:
+        f: asyncio.Future[Any] = asyncio.Future()
+        f.set_result(None)
+        return f
+
+    hass.async_create_task = MagicMock(side_effect=_create_task)
+    return hass
+
+
+@pytest.fixture
+def mock_entry(mock_hass: MagicMock) -> MagicMock:
+    """Return a mock ConfigEntry."""
+    entry = MagicMock()
+    entry.entry_id = "test_entry"
+    entry.options = {
+        SZ_KNOWN_LIST: {},
+        CONF_SCHEMA: {},
+        CONF_RAMSES_RF: {},
+        SZ_SERIAL_PORT: "/dev/ttyUSB0",
+        CONF_SCAN_INTERVAL: 60,
+    }
+    entry.async_on_unload = MagicMock()
+
+    # Register this entry with the mock hass instance
+    mock_hass.config_entries.async_get_entry.side_effect = (
+        lambda eid: entry if eid == entry.entry_id else None
+    )
+
+    return entry
+
+
+@pytest.fixture
+def mock_broker(mock_hass: MagicMock, mock_entry: MagicMock) -> RamsesBroker:
+    """Return a mock broker with an entry attached."""
+    broker = RamsesBroker(mock_hass, mock_entry)
+    broker.client = MagicMock()
+    broker.client.async_send_cmd = AsyncMock()
+    broker._device_info = {}
+    broker.platforms = {}
+
+    mock_hass.data[DOMAIN] = {mock_entry.entry_id: broker}
+    return broker
+
+
+async def test_setup_fails_gracefully_on_bad_config(
+    mock_hass: MagicMock, mock_entry: MagicMock
+) -> None:
+    """Test that startup catches client creation errors and logs them."""
+    broker = RamsesBroker(mock_hass, mock_entry)
+    broker._store.async_load = AsyncMock(return_value={})
+
+    # Force _create_client to raise vol.Invalid (simulation of bad schema)
+    broker._create_client = MagicMock(side_effect=vol.Invalid("Invalid config"))
+
+    # Verify it raises a clean ValueError with helpful message
+    with pytest.raises(ValueError, match="Failed to initialise RAMSES client"):
+        await broker.async_setup()
+
+
+async def test_device_registry_update_slugs(mock_broker: RamsesBroker) -> None:
+    """Test registry update logic for different device slugs."""
+    mock_device = MagicMock()
+    mock_device.id = FAN_ID
+    mock_device._SLUG = "FAN"
+    # Ensure name is None so broker falls back to slug-based logic
+    mock_device.name = None
+    mock_device._msg_value_code.return_value = None  # No 10E0 info
+
+    with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
+        mock_reg = mock_dr_get.return_value
+
+        mock_broker._update_device(mock_device)
+
+        # Verify the name and model were derived from the SLUG
+        call_kwargs = mock_reg.async_get_or_create.call_args[1]
+        assert call_kwargs["name"] == f"FAN {FAN_ID}"
+        assert call_kwargs["model"] == "FAN"
+
+
+async def test_setup_schema_merge_failure(
+    mock_hass: MagicMock, mock_entry: MagicMock
+) -> None:
+    """Test async_setup handling of schema merge failures."""
+    broker = RamsesBroker(mock_hass, mock_entry)
+
+    # Provide a non-empty schema so the code enters the "merge" block
+    broker._store.async_load = AsyncMock(
+        return_value={SZ_CLIENT_STATE: {SZ_SCHEMA: {"existing": "data"}}}
+    )
+
+    mock_client = MagicMock()
+    mock_client.start = AsyncMock()
+
+    # Mock _create_client to fail on first call (merged schema) but succeed on second (config schema)
+    broker._create_client = MagicMock(
+        side_effect=[LookupError("Merge failed"), mock_client]
+    )
+
+    with patch(
+        "custom_components.ramses_cc.broker.merge_schemas",
+        return_value={"mock": "schema"},
+    ):
+        await broker.async_setup()
+
+    assert broker._create_client.call_count == 2
+
+
+async def test_update_device_relationships(mock_broker: RamsesBroker) -> None:
+    """Test _update_device logic for parent/child and TCS relationships."""
+
+    # Define dummy class with required attributes for spec matching
+    class DummyZone:
+        tcs = None
+        name = None
+        _SLUG = None
+
+        def _msg_value_code(self, code: Any) -> Any:
+            pass
+
+    # We patch the class in the BROKER module so it checks against our dummy
+    with patch("custom_components.ramses_cc.broker.Zone", DummyZone):
+        # 1. Test Zone with TCS (hits via_device logic for Zones)
+        mock_zone = MagicMock(spec=DummyZone)
+        mock_zone.id = "04:123456"
+        mock_zone.tcs.id = "01:999999"
+        mock_zone._msg_value_code.return_value = {"description": "Zone Name"}
+        mock_zone.name = "Custom Zone"
+
+        with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
+            mock_reg = mock_dr_get.return_value
+            mock_broker._update_device(mock_zone)
+
+            # Verify via_device was set to TCS ID
+            call_kwargs = mock_reg.async_get_or_create.call_args[1]
+            assert call_kwargs["via_device"] == (DOMAIN, "01:999999")
+
+
+async def test_update_device_child_parent(mock_broker: RamsesBroker) -> None:
+    """Test _update_device logic for Child devices (actuators/sensors)."""
+
+    class DummyChild:
+        _parent = None
+        _SLUG = None
+        name = None
+
+        def _msg_value_code(self, code: Any) -> Any:
+            pass
+
+    with patch("custom_components.ramses_cc.broker.Child", DummyChild):
+        mock_child = MagicMock(spec=DummyChild)
+        mock_child.id = "13:123456"
+        mock_child._parent.id = "04:123456"
+        mock_child._msg_value_code.return_value = None
+        mock_child._SLUG = "BDR"
+        mock_child.name = None
+
+        with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
+            mock_reg = mock_dr_get.return_value
+            mock_broker._update_device(mock_child)
+
+            call_kwargs = mock_reg.async_get_or_create.call_args[1]
+            assert call_kwargs["via_device"] == (DOMAIN, "04:123456")
+
+
+async def test_async_start(mock_broker: RamsesBroker) -> None:
+    """Test async_start sets up updates and saving."""
+    mock_broker.async_update = AsyncMock()
+    mock_broker.async_save_client_state = AsyncMock()
+    mock_broker.client.start = AsyncMock()
+
+    with patch(
+        "custom_components.ramses_cc.broker.async_track_time_interval"
+    ) as mock_track:
+        await mock_broker.async_start()
+
+        # Should trigger initial update
+        assert mock_broker.async_update.called
+        # Should setup 2 timers (update + save state)
+        assert mock_track.call_count == 2
+
+
+async def test_platform_lifecycle(mock_broker: RamsesBroker) -> None:
+    """Test registering, setting up, and unloading platforms."""
+    # 1. Register Platform
+    mock_platform = MagicMock()
+    mock_platform.domain = "climate"
+    mock_callback = MagicMock()
+
+    mock_broker.async_register_platform(mock_platform, mock_callback)
+    assert "climate" in mock_broker.platforms
+    # Test duplicate registration
+    mock_broker.async_register_platform(mock_platform, mock_callback)
+    assert len(mock_broker.platforms["climate"]) == 2
+
+    # 2. Setup Platform
+    # Since mock_broker.hass is a MagicMock, we verify the call directly on the mock
+    await mock_broker._async_setup_platform("climate")
+    assert mock_broker.hass.config_entries.async_forward_entry_setups.called
+
+    # Already set up path
+    mock_broker.hass.config_entries.async_forward_entry_setups.reset_mock()
+    await mock_broker._async_setup_platform("climate")
+    assert not mock_broker.hass.config_entries.async_forward_entry_setups.called
+
+    # 3. Unload Platforms
+    assert await mock_broker.async_unload_platforms()
+    assert mock_broker.hass.config_entries.async_forward_entry_unload.called
+
+
+async def test_create_client_real(mock_broker: RamsesBroker) -> None:
+    """Test the _create_client method execution (port extraction)."""
+    # Setup options to contain the expected dict structure for the serial port
+    mock_broker.options[SZ_SERIAL_PORT] = {SZ_PORT_NAME: "/dev/ttyUSB0"}
+
+    with patch("custom_components.ramses_cc.broker.Gateway") as mock_gateway_cls:
+        # Pass empty dict as config_schema
+        mock_broker._create_client({})
+
+        assert mock_gateway_cls.called
+        _, kwargs = mock_gateway_cls.call_args
+        # Verify the port config was extracted and passed
+        assert "port_name" in kwargs
+        assert kwargs["port_name"] == "/dev/ttyUSB0"
+
+
+async def test_async_update_discovery(mock_broker: RamsesBroker) -> None:
+    """Test async_update discovering and adding new entities."""
+    # Setup mock entities in client
+    mock_system = MagicMock(spec=Evohome)
+    mock_system.id = "01:123456"
+    mock_system.dhw = MagicMock()  # Has DHW
+    mock_system.zones = [MagicMock()]  # Has Zone
+
+    mock_device = MagicMock()
+    mock_device.id = "04:123456"  # Device
+
+    mock_broker.client.systems = [mock_system]
+    mock_broker.client.devices = [mock_device]
+
+    # FIX: get_state must return a tuple (schema, packets)
+    mock_broker.client.get_state.return_value = ({}, {})
+
+    # Mock device registry to allow lookup AND Mock dispatcher to verify signals
+    with (
+        patch("homeassistant.helpers.device_registry.async_get"),
+        patch(
+            "custom_components.ramses_cc.broker.async_dispatcher_send"
+        ) as mock_dispatch,
+    ):
+        await mock_broker.async_update()
+
+        # Verify signal sent for new devices
+        assert mock_dispatch.call_count >= 1
+        calls = [c[0][1] for c in mock_dispatch.call_args_list]
+        assert SIGNAL_NEW_DEVICES.format(Platform.CLIMATE) in calls
+        assert SIGNAL_NEW_DEVICES.format(Platform.WATER_HEATER) in calls
