@@ -1,18 +1,23 @@
-"""Tests for the asynchronous water heater platform in ramses_cc."""
+"""Tests for the water heater platform in ramses_cc."""
 
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from homeassistant.components.water_heater import STATE_OFF, STATE_ON
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
-from custom_components.ramses_cc.const import SystemMode, ZoneMode
+from custom_components.ramses_cc.const import DOMAIN, SystemMode, ZoneMode
 from custom_components.ramses_cc.water_heater import (
     STATE_AUTO,
     STATE_BOOST,
     RamsesWaterHeater,
+    async_setup_entry,
 )
+from ramses_rf.system.zones import DhwZone
+from ramses_tx.const import SZ_SYSTEM_MODE
 from ramses_tx.exceptions import ProtocolSendFailed
 
 # Constants for testing
@@ -23,6 +28,7 @@ SZ_ACTIVE = "active"
 @pytest.fixture
 def mock_device() -> MagicMock:
     """Return a mock DhwZone device."""
+    # Note: Do not use spec=DhwZone here as it prevents mocking 'tcs' if not explicitly in the class
     device = MagicMock()
     device.id = TEST_DEVICE_ID
     device.mode = {"mode": ZoneMode.SCHEDULE, SZ_ACTIVE: True}
@@ -31,7 +37,7 @@ def mock_device() -> MagicMock:
     device.params = {}
     device.schedule = []
     device.schedule_version = 1
-    device.tcs.system_mode = {"system_mode": SystemMode.AUTO}
+    device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AUTO}
 
     # Async methods on the device
     device.set_mode = AsyncMock()
@@ -64,6 +70,51 @@ def water_heater(mock_broker: MagicMock, mock_device: MagicMock) -> RamsesWaterH
     entity.async_write_ha_state_delayed = MagicMock()
     entity.async_write_ha_state = MagicMock()
     return entity
+
+
+async def test_async_setup_entry(hass: HomeAssistant) -> None:
+    """Test the platform setup."""
+    # Mock ConfigEntry
+    mock_entry = MagicMock(spec=ConfigEntry)
+    mock_entry.entry_id = "test_entry_id"
+
+    # Mock Broker
+    mock_broker = MagicMock()
+    hass.data[DOMAIN] = {mock_entry.entry_id: mock_broker}
+
+    # Mock AddEntitiesCallback
+    mock_add_entities = MagicMock()
+
+    # Patch async_get_current_platform to return a mock
+    with patch(
+        "custom_components.ramses_cc.water_heater.async_get_current_platform"
+    ) as mock_get_platform:
+        mock_platform = MagicMock()
+        mock_get_platform.return_value = mock_platform
+
+        # Call setup
+        await async_setup_entry(hass, mock_entry, mock_add_entities)
+
+        # Assert register_platform called
+        mock_broker.async_register_platform.assert_called_once()
+        call_args = mock_broker.async_register_platform.call_args
+        assert call_args[0][0] == mock_platform
+        callback_func = call_args[0][1]
+
+        # Test the callback function (add_devices)
+        # Create a mock device that passes isinstance(device, DhwZone)
+        mock_device = MagicMock(spec=DhwZone)
+        mock_device.id = TEST_DEVICE_ID
+
+        # Call the internal callback
+        callback_func([mock_device])
+
+        # Assert entities added
+        mock_add_entities.assert_called_once()
+        entities = mock_add_entities.call_args[0][0]
+        assert len(entities) == 1
+        assert isinstance(entities[0], RamsesWaterHeater)
+        assert entities[0]._device == mock_device
 
 
 async def test_property_current_operation(
@@ -109,6 +160,27 @@ async def test_property_error_handling(
     ) as mock_sys_mode:
         mock_sys_mode.side_effect = TypeError
         assert water_heater.is_away_mode_on is None
+
+
+async def test_is_away_mode_on(
+    water_heater: RamsesWaterHeater, mock_device: MagicMock
+) -> None:
+    """Test is_away_mode_on property."""
+    # Test True
+    mock_device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AWAY}
+    assert water_heater.is_away_mode_on is True
+
+    # Test False
+    mock_device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AUTO}
+    assert water_heater.is_away_mode_on is False
+
+
+async def test_simple_properties(
+    water_heater: RamsesWaterHeater, mock_device: MagicMock
+) -> None:
+    """Test simple properties."""
+    assert water_heater.current_temperature == 55.0
+    assert water_heater.target_temperature == 60.0
 
 
 async def test_extra_state_attributes(
