@@ -505,3 +505,55 @@ async def test_setup_logs_warning_on_non_minimal_schema(
         mock_logger.warning.assert_any_call(
             "The config schema is not minimal (consider minimising it)"
         )
+
+
+async def test_fan_setup_logs_warning_on_parameter_request_failure(
+    mock_broker: RamsesBroker,
+) -> None:
+    """Test that a warning is logged if requesting fan params fails during startup."""
+    # CRITICAL FIX: Disable the fixture's side_effect that closes coroutines.
+    # We intend to await the coroutine manually in this test to check its internal logic.
+    mock_broker.hass.async_create_task.side_effect = None
+
+    # 1. Setup a mock FAN device
+    mock_device = MagicMock()
+    mock_device.id = "30:123456"
+    mock_device._SLUG = "FAN"
+    # Ensure it hits the "set_initialized_callback" block
+    mock_device.set_initialized_callback = MagicMock()
+
+    # 2. Mock get_all_fan_params to raise an exception
+    # This simulates the failure we want to catch
+    mock_broker.get_all_fan_params = MagicMock(
+        side_effect=RuntimeError("Connection lost")
+    )
+
+    # 3. Call _async_setup_fan_device to register the callback
+    await mock_broker._async_setup_fan_device(mock_device)
+
+    # 4. Extract the lambda passed to set_initialized_callback
+    # device.set_initialized_callback(lambda: self.hass.async_create_task(on_fan_first_message()))
+    registered_callback = mock_device.set_initialized_callback.call_args[0][0]
+
+    # 5. Execute the lambda. This calls hass.async_create_task(coroutine)
+    registered_callback()
+
+    # 6. Extract the coroutine (on_fan_first_message) passed to async_create_task
+    coroutine = mock_broker.hass.async_create_task.call_args[0][0]
+
+    # 7. Await the coroutine to execute the logic inside the try/except block
+    # We patch the logger to verify the warning
+    with patch("custom_components.ramses_cc.broker._LOGGER") as mock_logger:
+        await coroutine
+
+        # 8. Verify the warning was logged correctly
+        assert mock_logger.warning.called
+
+        # Verify the arguments of the warning call
+        args = mock_logger.warning.call_args[0]
+        assert args[0] == (
+            "Failed to request parameters for device %s during startup: %s. "
+            "Entities will still work for received parameter updates."
+        )
+        assert args[1] == mock_device.id
+        assert str(args[2]) == "Connection lost"
