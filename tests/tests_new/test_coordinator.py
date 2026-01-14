@@ -428,3 +428,80 @@ async def test_async_update_adds_systems_and_guards(mock_broker: RamsesBroker) -
             mock_dispatch.assert_any_call(
                 mock_broker.hass, expected_signal, [mock_system]
             )
+
+
+async def test_setup_uses_merged_schema_on_success(
+    mock_hass: MagicMock, mock_entry: MagicMock
+) -> None:
+    """Test that async_setup successfully uses the merged schema (Line 155)."""
+    broker = RamsesBroker(mock_hass, mock_entry)
+
+    # 1. Setup storage to provide a cached schema so we enter the conditional block
+    cached_schema = {"cached_key": "cached_val"}
+    broker._store.async_load = AsyncMock(
+        return_value={SZ_CLIENT_STATE: {SZ_SCHEMA: cached_schema}}
+    )
+
+    # 2. Setup a mock config schema in options
+    config_schema = {"config_key": "config_val"}
+    broker.options[CONF_SCHEMA] = config_schema
+
+    # 3. Mock _create_client to return a valid client object (Success case)
+    mock_client = MagicMock()
+    mock_client.start = AsyncMock()
+    broker._create_client = MagicMock(return_value=mock_client)
+
+    # 4. Patch merge_schemas to return a known merged dictionary
+    merged_result = {"merged_key": "merged_val"}
+
+    # PATCH: Mock schema_is_minimal to prevent TypeError on our dummy config_schema
+    with (
+        patch(
+            "custom_components.ramses_cc.broker.merge_schemas",
+            return_value=merged_result,
+        ) as mock_merge,
+        patch(
+            "custom_components.ramses_cc.broker.schema_is_minimal",
+            return_value=True,
+        ),
+    ):
+        # 5. Execute async_setup
+        await broker.async_setup()
+
+        # VERIFICATION
+
+        # Ensure merge_schemas was called correctly
+        mock_merge.assert_called_once_with(config_schema, cached_schema)
+
+        # CRITICAL: Verify _create_client was called exactly ONCE with the MERGED schema.
+        broker._create_client.assert_called_once_with(merged_result)
+
+        # Ensure the broker's client attribute was set to our mock
+        assert broker.client is mock_client
+
+
+async def test_setup_logs_warning_on_non_minimal_schema(
+    mock_hass: MagicMock, mock_entry: MagicMock
+) -> None:
+    """Test that a warning is logged when the schema is not minimal (Line 155)."""
+    broker = RamsesBroker(mock_hass, mock_entry)
+    broker._store.async_load = AsyncMock(return_value={})
+
+    # Mock success path for client creation so setup completes
+    mock_client = MagicMock()
+    mock_client.start = AsyncMock()
+    broker._create_client = MagicMock(return_value=mock_client)
+
+    # Patch schema_is_minimal to return False -> triggers the warning
+    with (
+        patch(
+            "custom_components.ramses_cc.broker.schema_is_minimal", return_value=False
+        ),
+        patch("custom_components.ramses_cc.broker._LOGGER") as mock_logger,
+    ):
+        await broker.async_setup()
+
+        # Verify the specific warning on line 155 was logged
+        mock_logger.warning.assert_any_call(
+            "The config schema is not minimal (consider minimising it)"
+        )
