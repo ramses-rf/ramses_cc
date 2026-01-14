@@ -1,6 +1,6 @@
 """Tests for the storage aspect of RamsesBroker (Persistence)."""
 
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -103,3 +103,53 @@ async def test_save_client_state_remotes(mock_broker: RamsesBroker) -> None:
     save_data = mock_broker._store.async_save.call_args[0][0]
     assert "remotes" in save_data
     assert save_data["remotes"][REM_ID]["boost"] == "packet_data"
+
+
+async def test_setup_packet_filtering(
+    mock_hass: MagicMock, mock_entry: MagicMock
+) -> None:
+    """Test logic for filtering cached packets based on age and known list."""
+    broker = RamsesBroker(mock_hass, mock_entry)
+    broker._create_client = MagicMock()
+    broker.client = MagicMock()
+    broker.client.start = AsyncMock()
+
+    now = dt.now()
+    old_date = (now - timedelta(days=2)).isoformat()
+    recent_date = (now - timedelta(hours=1)).isoformat()
+
+    # Known list contains a device 01:123456
+    broker.options[SZ_KNOWN_LIST] = {"01:123456": {}}
+    broker.options[CONF_RAMSES_RF] = {"enforce_known_list": True}
+
+    # Helper to construct a packet where ID matches [11:20]
+    # Indices 0-10 (11 chars) are padding.
+    # [11:20] is 9 chars -> "01:123456"
+    padding = " " * 11
+    valid_packet = f"{padding}01:123456" + (" " * 20)
+    unknown_packet = f"{padding}99:999999" + (" " * 20)
+
+    mock_storage_data = {
+        SZ_CLIENT_STATE: {
+            SZ_PACKETS: {
+                old_date: valid_packet,  # Too old
+                recent_date: valid_packet,  # Good
+                (now - timedelta(minutes=1)).isoformat(): unknown_packet,  # Unknown
+            }
+        }
+    }
+    broker._store.async_load = AsyncMock(return_value=mock_storage_data)
+
+    await broker.async_setup()
+
+    # Check which packets survived
+    call_kwargs = broker.client.start.call_args.kwargs
+    packets = call_kwargs["cached_packets"]
+
+    # Verify recent known packet is present
+    assert recent_date in packets
+    # Verify old packet is gone
+    assert old_date not in packets
+    # Verify unknown device packet is gone
+    # Note: unknown_packet timestamp key was dynamically generated, so we check count
+    assert len(packets) == 1

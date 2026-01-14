@@ -5,7 +5,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import voluptuous as vol
+import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.const import CONF_SCAN_INTERVAL, Platform
 
 from custom_components.ramses_cc.broker import SZ_CLIENT_STATE, SZ_SCHEMA, RamsesBroker
@@ -141,6 +141,7 @@ async def test_setup_schema_merge_failure(
         await broker.async_setup()
 
     assert broker._create_client.call_count == 2
+    # First call with merged schema, second with config schema
 
 
 async def test_update_device_relationships(mock_broker: RamsesBroker) -> None:
@@ -175,29 +176,23 @@ async def test_update_device_relationships(mock_broker: RamsesBroker) -> None:
 
 async def test_update_device_child_parent(mock_broker: RamsesBroker) -> None:
     """Test _update_device logic for Child devices (actuators/sensors)."""
+    # Test logic around lines 535-548
+    from ramses_rf.entity_base import Child
 
-    class DummyChild:
-        _parent = None
-        _SLUG = None
-        name = None
+    mock_child = MagicMock(spec=Child)
+    mock_child.id = "13:123456"
+    mock_child._parent = MagicMock()
+    mock_child._parent.id = "04:123456"
+    mock_child._msg_value_code.return_value = None
+    mock_child._SLUG = "BDR"
+    mock_child.name = None
 
-        def _msg_value_code(self, code: Any) -> Any:
-            pass
+    with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
+        mock_reg = mock_dr_get.return_value
+        mock_broker._update_device(mock_child)
 
-    with patch("custom_components.ramses_cc.broker.Child", DummyChild):
-        mock_child = MagicMock(spec=DummyChild)
-        mock_child.id = "13:123456"
-        mock_child._parent.id = "04:123456"
-        mock_child._msg_value_code.return_value = None
-        mock_child._SLUG = "BDR"
-        mock_child.name = None
-
-        with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
-            mock_reg = mock_dr_get.return_value
-            mock_broker._update_device(mock_child)
-
-            call_kwargs = mock_reg.async_get_or_create.call_args[1]
-            assert call_kwargs["via_device"] == (DOMAIN, "04:123456")
+        call_kwargs = mock_reg.async_get_or_create.call_args[1]
+        assert call_kwargs["via_device"] == (DOMAIN, "04:123456")
 
 
 async def test_async_start(mock_broker: RamsesBroker) -> None:
@@ -292,3 +287,22 @@ async def test_async_update_discovery(mock_broker: RamsesBroker) -> None:
         calls = [c[0][1] for c in mock_dispatch.call_args_list]
         assert SIGNAL_NEW_DEVICES.format(Platform.CLIMATE) in calls
         assert SIGNAL_NEW_DEVICES.format(Platform.WATER_HEATER) in calls
+
+
+async def test_async_update_setup_failure(mock_broker: RamsesBroker) -> None:
+    """Test platform setup failure handling."""
+    # Create a future that raises an exception when awaited
+    f: asyncio.Future[Any] = asyncio.Future()
+    f.set_exception(Exception("Setup failed"))
+
+    # Mock create_task to return this failing future
+    mock_broker.hass.async_create_task.side_effect = lambda coro: f
+
+    # We also need async_forward_entry_setups to fail if it were awaited directly
+    # (though in this case async_create_task bypasses it)
+    mock_broker.hass.config_entries.async_forward_entry_setups.side_effect = Exception(
+        "Setup failed"
+    )
+
+    result = await mock_broker._async_setup_platform("climate")
+    assert result is False

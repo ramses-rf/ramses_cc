@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
     MockConfigEntry,
 )
@@ -37,6 +37,7 @@ def mock_broker(hass: HomeAssistant) -> RamsesBroker:
     broker = RamsesBroker(hass, entry)
     broker.client = MagicMock()
     broker.client.async_send_cmd = AsyncMock()
+    broker.platforms = {}
 
     hass.data[DOMAIN] = {entry.entry_id: broker}
     return broker
@@ -275,3 +276,82 @@ def test_resolve_device_ids_complex(mock_broker: RamsesBroker) -> None:
 
     # 2. Test explicit None return (line 827)
     assert mock_broker._resolve_device_id({}) is None
+
+    # 3. Test empty list
+    data_empty: dict[str, Any] = {"device_id": []}
+    assert mock_broker._resolve_device_id(data_empty) is None
+
+    # 4. Test list with empty values
+    data_missing: dict[str, Any] = {"device": []}
+    assert mock_broker._resolve_device_id(data_missing) is None
+
+
+async def test_resolve_area_id(hass: HomeAssistant, mock_broker: RamsesBroker) -> None:
+    """Test resolving device ID from an Area ID (lines 782-784)."""
+    # Create a device in an area
+    dev_reg = dr.async_get(hass)
+    config_entry = MockConfigEntry(domain=DOMAIN, entry_id="test_config")
+    config_entry.add_to_hass(hass)
+
+    device = dev_reg.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, "01:555555")},
+    )
+    dev_reg.async_update_device(device.id, area_id="test_area")
+
+    data = {"target": {"area_id": ["test_area"]}}
+    resolved = mock_broker._resolve_device_id(data)
+
+    assert resolved == "01:555555"
+
+
+async def test_find_param_entity_registry_only(
+    hass: HomeAssistant, mock_broker: RamsesBroker
+) -> None:
+    """Test _find_param_entity when entity is in registry but not platform."""
+    # Add entity to registry
+    ent_reg = er.async_get(hass)
+    ent_reg.async_get_or_create(
+        "number",
+        DOMAIN,
+        "30_111222_param_0a",
+        original_icon="mdi:fan",
+    )
+    # Ensure platform is empty or doesn't have it
+    mock_broker.platforms = {"number": [MagicMock(entities={})]}
+
+    # This should hit line 669 (return None)
+    entity = mock_broker._find_param_entity("30:111222", "0A")
+    assert entity is None
+
+
+async def test_async_set_fan_param_success_clear_pending(
+    mock_broker: RamsesBroker,
+) -> None:
+    """Test full success path of set_fan_param including pending state."""
+    mock_broker._devices = [MagicMock(id=FAN_ID)]
+    mock_entity = MagicMock()
+    mock_entity.set_pending = MagicMock()
+    mock_entity._clear_pending_after_timeout = AsyncMock()
+
+    # Mock Command to avoid validation errors
+    with (
+        patch.object(mock_broker, "_find_param_entity", return_value=mock_entity),
+        patch("custom_components.ramses_cc.broker.Command") as mock_cmd_cls,
+    ):
+        mock_cmd = MagicMock()
+        mock_cmd_cls.set_fan_param.return_value = mock_cmd
+
+        call = {
+            "device_id": FAN_ID,
+            "param_id": "0A",
+            "value": 20,
+            "from_id": "32:999999",
+        }
+        await mock_broker.async_set_fan_param(call)
+
+        # Verify command sent
+        assert mock_broker.client.async_send_cmd.called
+        assert mock_broker.client.async_send_cmd.call_args[0][0] == mock_cmd
+        # Verify pending set
+        assert mock_entity.set_pending.called
