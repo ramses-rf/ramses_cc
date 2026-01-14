@@ -1,6 +1,8 @@
 """Tests for the storage aspect of RamsesBroker (Persistence)."""
 
+import asyncio
 from datetime import datetime as dt, timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,7 +18,17 @@ REM_ID = "32:111111"
 def mock_hass() -> MagicMock:
     """Return a mock Home Assistant instance."""
     hass = MagicMock()
-    hass.loop = AsyncMock()
+    hass.loop = MagicMock()
+
+    # FIX: Define a helper that schedules the coroutine on the REAL event loop
+    def _create_task(coro: Any) -> asyncio.Task[Any]:
+        return asyncio.create_task(coro)
+
+    # Apply this to both loop.create_task AND async_create_task
+    # This ensures any coroutine passed by broker.py gets scheduled (and awaited)
+    hass.loop.create_task.side_effect = _create_task
+    hass.async_create_task = MagicMock(side_effect=_create_task)
+
     return hass
 
 
@@ -69,19 +81,21 @@ async def test_setup_with_corrupted_storage_dates(
     }
 
     broker._store.async_load = AsyncMock(return_value=mock_storage_data)
-    broker._create_client = MagicMock()
-    broker.client = MagicMock()
-    broker.client.start = AsyncMock()
+
+    # FIX: Ensure _create_client returns the mock that we check later
+    mock_client = MagicMock()
+    mock_client.start = AsyncMock()
+    broker._create_client = MagicMock(return_value=mock_client)
 
     # 3. Run async_setup
     # This should NOT raise ValueError
     await broker.async_setup()
 
     # 4. Verify client started
-    assert broker.client.start.called
+    assert mock_client.start.called
 
     # 5. Verify only valid packet was passed to start
-    call_args = broker.client.start.call_args
+    call_args = mock_client.start.call_args
     cached_packets = call_args.kwargs.get("cached_packets", {})
 
     assert len(cached_packets) == 1
@@ -110,9 +124,13 @@ async def test_setup_packet_filtering(
 ) -> None:
     """Test logic for filtering cached packets based on age and known list."""
     broker = RamsesBroker(mock_hass, mock_entry)
-    broker._create_client = MagicMock()
-    broker.client = MagicMock()
-    broker.client.start = AsyncMock()
+
+    # FIX: Wire up mock_client to be returned by _create_client
+    mock_client = MagicMock()
+    mock_client.start = AsyncMock()
+    broker._create_client = MagicMock(return_value=mock_client)
+    # Also set broker.client for convenience, though async_setup overwrites it
+    broker.client = mock_client
 
     now = dt.now()
     old_date = (now - timedelta(days=2)).isoformat()
@@ -143,7 +161,7 @@ async def test_setup_packet_filtering(
     await broker.async_setup()
 
     # Check which packets survived
-    call_kwargs = broker.client.start.call_args.kwargs
+    call_kwargs = mock_client.start.call_args.kwargs
     packets = call_kwargs["cached_packets"]
 
     # Verify recent known packet is present

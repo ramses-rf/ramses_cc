@@ -360,8 +360,9 @@ async def test_run_fan_param_sequence_bad_data(
     pass
     # Actually, simply checking that we hit the block is enough.
     # If we pass a mock that raises TypeError on conversion to dict, but supports setitem?
-    bad_data_mock = MagicMock()
-    bad_data_mock.__class__ = dict  # Pretend to be dict to maybe pass some checks? No.
+    bad_data_mock = MagicMock(
+        spec=dict
+    )  # Pretend to be dict to maybe pass some checks? No.
     # To fail `dict(x)`, x must not be iterable of pairs.
     # But to support `x['k']=v`, it needs __setitem__.
     bad_data_mock.__iter__.side_effect = TypeError

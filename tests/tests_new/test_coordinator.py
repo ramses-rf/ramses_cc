@@ -8,7 +8,12 @@ import pytest
 import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.const import CONF_SCAN_INTERVAL, Platform
 
-from custom_components.ramses_cc.broker import SZ_CLIENT_STATE, SZ_SCHEMA, RamsesBroker
+from custom_components.ramses_cc.broker import (
+    SZ_CLIENT_STATE,
+    SZ_PACKETS,
+    SZ_SCHEMA,
+    RamsesBroker,
+)
 from custom_components.ramses_cc.const import (
     CONF_RAMSES_RF,
     CONF_SCHEMA,
@@ -26,17 +31,19 @@ FAN_ID = "30:111222"
 def mock_hass() -> MagicMock:
     """Return a mock Home Assistant instance."""
     hass = MagicMock()
-    hass.loop = AsyncMock()
+    # FIX: Loop methods are synchronous, but return Tasks. Use MagicMock.
+    hass.loop = MagicMock()
     hass.config_entries = MagicMock()
     hass.config_entries.async_get_entry = MagicMock(return_value=None)
 
-    # Ensure these methods are AsyncMocks or return awaitables
+    # Ensure these methods are AsyncMocks
     hass.config_entries.async_forward_entry_setups = AsyncMock()
     hass.config_entries.async_forward_entry_unload = AsyncMock(return_value=True)
 
-    # Fix: async_create_task must return an awaitable object (Future)
-    # because the broker code awaits the task it creates.
+    # FIX: async_create_task must return an awaitable (Future).
+    # CRITICAL: It must also 'close' the coro passed to it to prevent RuntimeWarnings.
     def _create_task(coro: Any) -> asyncio.Future[Any]:
+        coro.close()  # Prevent "coroutine '...' was never awaited" warning
         f: asyncio.Future[Any] = asyncio.Future()
         f.set_result(None)
         return f
@@ -295,8 +302,13 @@ async def test_async_update_setup_failure(mock_broker: RamsesBroker) -> None:
     f: asyncio.Future[Any] = asyncio.Future()
     f.set_exception(Exception("Setup failed"))
 
+    # FIX: The side effect needs to close the coro argument to prevent warning
+    def _fail_task(coro: Any) -> asyncio.Future[Any]:
+        coro.close()
+        return f
+
     # Mock create_task to return this failing future
-    mock_broker.hass.async_create_task.side_effect = lambda coro: f
+    mock_broker.hass.async_create_task.side_effect = _fail_task
 
     # We also need async_forward_entry_setups to fail if it were awaited directly
     # (though in this case async_create_task bypasses it)
@@ -306,3 +318,113 @@ async def test_async_update_setup_failure(mock_broker: RamsesBroker) -> None:
 
     result = await mock_broker._async_setup_platform("climate")
     assert result is False
+
+
+async def test_setup_ignores_invalid_cached_packet_timestamps(
+    mock_hass: MagicMock, mock_entry: MagicMock
+) -> None:
+    """Test that async_setup ignores packets with invalid timestamps."""
+    from datetime import datetime as dt
+
+    broker = RamsesBroker(mock_hass, mock_entry)
+
+    # Use a fresh timestamp for the valid packet so it isn't filtered out by the 24h check
+    valid_dtm = dt.now().isoformat()
+    invalid_dtm = "invalid-iso-format"
+
+    broker._store.async_load = AsyncMock(
+        return_value={
+            SZ_CLIENT_STATE: {
+                SZ_PACKETS: {
+                    valid_dtm: "valid_packet_data",
+                    invalid_dtm: "broken_packet_data",
+                }
+            }
+        }
+    )
+
+    # Mock client creation
+    broker._create_client = MagicMock()
+    mock_client = MagicMock()
+    mock_client.start = AsyncMock()
+    broker._create_client.return_value = mock_client
+
+    # Run setup
+    await broker.async_setup()
+
+    # Verify client.start was called with only the valid packet
+    args, kwargs = mock_client.start.call_args
+    cached = kwargs.get("cached_packets", {})
+
+    assert valid_dtm in cached
+    assert invalid_dtm not in cached
+
+
+async def test_update_device_system_naming(mock_broker: RamsesBroker) -> None:
+    """Test _update_device naming logic for System devices."""
+
+    # Define dummy class to patch System for isinstance check
+    class DummySystem:
+        def _msg_value_code(self, *args: Any, **kwargs: Any) -> Any:
+            return None
+
+    # Patch the System class in the broker module
+    with patch("custom_components.ramses_cc.broker.System", DummySystem):
+        mock_system = MagicMock(spec=DummySystem)
+        mock_system.id = "01:123456"
+        mock_system.name = None
+        mock_system._SLUG = None
+
+        # Ensure the method returns None as expected
+        mock_system._msg_value_code.return_value = None
+
+        with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
+            mock_reg = mock_dr_get.return_value
+
+            mock_broker._update_device(mock_system)
+
+            # Verify the name format "Controller {id}"
+            call_kwargs = mock_reg.async_get_or_create.call_args[1]
+            assert call_kwargs["name"] == "Controller 01:123456"
+
+
+async def test_async_update_adds_systems_and_guards(mock_broker: RamsesBroker) -> None:
+    """Test async_update handles new systems and guards empty lists."""
+
+    # Define a dummy class with all required attributes for broker.py logic
+    class DummyEvohome:
+        id: str = "01:111111"
+        dhw: Any = None
+        zones: list[Any] = []
+        name: str | None = None
+        _SLUG: str = "EVO"
+
+        def _msg_value_code(self, *args: Any, **kwargs: Any) -> Any:
+            return None
+
+    # Patch Evohome in the broker with our dummy CLASS (using new=...)
+    with patch("custom_components.ramses_cc.broker.Evohome", new=DummyEvohome):
+        # Create a system that is an instance of our dummy class
+        mock_system = DummyEvohome()
+        mock_system.zones = []
+
+        # Setup client to return this system
+        mock_broker.client.systems = [mock_system]
+        mock_broker.client.devices = []
+
+        mock_broker.client.get_state.return_value = ({}, {})
+
+        # Capture the calls to dispatcher to verify system was added
+        with (
+            patch(
+                "custom_components.ramses_cc.broker.async_dispatcher_send"
+            ) as mock_dispatch,
+            patch("homeassistant.helpers.device_registry.async_get"),
+        ):
+            await mock_broker.async_update()
+
+            # Use assert_any_call for robust verification
+            expected_signal = SIGNAL_NEW_DEVICES.format(Platform.CLIMATE)
+            mock_dispatch.assert_any_call(
+                mock_broker.hass, expected_signal, [mock_system]
+            )
