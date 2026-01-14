@@ -142,7 +142,7 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
     def available(self) -> bool:
         """Return True if the device has been seen recently."""
         msg = self._device._msgs.get("0418")
-        return msg and dt.now() - msg.dtm < timedelta(seconds=1200)
+        return bool(msg and dt.now() - msg.dtm < timedelta(seconds=1200))
 
     @property
     def is_on(self) -> bool:
@@ -159,14 +159,16 @@ class RamsesSystemBinarySensor(RamsesBinarySensor):
     def available(self) -> bool:
         """Return True if the last system sync message is recent."""
         msg = self._device._msgs.get("1F09")
-        return msg and dt.now() - msg.dtm < timedelta(
-            seconds=msg.payload["remaining_seconds"] * 3
+        return bool(
+            msg
+            and dt.now() - msg.dtm
+            < timedelta(seconds=msg.payload["remaining_seconds"] * 3)
         )
 
     @property
     def is_on(self) -> bool:
         """Return True if the gateway has received messages recently."""
-        return not super().is_on  # TODO
+        return not bool(super().is_on)  # TODO
 
 
 class RamsesGatewayBinarySensor(RamsesBinarySensor):
