@@ -993,6 +993,7 @@ class RamsesBroker:
 
         resolved_ids: list[str] = []
 
+        # 1. Check Entity IDs
         entity_ids = target.get("entity_id")
         if entity_ids:
             if isinstance(entity_ids, str):
@@ -1005,24 +1006,30 @@ class RamsesBroker:
                     if device_id := _device_entry_to_ramses_id(device_entry):
                         resolved_ids.append(device_id)
 
-        if not resolved_ids and (device_ids := target.get("device_id")):
-            if isinstance(device_ids, str):
-                device_ids = [device_ids]
-            for device_id in device_ids:
-                device_entry = dev_reg.async_get(device_id)
-                if resolved := _device_entry_to_ramses_id(device_entry):
-                    resolved_ids.append(resolved)
+        # 2. Check Device IDs (if not already found)
+        if not resolved_ids:
+            device_ids = target.get("device_id")
+            if device_ids:
+                if isinstance(device_ids, str):
+                    device_ids = [device_ids]
+                for device_id in device_ids:
+                    device_entry = dev_reg.async_get(device_id)
+                    if resolved := _device_entry_to_ramses_id(device_entry):
+                        resolved_ids.append(resolved)
 
-        if not resolved_ids and (area_ids := target.get("area_id")):
-            if isinstance(area_ids, str):
-                area_ids = [area_ids]
-            for area_id in area_ids:
-                for device_entry in dev_reg.devices.values():
-                    if device_entry.area_id == area_id:
-                        if resolved := _device_entry_to_ramses_id(device_entry):
-                            resolved_ids.append(resolved)
-                if resolved_ids:
-                    break
+        # 3. Check Area IDs (if not already found)
+        if not resolved_ids:
+            area_ids = target.get("area_id")
+            if area_ids:
+                if isinstance(area_ids, str):
+                    area_ids = [area_ids]  # This line is now clearly isolated
+                for area_id in area_ids:
+                    for device_entry in dev_reg.devices.values():
+                        if device_entry.area_id == area_id:
+                            if resolved := _device_entry_to_ramses_id(device_entry):
+                                resolved_ids.append(resolved)
+                    if resolved_ids:
+                        break
 
         return resolved_ids[0] if resolved_ids else None
 
