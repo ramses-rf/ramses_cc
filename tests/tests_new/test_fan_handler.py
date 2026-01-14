@@ -13,7 +13,8 @@ from custom_components.ramses_cc.number import (
     RamsesNumberParam,
     create_parameter_entities,
 )
-from ramses_tx.schemas import SZ_KNOWN_LIST
+from ramses_tx.const import DevType
+from ramses_tx.schemas import SZ_BOUND_TO, SZ_KNOWN_LIST
 
 # Constants
 FAN_ID = "30:123456"
@@ -378,3 +379,154 @@ async def test_run_fan_param_sequence_bad_data(
 
     # If we got here without crashing, we covered the block.
     assert mock_gateway.async_send_cmd.call_count >= 0
+
+
+async def test_setup_fan_bound_success_rem(
+    mock_broker: RamsesBroker, mock_fan_device: MagicMock
+) -> None:
+    """Test successful binding of a FAN to a REM device."""
+    bound_id = "32:111111"
+
+    # Configure the known list with the bound device
+    mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {SZ_BOUND_TO: bound_id}}
+
+    # Create the bound device object
+    bound_device = MagicMock()
+    bound_device.id = bound_id
+    mock_broker.client.devices = [bound_device]
+
+    # Helper classes to satisfy isinstance checks in broker.py
+    class MockHvacVentilator:
+        pass
+
+    class MockHvacRemoteBase:
+        pass
+
+    # Assign classes to mocks
+    mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
+    bound_device.__class__ = MockHvacRemoteBase  # type: ignore[assignment]
+
+    # Patch the classes in the broker module so isinstance checks pass
+    with (
+        patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator),
+        patch("custom_components.ramses_cc.broker.HvacRemoteBase", MockHvacRemoteBase),
+    ):
+        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+
+    # Verify binding was added with correct type
+    mock_fan_device.add_bound_device.assert_called_once_with(bound_id, DevType.REM)
+    assert mock_broker._fan_bound_to_remote[bound_id] == FAN_ID
+
+
+async def test_setup_fan_bound_success_dis(
+    mock_broker: RamsesBroker, mock_fan_device: MagicMock
+) -> None:
+    """Test successful binding of a FAN to a DIS device."""
+    bound_id = "32:222222"
+
+    mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {SZ_BOUND_TO: bound_id}}
+
+    bound_device = MagicMock()
+    bound_device.id = bound_id
+    bound_device._SLUG = DevType.DIS
+    mock_broker.client.devices = [bound_device]
+
+    class MockHvacVentilator:
+        pass
+
+    mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
+
+    # Patch HvacVentilator to pass the first guard clause
+    # We do NOT patch HvacRemoteBase, so isinstance(bound_device, HvacRemoteBase) will fail (correct for DIS)
+    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
+        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+
+    mock_fan_device.add_bound_device.assert_called_once_with(bound_id, DevType.DIS)
+    assert mock_broker._fan_bound_to_remote[bound_id] == FAN_ID
+
+
+async def test_setup_fan_bound_device_not_found(
+    mock_broker: RamsesBroker, mock_fan_device: MagicMock
+) -> None:
+    """Test binding when the bound device is not found in client.devices."""
+    bound_id = "32:333333"
+
+    mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {SZ_BOUND_TO: bound_id}}
+
+    # Ensure device list is empty
+    mock_broker.client.devices = []
+
+    class MockHvacVentilator:
+        pass
+
+    mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
+
+    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
+        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+
+    # Should log warning and not add binding
+    mock_fan_device.add_bound_device.assert_not_called()
+    assert bound_id not in mock_broker._fan_bound_to_remote
+
+
+async def test_setup_fan_bound_no_config(
+    mock_broker: RamsesBroker, mock_fan_device: MagicMock
+) -> None:
+    """Test binding when no bound device is configured (early return)."""
+    # Config exists but has no SZ_BOUND_TO
+    mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {}}
+
+    class MockHvacVentilator:
+        pass
+
+    mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
+
+    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
+        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+
+    mock_fan_device.add_bound_device.assert_not_called()
+
+
+async def test_setup_fan_bound_bad_device_type(
+    mock_broker: RamsesBroker, mock_fan_device: MagicMock
+) -> None:
+    """Test binding when device exists but is incompatible (not REM/DIS)."""
+    bound_id = "32:444444"
+
+    mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {SZ_BOUND_TO: bound_id}}
+
+    # Device exists but is generic (not REM, no DIS slug)
+    bound_device = MagicMock()
+    bound_device.id = bound_id
+    del bound_device._SLUG  # Ensure no _SLUG attribute exists or it is not DIS
+    mock_broker.client.devices = [bound_device]
+
+    class MockHvacVentilator:
+        pass
+
+    mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
+
+    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
+        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+
+    mock_fan_device.add_bound_device.assert_not_called()
+
+
+async def test_setup_fan_bound_invalid_id_type(
+    mock_broker: RamsesBroker, mock_fan_device: MagicMock
+) -> None:
+    """Test binding when the bound device ID is not a string (e.g. integer)."""
+    # Configure known_list with an integer instead of a string for bound_to
+    mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {SZ_BOUND_TO: 12345}}
+
+    class MockHvacVentilator:
+        pass
+
+    # Satisfy the isinstance(device, HvacVentilator) check
+    mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
+
+    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
+        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+
+    # Verify no binding occurred and code returned early
+    mock_fan_device.add_bound_device.assert_not_called()
