@@ -557,3 +557,32 @@ async def test_fan_setup_logs_warning_on_parameter_request_failure(
         )
         assert args[1] == mock_device.id
         assert str(args[2]) == "Connection lost"
+
+
+async def test_update_device_name_fallback_to_id(mock_broker: RamsesBroker) -> None:
+    """Test _update_device falls back to device.id when no name/slug/system (Line 626)."""
+
+    # 1. Create a generic mock device
+    # MagicMock is not an instance of ramses_rf.system.System, so that check fails automatically.
+    mock_device = MagicMock()
+    mock_device.id = "99:888777"
+
+    # 2. Ensure preceding checks fail
+    mock_device.name = None  # Fails 'if device.name'
+    mock_device._SLUG = None  # Fails 'elif device._SLUG'
+
+    # Stub helper method to return None (affects 'model' variable, not 'name')
+    mock_device._msg_value_code.return_value = None
+
+    # 3. Patch the device registry to verify the result
+    with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
+        mock_reg = mock_dr_get.return_value
+
+        # 4. Call the method under test
+        mock_broker._update_device(mock_device)
+
+        # 5. Verify device_registry was called with name == device.id
+        mock_reg.async_get_or_create.assert_called_once()
+        call_kwargs = mock_reg.async_get_or_create.call_args[1]
+
+        assert call_kwargs["name"] == "99:888777"
