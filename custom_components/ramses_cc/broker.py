@@ -305,12 +305,23 @@ class RamsesBroker:
     def _get_device(self, device_id: str) -> Any | None:
         """Get a device by ID.
 
+        Searches the local broker cache first, then falls back to the
+        Gateway's registry for the most up-to-date device object.
+
         :param device_id: The ID of the device to find
         :type device_id: str
         :return: The device if found, None otherwise
         :rtype: Any | None
         """
-        return next((d for d in self._devices if d.id == device_id), None)
+        # 1. Try local broker list first (subset of interested devices)
+        if dev := next((d for d in self._devices if d.id == device_id), None):
+            return dev
+
+        # 2. Fallback to Gateway registry (source of truth)
+        if self.client and hasattr(self.client, "device_by_id"):
+            return self.client.device_by_id.get(device_id)
+
+        return None
 
     def async_register_platform(
         self,
@@ -1166,6 +1177,7 @@ class RamsesBroker:
         :raises ValueError: If required parameters are missing or invalid
         :raises ValueError: If device is not found or not a FAN device
         :raises ValueError: If parameter ID is not a valid 2-digit hex value
+        :raises HomeAssistantError: If communication or transport errors occur
 
         The call dict should contain:
             - device_id (str): Target device ID (supports colon/underscore formats)
@@ -1173,6 +1185,8 @@ class RamsesBroker:
         and optionally:
             - from_id (str): Source device ID (defaults to bound_REM)
         """
+        entity = None  # Ensure entity is defined for finally/except blocks
+
         try:
             data = self._normalize_service_call(call)
 
@@ -1210,17 +1224,17 @@ class RamsesBroker:
         except ValueError as err:
             # Log validation errors but don't re-raise them for edge cases
             _LOGGER.error("Failed to get fan parameter: %s", err)
+            # Clear pending state immediately on validation error
+            if entity and hasattr(entity, "_clear_pending_after_timeout"):
+                asyncio.create_task(entity._clear_pending_after_timeout(0))
             return
         except Exception as err:
             _LOGGER.error("Failed to get fan parameter: %s", err, exc_info=True)
             # Clear pending state on error
-            if (
-                "entity" in locals()
-                and entity
-                and hasattr(entity, "_clear_pending_after_timeout")
-            ):
+            if entity and hasattr(entity, "_clear_pending_after_timeout"):
                 asyncio.create_task(entity._clear_pending_after_timeout(0))
-            raise
+            # Raise friendly error for UI
+            raise HomeAssistantError(f"Failed to get fan parameter: {err}") from err
 
     def get_all_fan_params(self, call: dict[str, Any] | ServiceCall) -> None:
         """Wrapper for _async_run_fan_param_sequence.
