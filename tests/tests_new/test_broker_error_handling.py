@@ -77,6 +77,9 @@ async def test_set_fan_param_raises_ha_error_no_source(
 ) -> None:
     """Test that async_set_fan_param raises HomeAssistantError when no source device is found."""
 
+    # Force device lookup to return None so no bound remote can be found
+    mock_broker.client.device_by_id.get.return_value = None
+
     call_data = {
         "device_id": "30:111222",
         "param_id": "0A",

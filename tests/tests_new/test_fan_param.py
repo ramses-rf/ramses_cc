@@ -68,6 +68,13 @@ class TestFanParameterGet:
         self.broker.client = self.mock_client
         self.broker.client.hgi = MagicMock(id=TEST_FROM_ID)
 
+        # Create a mock device and add it to the registry
+        # This prevents _get_device_and_from_id from returning early with empty from_id
+        self.mock_device = MagicMock()
+        self.mock_device.id = TEST_DEVICE_ID
+        self.mock_device.get_bound_rem.return_value = None
+        self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
+
         # Patch Command.get_fan_param to control command creation
         self.patcher = patch("custom_components.ramses_cc.broker.Command.get_fan_param")
         self.mock_get_fan_param = self.patcher.start()
@@ -252,6 +259,12 @@ class TestFanParameterSet:
         self.broker.client = self.mock_client
         self.broker.client.hgi = MagicMock(id=TEST_FROM_ID)
 
+        # Create a mock device and add it to the registry
+        self.mock_device = MagicMock()
+        self.mock_device.id = TEST_DEVICE_ID
+        self.mock_device.get_bound_rem.return_value = None
+        self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
+
         # Patch Command.set_fan_param to control command creation
         self.patcher = patch("custom_components.ramses_cc.broker.Command.set_fan_param")
         self.mock_set_fan_param = self.patcher.start()
@@ -394,6 +407,12 @@ class TestFanParameterUpdate:
         self.mock_client = AsyncMock()
         self.broker.client = self.mock_client
         self.broker.client.hgi = MagicMock(id=TEST_FROM_ID)
+
+        # Create a mock device and add it to the registry
+        self.mock_device = MagicMock()
+        self.mock_device.id = TEST_DEVICE_ID
+        self.mock_device.get_bound_rem.return_value = None
+        self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
 
         # Patch Command.get_fan_param to control command creation
         self.patcher = patch("custom_components.ramses_cc.broker.Command.get_fan_param")

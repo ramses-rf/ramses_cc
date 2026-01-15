@@ -43,6 +43,8 @@ def mock_broker(hass: HomeAssistant) -> RamsesBroker:
 
     broker = RamsesBroker(hass, entry)
     broker.client = MagicMock()
+    # Fix: Ensure device lookups return None by default so strings aren't treated as devices
+    broker.client.device_by_id = {}
     broker.client.async_send_cmd = AsyncMock()
 
     hass.data[DOMAIN] = {entry.entry_id: broker}

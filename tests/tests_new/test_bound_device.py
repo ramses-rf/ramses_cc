@@ -57,6 +57,15 @@ class TestBoundDeviceFunctionality:
         self.broker.client = self.mock_client
         self.broker.client.hgi = MagicMock(id=TEST_FROM_ID)
 
+        # Create a mock device and add it to the client's registry
+        # This fixes the AttributeError: 'coroutine' object has no attribute 'id'
+        self.mock_device = MagicMock()
+        self.mock_device.id = TEST_DEVICE_ID
+        self.mock_device.get_bound_rem.return_value = None
+
+        # Ensure device_by_id behaves like a dict (synchronous .get)
+        self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
+
         # Patch Command.set_fan_param to control command creation
         self.set_patcher = patch(
             "custom_components.ramses_cc.broker.Command.set_fan_param"

@@ -32,6 +32,8 @@ def mock_gateway() -> MagicMock:
     """
     gateway = MagicMock()
     gateway.async_send_cmd = AsyncMock()
+    # Ensure device_by_id.get returns None by default so IDs are treated as strings
+    gateway.device_by_id = {}
     return gateway
 
 
@@ -72,13 +74,18 @@ def mock_fan_device() -> MagicMock:
 
 
 async def test_broker_get_fan_param(
-    mock_broker: RamsesBroker, mock_gateway: MagicMock
+    mock_broker: RamsesBroker, mock_gateway: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test async_get_fan_param service call in broker.py.
 
     :param mock_broker: The mock broker fixture.
     :param mock_gateway: The mock gateway fixture.
+    :param mock_fan_device: The mock fan device fixture.
     """
+    # Register the mock device so the broker finds it and proceeds to extract from_id
+    mock_broker._devices = [mock_fan_device]
+    mock_gateway.device_by_id = {FAN_ID: mock_fan_device}
+
     # 1. Test with explicit from_id
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX, "from_id": REM_ID}
 
@@ -104,6 +111,8 @@ async def test_broker_set_fan_param(
     """
     # Mock the device lookup so the broker can find the bound remote
     mock_broker._devices = [mock_fan_device]
+    # Also update the gateway registry if the broker checks there (fallback)
+    mock_gateway.device_by_id = {FAN_ID: mock_fan_device}
 
     # 1. Test with automatic bound device lookup (no from_id)
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX, "value": 21.5}
@@ -295,6 +304,8 @@ async def test_update_fan_params_sequence(
     """
     # Register the mock device so the broker can find the bound remote (source ID)
     mock_broker._devices = [mock_fan_device]
+    # Also update the gateway registry if the broker checks there (fallback)
+    mock_gateway.device_by_id = {FAN_ID: mock_fan_device}
 
     # Define a tiny schema for testing (just 2 params) to avoid 30+ iterations
     tiny_schema = ["11", "22"]
@@ -323,6 +334,8 @@ async def test_broker_set_fan_param_no_binding(
 
     # Mock the device lookup
     mock_broker._devices = [mock_fan_device]
+    # Also update the gateway registry if the broker checks there (fallback)
+    mock_gateway.device_by_id = {FAN_ID: mock_fan_device}
 
     # 1. Simulate an Unbound Fan (get_bound_rem returns None)
     mock_fan_device.get_bound_rem = MagicMock(return_value=None)
