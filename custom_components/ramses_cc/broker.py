@@ -1043,67 +1043,69 @@ class RamsesBroker:
         return resolved_ids[0] if resolved_ids else None
 
     def _resolve_device_id(self, data: dict[str, Any]) -> str | None:
-        """Return device_id from either explicit device_id or HA target selector."""
-        device_id = data.get("device_id")
-        if device_id:
-            # Handle list case first
-            if isinstance(device_id, list):
-                if not device_id:  # Empty list
-                    return None
-                # If it's a list with one item, use that
-                if len(device_id) == 1:
-                    device_id = device_id[0]
-                    data["device_id"] = (
-                        device_id  # Update the data with the single value
-                    )
-                else:
-                    # For multiple device IDs, log a warning and use the first one
-                    _LOGGER.warning(
-                        "Multiple device_ids provided, using first one: %s",
-                        device_id[0],
-                    )
-                    device_id = device_id[0]
-                    data["device_id"] = (
-                        device_id  # Update the data with the first value
-                    )
+        """Return device_id from either explicit device_id or HA target selector.
 
-            # Now handle the single device_id case
+        This method checks 'device_id', 'device', and 'target' keys in the data
+        dictionary to resolve a single RAMSES-compatible device ID.
+
+        :param data: The service call data dictionary.
+        :return: The resolved device ID string or None if not found.
+        """
+
+        def _get_first(key: str) -> Any | None:
+            """Extract the first item if the value is a list, else return value.
+
+            :param key: The key to look up in the data dictionary.
+            :return: The first item of a list, the value itself, or None.
+            """
+            val = data.get(key)
+            if val is None:
+                return None
+
+            if isinstance(val, list):
+                if not val:
+                    return None
+                if len(val) > 1:
+                    _LOGGER.warning(
+                        "Multiple values for '%s' provided, using first one: %s",
+                        key,
+                        val[0],
+                    )
+                # Update data in place to keep original side-effect behavior
+                data[key] = val[0]
+                return val[0]
+            return val
+
+        # 1. Try explicit device_id
+        if (device_id := _get_first("device_id")) is not None:
             if isinstance(device_id, str):
+                # RAMSES IDs usually contain colons or underscores
                 if ":" in device_id or "_" in device_id:
                     return device_id
+
+                # Try resolving as an HA Device Registry ID
                 if resolved := self._target_to_device_id({"device_id": [device_id]}):
                     data["device_id"] = resolved
-                    return resolved
-            else:
-                # Handle other types (shouldn't normally happen)
-                device_id = str(device_id)
-                data["device_id"] = device_id
-                return device_id
+                    return str(resolved)
 
-        # Support UI device selection via services.yaml device selector field
-        # (a HA device registry id/UUID), while keeping device_id for RAMSES ids.
-        ha_device_id = data.get("device")
-        if ha_device_id:
-            if isinstance(ha_device_id, list):
-                if not ha_device_id:
-                    return None
-                if len(ha_device_id) > 1:
-                    _LOGGER.warning(
-                        "Multiple devices provided, using first one: %s",
-                        ha_device_id[0],
-                    )
-                ha_device_id = ha_device_id[0]
-                data["device"] = ha_device_id
-            if isinstance(ha_device_id, str):
-                if resolved := self._target_to_device_id({"device_id": [ha_device_id]}):
+            # Fallback for unexpected types (matches original behavior)
+            res = str(device_id)
+            data["device_id"] = res
+            return res
+
+        # 2. Try 'device' (common in services.yaml selectors)
+        if (ha_device := _get_first("device")) is not None:
+            if isinstance(ha_device, str):
+                if resolved := self._target_to_device_id({"device_id": [ha_device]}):
                     data["device_id"] = resolved
-                    return resolved
+                    return str(resolved)
 
-        # Try to get device_id from target
-        target = data.get("target")
-        if target and (resolved := self._target_to_device_id(target)):
+        # 3. Try 'target' selector
+        if (target := data.get("target")) and (
+            resolved := self._target_to_device_id(target)
+        ):
             data["device_id"] = resolved
-            return resolved
+            return str(resolved)
 
         return None
 
