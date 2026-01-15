@@ -5,6 +5,18 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Final
 
+from homeassistant.const import CONF_SCAN_INTERVAL as CONF_SCAN_INTERVAL
+
+from ramses_rf.schemas import SZ_SCHEMA as SZ_SCHEMA
+from ramses_tx.ramses import _2411_PARAMS_SCHEMA as _2411_PARAMS_SCHEMA
+from ramses_tx.schemas import (
+    SZ_BOUND_TO as SZ_BOUND_TO,
+    SZ_ENFORCE_KNOWN_LIST as SZ_ENFORCE_KNOWN_LIST,
+    SZ_KNOWN_LIST as SZ_KNOWN_LIST,
+    SZ_PACKET_LOG as SZ_PACKET_LOG,
+    SZ_SERIAL_PORT as SZ_SERIAL_PORT,
+)
+
 DOMAIN: Final = "ramses_cc"
 
 STORAGE_VERSION: Final[int] = 1

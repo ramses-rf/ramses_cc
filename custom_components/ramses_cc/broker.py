@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_SCAN_INTERVAL, Platform
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -31,35 +31,33 @@ from ramses_rf.device.hvac import HvacRemoteBase, HvacVentilator
 from ramses_rf.entity_base import Child, Entity as RamsesRFEntity
 from ramses_rf.exceptions import BindingFlowFailed
 from ramses_rf.gateway import Gateway
-from ramses_rf.schemas import SZ_SCHEMA
 from ramses_rf.system import Evohome, System, Zone
 from ramses_tx.address import pkt_addrs
 from ramses_tx.command import Command
 from ramses_tx.const import Code, DevType
 from ramses_tx.exceptions import PacketAddrSetInvalid  # , TransportSourceInvalid
-from ramses_tx.ramses import _2411_PARAMS_SCHEMA
-from ramses_tx.schemas import (
-    SZ_BOUND_TO,
-    SZ_ENFORCE_KNOWN_LIST,
-    SZ_KNOWN_LIST,
-    SZ_PACKET_LOG,
-    SZ_SERIAL_PORT,
-    DeviceIdT,
-    extract_serial_port,
-)
+from ramses_tx.schemas import DeviceIdT, extract_serial_port
 
 from .const import (
+    _2411_PARAMS_SCHEMA,
     CONF_COMMANDS,
     CONF_RAMSES_RF,
+    CONF_SCAN_INTERVAL,
     CONF_SCHEMA,
     DOMAIN,
     SIGNAL_NEW_DEVICES,
     SIGNAL_UPDATE,
     STORAGE_KEY,
     STORAGE_VERSION,
+    SZ_BOUND_TO,
     SZ_CLIENT_STATE,
+    SZ_ENFORCE_KNOWN_LIST,
+    SZ_KNOWN_LIST,
+    SZ_PACKET_LOG,
     SZ_PACKETS,
     SZ_REMOTES,
+    SZ_SCHEMA,
+    SZ_SERIAL_PORT,
 )
 from .schemas import merge_schemas, schema_is_minimal
 
