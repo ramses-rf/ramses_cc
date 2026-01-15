@@ -63,9 +63,6 @@ def mock_broker(hass: HomeAssistant) -> RamsesBroker:
     broker = RamsesBroker(hass, entry)
     broker.client = MagicMock()
     broker.client.async_send_cmd = AsyncMock()
-
-    # IMPORTANT: Initialize device_by_id as a dict so .get() returns None for
-    # missing keys instead of a MagicMock object.
     broker.client.device_by_id = {}
     broker.platforms = {}
 
@@ -105,7 +102,7 @@ async def test_set_fan_param_raises_ha_error_invalid_value(
         # "value": missing -> triggers ValueError
         "from_id": "32:111111",
     }
-    # We patch _get_device_and_from_id because otherwise the broker checks for
+    # Patch _get_device_and_from_id because otherwise the broker checks for
     # the device existence first and raises "No valid source device" before
     # checking the value.
     with (
@@ -211,8 +208,7 @@ async def test_broker_service_presence(
         assert "set_fan_param" in services[DOMAIN]
 
 
-# --- Helper Tests (moved from test_broker_services.py) ---
-# These verify helpers used during service ID resolution
+# --- Helper Tests (verify helpers used during service ID resolution) ---
 
 
 def test_ha_to_ramses_id_mapping(hass: HomeAssistant) -> None:
@@ -482,7 +478,7 @@ async def test_get_device_and_from_id_bound_logic(mock_broker: RamsesBroker) -> 
 async def test_run_fan_param_sequence_exception(mock_broker: RamsesBroker) -> None:
     """Test exception handling in _async_run_fan_param_sequence."""
     # Force an exception inside the sequence loop
-    # We patch the schema to a single item to make the test deterministic and fast
+    # Patch the schema to a single item to make the test deterministic and fast
     with (
         patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", ["0A"]),
         patch.object(
@@ -647,7 +643,7 @@ async def test_set_fan_param_exception_handling(
 async def test_run_fan_param_sequence_dict_fail(mock_broker: RamsesBroker) -> None:
     """Test the try/except block in run_fan_param_sequence."""
 
-    # We need to mock data so dict(data) raises ValueError
+    # Mock data so dict(data) raises ValueError
     # Mock _normalize_service_call
     class BadDict:
         def __init__(self) -> None:
@@ -1200,7 +1196,7 @@ def test_update_device_relationships(hass: HomeAssistant) -> None:
     dev_reg = MagicMock()
     dev_reg.async_get_or_create = MagicMock()
     with patch("homeassistant.helpers.device_registry.async_get", return_value=dev_reg):
-        # Case 1: Child Device with Parent (Hits ~Lines 678)
+        # Case 1: Child Device with Parent
         parent = MagicMock(spec=System)
         parent.id = "01:123456"
 
@@ -1223,7 +1219,7 @@ def test_update_device_relationships(hass: HomeAssistant) -> None:
             serial_number="04:123456",
         )
 
-        # Case 2: Generic Device (hits 'else' block for via_device = None)
+        # Case 2: Generic Device
         generic_device = MagicMock(spec=Device)
         generic_device.id = "18:000000"
         generic_device.name = "HGI"
@@ -1293,7 +1289,7 @@ def test_resolve_device_id_edge_cases(hass: HomeAssistant) -> None:
     assert broker._resolve_device_id(data) is None
 
     # Test 3: device (HA ID) is a list with multiple items (Logs warning)
-    # We need to mock _target_to_device_id to return something valid
+    # Mock _target_to_device_id to return something valid
     with patch.object(broker, "_target_to_device_id", return_value="18:123456"):
         # Explicitly annotate data as dict[str, Any] to avoid Mypy overlap error
         # when comparing data["device"] (initially list) with a string.
@@ -1343,7 +1339,6 @@ async def test_get_fan_param_sets_pending(hass: HomeAssistant) -> None:
     entry = MagicMock()
     broker = RamsesBroker(hass, entry)
     broker.client = MagicMock()
-    # Make async_send_cmd awaitable
     broker.client.async_send_cmd = AsyncMock()
 
     # Setup happy path for IDs using valid RAMSES ID format (XX:YYYYYY)

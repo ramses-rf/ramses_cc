@@ -222,7 +222,7 @@ class TestFanParameterGet:
 class TestFanParameterSet:
     """Test cases for the set_fan_param service.
 
-    ⚠️  SAFETY NOTICE: This test class uses comprehensive mocking to ensure
+    SAFETY NOTICE: This test class uses comprehensive mocking to ensure
     no real commands are sent to actual FAN devices. All Command.set_fan_param
     calls and client.send_cmd operations are intercepted by mocks.
 

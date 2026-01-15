@@ -1122,7 +1122,6 @@ class RamsesBroker:
         if not device_id:
             # Logic to handle missing device ID gracefully or raise
             # For now, we return empty to let the caller handle "not found"
-            # matching the previous behavior for 'None', but allowing Exceptions to bubble.
             return "", "", ""
 
         # 2. Get the Actual Device Object

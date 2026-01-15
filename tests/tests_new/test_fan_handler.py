@@ -267,7 +267,7 @@ async def test_setup_fan_bound_invalid_type(
         FAN_ID: {"bound_to": 12345}  # Invalid type
     }
 
-    # This should trigger the warning and return early (lines 365-369)
+    # Trigger the warning and return early
     await mock_broker._setup_fan_bound_devices(mock_fan_device)
 
     # Verify no binding occurred
@@ -358,26 +358,10 @@ async def test_run_fan_param_sequence_bad_data(
     mock_broker: RamsesBroker, mock_gateway: MagicMock
 ) -> None:
     """Test that sequence handles non-dict data gracefully."""
-    # Setup bad_data to look like it fails dict(), but still works for .get()
-    # This is tricky because we want to trigger the TypeError on dict(data)
-    # but still allow subsequent logic to work.
     bad_data = MagicMock()
     bad_data.items.side_effect = TypeError("Not a dict")
-    # But for param validation we need .get("param_id") to return a string
     bad_data.get.return_value = "0A"
 
-    # The code at 1017-1025 does:
-    # try: param_data = dict(data) -> raises TypeError
-    # except: param_data = {k:v for k,v in data.items()} if hasattr(data, "items") else data
-
-    # Wait, if bad_data.items raises TypeError, the fallback logic might catch it?
-    # No, the 'try' wraps `dict(data)`.
-    # To test the fallback "else data", we need dict(data) to fail AND hasattr(data, "items") be False?
-    # Or just `bad_data` passed through.
-
-    # Let's just make it simpler: ensure fallback works when data is NOT a dict but has items().
-    # We can mock `dict`? No.
-    # We can pass an object that isn't a dict.
     class NotADict:
         def get(self, key: str) -> str:
             return "0A"
@@ -389,21 +373,9 @@ async def test_run_fan_param_sequence_bad_data(
         return_value=bad_data_obj,
     ):
         await mock_broker._async_run_fan_param_sequence({})
-        # The code will use bad_data_obj as param_data.
-        # Then `param_data["param_id"] = param_id` -> TypeError because NotADict doesn't support setitem
-        # Ah, the code does: `param_data["param_id"] = param_id`.
-        # So the fallback object MUST support item assignment.
-        # This implies the fallback is only really useful if it's a MutableMapping that isn't a dict?
-        # Let's assume the coverage gap is just the `except (TypeError, ValueError)` block.
-        # We can force `dict()` to fail by passing a weird object.
     pass
-    # Actually, simply checking that we hit the block is enough.
-    # If we pass a mock that raises TypeError on conversion to dict, but supports setitem?
-    bad_data_mock = MagicMock(
-        spec=dict
-    )  # Pretend to be dict to maybe pass some checks? No.
-    # To fail `dict(x)`, x must not be iterable of pairs.
-    # But to support `x['k']=v`, it needs __setitem__.
+
+    bad_data_mock = MagicMock(spec=dict)
     bad_data_mock.__iter__.side_effect = TypeError
     bad_data_mock.get.return_value = "0A"
 
@@ -411,11 +383,8 @@ async def test_run_fan_param_sequence_bad_data(
         "custom_components.ramses_cc.broker.RamsesBroker._normalize_service_call",
         return_value=bad_data_mock,
     ):
-        # We need to swallow the exception if the test setup makes it fail later
-        # But if we want to test the TRY/EXCEPT block specifically:
         await mock_broker._async_run_fan_param_sequence({})
 
-    # If we got here without crashing, we covered the block.
     assert mock_gateway.async_send_cmd.call_count >= 0
 
 
@@ -475,7 +444,7 @@ async def test_setup_fan_bound_success_dis(
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
     # Patch HvacVentilator to pass the first guard clause
-    # We do NOT patch HvacRemoteBase, so isinstance(bound_device, HvacRemoteBase) will fail (correct for DIS)
+    # Do NOT patch HvacRemoteBase, so isinstance(bound_device, HvacRemoteBase) will fail (correct for DIS)
     with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
         await mock_broker._setup_fan_bound_devices(mock_fan_device)
 
@@ -511,7 +480,6 @@ async def test_setup_fan_bound_no_config(
     mock_broker: RamsesBroker, mock_fan_device: MagicMock
 ) -> None:
     """Test binding when no bound device is configured (early return)."""
-    # Config exists but has no SZ_BOUND_TO
     mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {}}
 
     class MockHvacVentilator:

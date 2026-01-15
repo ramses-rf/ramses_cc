@@ -31,7 +31,6 @@ FAN_ID = "30:111222"
 def mock_hass() -> MagicMock:
     """Return a mock Home Assistant instance."""
     hass = MagicMock()
-    # FIX: Loop methods are synchronous, but return Tasks. Use MagicMock.
     hass.loop = MagicMock()
     hass.config_entries = MagicMock()
     hass.config_entries.async_get_entry = MagicMock(return_value=None)
@@ -40,7 +39,7 @@ def mock_hass() -> MagicMock:
     hass.config_entries.async_forward_entry_setups = AsyncMock()
     hass.config_entries.async_forward_entry_unload = AsyncMock(return_value=True)
 
-    # FIX: async_create_task must return an awaitable (Future).
+    # async_create_task must return an awaitable (Future).
     # CRITICAL: It must also 'close' the coro passed to it to prevent RuntimeWarnings.
     def _create_task(coro: Any) -> asyncio.Future[Any]:
         coro.close()  # Prevent "coroutine '...' was never awaited" warning
@@ -277,7 +276,6 @@ async def test_async_update_discovery(mock_broker: RamsesBroker) -> None:
     mock_broker.client.systems = [mock_system]
     mock_broker.client.devices = [mock_device]
 
-    # FIX: get_state must return a tuple (schema, packets)
     mock_broker.client.get_state.return_value = ({}, {})
 
     # Mock device registry to allow lookup AND Mock dispatcher to verify signals
@@ -302,7 +300,7 @@ async def test_async_update_setup_failure(mock_broker: RamsesBroker) -> None:
     f: asyncio.Future[Any] = asyncio.Future()
     f.set_exception(Exception("Setup failed"))
 
-    # FIX: The side effect needs to close the coro argument to prevent warning
+    # The side effect needs to close the coro argument to prevent warning
     def _fail_task(coro: Any) -> asyncio.Future[Any]:
         coro.close()
         return f
@@ -310,7 +308,7 @@ async def test_async_update_setup_failure(mock_broker: RamsesBroker) -> None:
     # Mock create_task to return this failing future
     mock_broker.hass.async_create_task.side_effect = _fail_task
 
-    # We also need async_forward_entry_setups to fail if it were awaited directly
+    # async_forward_entry_setups needs to fail if it were awaited directly
     # (though in this case async_create_task bypasses it)
     mock_broker.hass.config_entries.async_forward_entry_setups.side_effect = Exception(
         "Setup failed"
@@ -454,7 +452,7 @@ async def test_setup_uses_merged_schema_on_success(
     # 4. Patch merge_schemas to return a known merged dictionary
     merged_result = {"merged_key": "merged_val"}
 
-    # PATCH: Mock schema_is_minimal to prevent TypeError on our dummy config_schema
+    # Patch mock schema_is_minimal to prevent TypeError on our dummy config_schema
     with (
         patch(
             "custom_components.ramses_cc.broker.merge_schemas",
@@ -501,7 +499,6 @@ async def test_setup_logs_warning_on_non_minimal_schema(
     ):
         await broker.async_setup()
 
-        # Verify the specific warning on line 155 was logged
         mock_logger.warning.assert_any_call(
             "The config schema is not minimal (consider minimising it)"
         )
@@ -511,8 +508,6 @@ async def test_fan_setup_logs_warning_on_parameter_request_failure(
     mock_broker: RamsesBroker,
 ) -> None:
     """Test that a warning is logged if requesting fan params fails during startup."""
-    # CRITICAL FIX: Disable the fixture's side_effect that closes coroutines.
-    # We intend to await the coroutine manually in this test to check its internal logic.
     mock_broker.hass.async_create_task.side_effect = None
 
     # 1. Setup a mock FAN device
@@ -523,7 +518,6 @@ async def test_fan_setup_logs_warning_on_parameter_request_failure(
     mock_device.set_initialized_callback = MagicMock()
 
     # 2. Mock get_all_fan_params to raise an exception
-    # This simulates the failure we want to catch
     mock_broker.get_all_fan_params = MagicMock(
         side_effect=RuntimeError("Connection lost")
     )
@@ -542,7 +536,6 @@ async def test_fan_setup_logs_warning_on_parameter_request_failure(
     coroutine = mock_broker.hass.async_create_task.call_args[0][0]
 
     # 7. Await the coroutine to execute the logic inside the try/except block
-    # We patch the logger to verify the warning
     with patch("custom_components.ramses_cc.broker._LOGGER") as mock_logger:
         await coroutine
 

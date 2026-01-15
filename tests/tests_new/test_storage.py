@@ -20,7 +20,7 @@ def mock_hass() -> MagicMock:
     hass = MagicMock()
     hass.loop = MagicMock()
 
-    # FIX: Define a helper that schedules the coroutine on the REAL event loop
+    # Define a helper that schedules the coroutine on the REAL event loop
     def _create_task(coro: Any) -> asyncio.Task[Any]:
         return asyncio.create_task(coro)
 
@@ -82,7 +82,7 @@ async def test_setup_with_corrupted_storage_dates(
 
     broker._store.async_load = AsyncMock(return_value=mock_storage_data)
 
-    # FIX: Ensure _create_client returns the mock that we check later
+    # Ensure _create_client returns the mock that we check later
     mock_client = MagicMock()
     mock_client.start = AsyncMock()
     broker._create_client = MagicMock(return_value=mock_client)
@@ -125,7 +125,7 @@ async def test_setup_packet_filtering(
     """Test logic for filtering cached packets based on age and known list."""
     broker = RamsesBroker(mock_hass, mock_entry)
 
-    # FIX: Wire up mock_client to be returned by _create_client
+    # Wire up mock_client to be returned by _create_client
     mock_client = MagicMock()
     mock_client.start = AsyncMock()
     broker._create_client = MagicMock(return_value=mock_client)
