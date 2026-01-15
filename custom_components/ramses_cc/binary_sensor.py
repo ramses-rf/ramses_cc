@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime as dt, timedelta
-from types import UnionType
 from typing import Any
 
 from homeassistant.components.binary_sensor import (
@@ -216,7 +215,7 @@ class RamsesBinarySensorEntityDescription(
     # integration-specific attributes
     ramses_cc_class: type[RamsesBinarySensor] = RamsesBinarySensor
     ramses_rf_attr: str
-    ramses_rf_class: type[RamsesRFEntity] | UnionType = RamsesRFEntity
+    ramses_rf_class: type[RamsesRFEntity] | Any = RamsesRFEntity
 
 
 BINARY_SENSOR_DESCRIPTIONS: tuple[RamsesBinarySensorEntityDescription, ...] = (

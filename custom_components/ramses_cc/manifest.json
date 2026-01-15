@@ -1,6 +1,7 @@
 {
     "domain": "ramses_cc",
     "name": "RAMSES RF",
+    "after_dependencies": ["mqtt"],
     "codeowners": ["@zxdavb","@silverailscolo"],
     "config_flow": true,
     "dependencies": ["usb"],

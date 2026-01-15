@@ -85,7 +85,7 @@ _CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.broker.py
 
 NUM_DEVS_BEFORE = 3  # HGI, faked THM, faked REM
 NUM_DEVS_AFTER = 15  # proxy for success of cast_packets_to_rf()
-NUM_SVCS_AFTER = 35  # proxy for success, platform services included since 0.51.8
+NUM_SVCS_AFTER = 36  # proxy for success, platform services included since 0.51.8
 NUM_ENTS_AFTER = 47  # proxy for success
 NUM_ENTS_AFTER_ALT = (
     NUM_ENTS_AFTER - 9
