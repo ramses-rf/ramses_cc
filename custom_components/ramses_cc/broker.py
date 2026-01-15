@@ -1277,14 +1277,17 @@ class RamsesBroker:
         """
         try:
             data = self._normalize_service_call(call)
-
             _LOGGER.debug(
                 "Processing update_fan_params service call with data: %s", data
             )
+        except Exception as err:
+            _LOGGER.error("Invalid service call data: %s", err)
+            return
 
-            # Get the list of parameters to request
-            # Add delay between requests to prevent flooding the RF protocol
-            for idx, param_id in enumerate(_2411_PARAMS_SCHEMA):
+        # Get the list of parameters to request
+        # Add delay between requests to prevent flooding the RF protocol
+        for idx, param_id in enumerate(_2411_PARAMS_SCHEMA):
+            try:
                 # Create parameter-specific data by copying base data and adding param_id
                 # Handle different types of mapping objects safely
                 try:
@@ -1303,10 +1306,13 @@ class RamsesBroker:
                 # This prevents overwhelming the device and protocol buffer
                 if idx < len(_2411_PARAMS_SCHEMA) - 1:
                     await asyncio.sleep(0.5)  # 500ms between requests
-        except Exception as err:
-            _LOGGER.error("Failed to get fan parameters for device: %s", err)
-            # Don't re-raise the exception - handle it gracefully like other methods
-            return
+
+            except Exception as err:
+                # Log error but continue to next parameter
+                _LOGGER.error(
+                    "Failed to get fan parameter %s for device: %s", param_id, err
+                )
+                continue
 
     async def async_set_fan_param(self, call: dict[str, Any] | ServiceCall) -> None:
         """Handle 'set_fan_param' service call (or direct dict).
