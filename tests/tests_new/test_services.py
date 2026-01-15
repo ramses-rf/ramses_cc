@@ -355,3 +355,30 @@ async def test_async_set_fan_param_success_clear_pending(
         assert mock_broker.client.async_send_cmd.call_args[0][0] == mock_cmd
         # Verify pending set
         assert mock_entity.set_pending.called
+
+
+async def test_find_param_entity_found_in_platform(
+    hass: HomeAssistant, mock_broker: RamsesBroker
+) -> None:
+    """Test _find_param_entity when entity is found in the platform."""
+    # 1. Add entity to registry to pass the first check in _find_param_entity
+    ent_reg = er.async_get(hass)
+    ent_reg.async_get_or_create(
+        "number",
+        DOMAIN,
+        "30_111222_param_0a",
+        original_icon="mdi:fan",
+    )
+
+    # 2. Mock the platform with the entity loaded
+    mock_entity = MagicMock()
+    mock_platform = MagicMock()
+    # ensure hasattr(platform, "entities") is True and key exists
+    mock_platform.entities = {"number.30_111222_param_0a": mock_entity}
+    mock_broker.platforms = {"number": [mock_platform]}
+
+    # 3. Call the method
+    entity = mock_broker._find_param_entity("30:111222", "0A")
+
+    # 4. Assert we got the specific entity object from the platform
+    assert entity is mock_entity
