@@ -1098,67 +1098,39 @@ class RamsesBroker:
 
         return None
 
-    def _get_device_and_from_id(self, call: dict[str, Any]) -> tuple[str, str, str]:
-        """Get device_id and from_id with validation and fallback logic.
+    def _get_device_and_from_id(self, data: dict[str, Any]) -> tuple[str, str, str]:
+        """Resolve the target device and the source (from) device IDs.
 
-        Combined helper method that extracts device_id and determines from_id
-        with fallback logic: explicit from_id -> bound device -> HGI gateway.
-
-        :param call: Dict containing device and parameter info
-        :type call: dict[str, Any]
-        :return: Tuple of (original_device_id, normalized_device_id, from_id)
-        :rtype: tuple[str, str, str]
-        :raises ValueError: If device_id is missing/invalid or no valid source device
+        Returns:
+            tuple[str, str, str]: (original_device_id, normalized_device_id, from_id)
         """
-        data: dict[str, Any] = call
-
-        # Extract and validate device_id - _resolve_device_id now always returns str or None
+        # 1. Resolve Target Device
+        # The data dict may contain 'device_id' (str or list) or 'device' (HA ID)
+        # _resolve_device_id handles these variations.
         device_id = self._resolve_device_id(data)
-
         if not device_id:
-            _LOGGER.error("Missing or invalid device_id")
-            return "", "", ""  # Return empty strings to indicate validation failure
+            # Logic to handle missing device ID gracefully or raise
+            # For now, we return empty to let the caller handle "not found"
+            # matching the previous behavior for 'None', but allowing Exceptions to bubble.
+            return "", "", ""
 
-        # At this point, device_id is guaranteed to be a non-empty string
-        original_device_id = device_id
-        try:
-            split_id = device_id.split(".")[1]
-        except IndexError:
-            split_id = device_id
-        normalized_device_id = split_id.replace(":", "_").lower()
+        # 2. Get the Actual Device Object
+        device = self._get_device(device_id)
+        if not device:
+            return device_id, device_id.replace(":", "_"), ""
 
-        # Get from_id with fallback logic (same as _get_from_id)
+        # 3. Resolve Source (From) ID
+        # If 'from_id' is explicitly provided, use it.
+        # Otherwise, try to find a bound remote (rem) or sensor (dis)
         from_id = data.get("from_id")
-        if from_id:
-            return original_device_id, normalized_device_id, str(from_id)
+        if not from_id:
+            from_id = device.get_bound_rem()
 
-        # Try to get device for bound device lookup (for set_fan_param operations)
-        try:
-            device = self._get_device(original_device_id)
-            if device and hasattr(device, "get_bound_rem"):
-                bound_device_id = device.get_bound_rem()
-                if bound_device_id:
-                    _LOGGER.debug("Using bound device %s as from_id", bound_device_id)
-                    return original_device_id, normalized_device_id, bound_device_id
-                else:
-                    # No bound device configured - this is expected for many setups
-                    _LOGGER.debug(
-                        "FAN device %s has no bound REM/DIS device configured. "
-                        "Parameter requests will be skipped to avoid communication timeouts.",
-                        original_device_id,
-                    )
-                    return "", "", ""  # Signal that no valid source is available
-        except Exception:
-            # Ignore device lookup errors
-            pass
+        # Handle explicit 'None' return from get_bound_rem
+        if from_id is None:
+            from_id = ""
 
-        # Explicit from_id was required but not found
-        _LOGGER.warning(
-            "No source device ID available for %s. "
-            "FAN parameter operations require a bound REM/DIS device or explicit from_id.",
-            original_device_id,
-        )
-        return "", "", ""  # Return empty strings to indicate no valid source
+        return device.id, device.id.replace(":", "_"), from_id
 
     def _normalize_service_call(
         self, call: dict[str, Any] | ServiceCall
@@ -1342,6 +1314,8 @@ class RamsesBroker:
         and optionally:
             - from_id (str): Source device ID (defaults to bound REM/DIS)
         """
+        entity = None  # Ensure entity is defined for finally/except blocks
+
         try:
             data = self._normalize_service_call(call)
 
@@ -1394,10 +1368,16 @@ class RamsesBroker:
                 asyncio.create_task(entity._clear_pending_after_timeout(30))
 
         except ValueError as err:
+            # Clear pending state on error
+            if entity and hasattr(entity, "_clear_pending_after_timeout"):
+                asyncio.create_task(entity._clear_pending_after_timeout(0))
             # Raise friendly error for UI
             raise HomeAssistantError(
                 f"Invalid parameter for set_fan_param: {err}"
             ) from err
         except Exception as err:
             _LOGGER.error("Failed to set fan parameter: %s", err, exc_info=True)
+            # Clear pending state on error
+            if entity and hasattr(entity, "_clear_pending_after_timeout"):
+                asyncio.create_task(entity._clear_pending_after_timeout(0))
             raise HomeAssistantError(f"Failed to set fan parameter: {err}") from err
