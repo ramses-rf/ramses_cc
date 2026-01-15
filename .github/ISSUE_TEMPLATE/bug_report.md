@@ -33,6 +33,6 @@ Only if applicable, add screenshots to help explain your problem. _Do not provid
 **Additional context**
 Add any other context about the problem here, such as:
 - installed version om Ramses RF integration
-- the make/model of your hardware dongle
-- interface (USB or MQTT)
+- the make/model of your hardware Ramses gateway dongle
+- gateway interface (USB or MQTT)
 - any custom settings etc.
