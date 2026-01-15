@@ -182,8 +182,14 @@ async def test_resolve_device_id_list_warning(mock_broker: RamsesBroker) -> None
     """Test that passing a list to device_id logs a warning."""
     with patch("custom_components.ramses_cc.broker._LOGGER.warning") as mock_warn:
         mock_broker._resolve_device_id({"device_id": ["30:111111", "30:222222"]})
+
         assert mock_warn.called
-        assert "Multiple device_ids provided" in mock_warn.call_args[0][0]
+        # Verify the call was made with the format string and specific arguments
+        mock_warn.assert_called_with(
+            "Multiple values for '%s' provided, using first one: %s",
+            "device_id",
+            "30:111111",
+        )
 
 
 async def test_get_device_client_fallback(mock_broker: RamsesBroker) -> None:
