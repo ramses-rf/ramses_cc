@@ -37,6 +37,9 @@ def mock_broker(hass: HomeAssistant) -> RamsesBroker:
     broker = RamsesBroker(hass, entry)
     broker.client = MagicMock()
     broker.client.async_send_cmd = AsyncMock()
+    # IMPORTANT: Initialize device_by_id as a dict so .get() returns None for missing keys
+    # instead of a MagicMock object.
+    broker.client.device_by_id = {}
     broker.platforms = {}
 
     hass.data[DOMAIN] = {entry.entry_id: broker}
@@ -451,16 +454,25 @@ async def test_get_device_and_from_id_bound_logic(mock_broker: RamsesBroker) -> 
 async def test_run_fan_param_sequence_exception(mock_broker: RamsesBroker) -> None:
     """Test exception handling in _async_run_fan_param_sequence."""
     # Force an exception inside the sequence loop
+    # We patch the schema to a single item to make the test deterministic and fast
     with (
+        patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", ["0A"]),
         patch.object(
             mock_broker, "async_get_fan_param", side_effect=Exception("Sequence Error")
         ),
         patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_err,
     ):
         await mock_broker._async_run_fan_param_sequence({"device_id": "30:111111"})
+
         # Should catch exception and log error, not raise
         assert mock_err.called
-        assert "Failed to get fan parameters" in mock_err.call_args[0][0]
+
+        # Verify the log message format matches the code in broker.py
+        # args[0] is the message format string
+        # args[1] is the param_id
+        args = mock_err.call_args[0]
+        assert args[0] == "Failed to get fan parameter %s for device: %s"
+        assert args[1] == "0A"
 
 
 async def test_set_fan_param_generic_exception(mock_broker: RamsesBroker) -> None:

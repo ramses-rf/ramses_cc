@@ -7,14 +7,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.ramses_cc.broker import RamsesBroker
-from custom_components.ramses_cc.const import DOMAIN
+from custom_components.ramses_cc.const import DOMAIN, SZ_BOUND_TO, SZ_KNOWN_LIST
 from custom_components.ramses_cc.number import (
     RamsesNumberEntityDescription,
     RamsesNumberParam,
     create_parameter_entities,
 )
 from ramses_tx.const import DevType
-from ramses_tx.schemas import SZ_BOUND_TO, SZ_KNOWN_LIST
 
 # Constants
 FAN_ID = "30:123456"
