@@ -74,7 +74,17 @@ async def test_set_fan_param_raises_ha_error_invalid_value(
         # "value": missing -> triggers ValueError
         "from_id": "32:111111",
     }
-    with pytest.raises(HomeAssistantError, match="Invalid parameter for set_fan_param"):
+    # We patch _get_device_and_from_id because otherwise the broker checks for
+    # the device existence first and raises "No valid source device" before
+    # checking the value.
+    with (
+        patch.object(
+            mock_broker,
+            "_get_device_and_from_id",
+            return_value=("30:111222", "30_111222", "32:111111"),
+        ),
+        pytest.raises(HomeAssistantError, match="Invalid parameter for set_fan_param"),
+    ):
         await mock_broker.async_set_fan_param(call_data)
 
 
@@ -432,9 +442,10 @@ async def test_get_device_and_from_id_bound_logic(mock_broker: RamsesBroker) -> 
     # This hits lines 922-927
     mock_dev.get_bound_rem.return_value = None
     orig_2, norm_2, from_id_2 = mock_broker._get_device_and_from_id(call)
-    # Should return empty strings indicating failure to find source
+
+    # Correct logic: It should still return the device ID, but empty from_id
     assert from_id_2 == ""
-    assert orig_2 == ""
+    assert orig_2 == "30:111111"
 
 
 async def test_run_fan_param_sequence_exception(mock_broker: RamsesBroker) -> None:
@@ -531,17 +542,29 @@ async def test_target_to_device_id_device_string(
     assert resolved == "30:654321"
 
 
-async def test_set_fan_param_exception_clears_pending(
+async def test_set_fan_param_exception_handling(
     mock_broker: RamsesBroker,
 ) -> None:
-    """Test that generic exception in set_fan_param clears pending state."""
+    """Test that generic exception in set_fan_param is handled gracefully."""
     # entity
     mock_entity = MagicMock()
+    # Must be AsyncMock because it is awaited via asyncio.create_task logic in test
     mock_entity._clear_pending_after_timeout = AsyncMock()
 
-    with patch.object(mock_broker, "_find_param_entity", return_value=mock_entity):
+    with (
+        patch.object(mock_broker, "_find_param_entity", return_value=mock_entity),
+        patch("custom_components.ramses_cc.broker.Command") as mock_cmd,
+        # Patch device lookup to ensure we reach the logic
+        patch.object(
+            mock_broker,
+            "_get_device_and_from_id",
+            return_value=("30:111111", "30_111111", "18:000000"),
+        ),
+    ):
         # Mock send_cmd to raise Exception
         mock_broker.client.async_send_cmd.side_effect = Exception("Boom")
+        # Mock cmd creation to succeed so we reach send_cmd
+        mock_cmd.set_fan_param.return_value = MagicMock()
 
         call = {
             "device_id": "30:111111",
@@ -550,12 +573,9 @@ async def test_set_fan_param_exception_clears_pending(
             "from_id": "18:000000",
         }
 
-        with pytest.raises(HomeAssistantError):
+        # Expect HomeAssistantError and logged error
+        with pytest.raises(HomeAssistantError, match="Failed to set fan parameter"):
             await mock_broker.async_set_fan_param(call)
-
-        # Check clear pending called with 0
-        # This assertion is now CORRECT because we updated the broker code
-        mock_entity._clear_pending_after_timeout.assert_called_with(0)
 
 
 async def test_run_fan_param_sequence_dict_fail(mock_broker: RamsesBroker) -> None:
@@ -594,7 +614,52 @@ async def test_get_fan_param_value_error(mock_broker: RamsesBroker) -> None:
         "param_id": "ZZ",
         "from_id": "18:000000",
     }
-    with patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_err:
+    # Patch device lookup to succeed so we reach param ID check
+    with (
+        patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_err,
+        patch.object(
+            mock_broker,
+            "_get_device_and_from_id",
+            return_value=("30:111111", "30_111111", "18:000000"),
+        ),
+    ):
         await mock_broker.async_get_fan_param(call)
         assert mock_err.called
         assert "Failed to get fan parameter" in mock_err.call_args[0][0]
+
+
+async def test_set_fan_param_exception_clears_pending(
+    mock_broker: RamsesBroker,
+) -> None:
+    """Test that generic exception in set_fan_param clears pending state."""
+    # entity
+    mock_entity = MagicMock()
+    mock_entity._clear_pending_after_timeout = AsyncMock()
+
+    with (
+        patch.object(mock_broker, "_find_param_entity", return_value=mock_entity),
+        patch("custom_components.ramses_cc.broker.Command") as mock_cmd_cls,
+        # Patch device lookup so we don't fail early with 'No valid source'
+        patch.object(
+            mock_broker,
+            "_get_device_and_from_id",
+            return_value=("30:111111", "30_111111", "18:000000"),
+        ),
+    ):
+        mock_cmd = MagicMock()
+        mock_cmd_cls.set_fan_param.return_value = mock_cmd
+        # Mock send_cmd to raise Exception
+        mock_broker.client.async_send_cmd.side_effect = Exception("Boom")
+
+        call = {
+            "device_id": "30:111111",
+            "param_id": "0A",
+            "value": "1",
+            "from_id": "18:000000",
+        }
+
+        with pytest.raises(HomeAssistantError):
+            await mock_broker.async_set_fan_param(call)
+
+        # Check clear pending called with 0
+        mock_entity._clear_pending_after_timeout.assert_called_with(0)
