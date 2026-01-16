@@ -414,9 +414,7 @@ class TestFanParameterUpdate:
         self.mock_get_fan_param.return_value = self.mock_cmd
 
         # PERFORMANCE OPTIMIZATION:
-        # The broker sleeps for 0.5s between requests.
-        # Patching this sleep is CRITICAL to make this test run in < 1s
-        # instead of 30s+ (schema length * 0.5s).
+        # Patch asyncio.sleep to be instant for set operations which use sleep
         self.sleep_patcher = patch("asyncio.sleep")
         self.mock_sleep = self.sleep_patcher.start()
 
