@@ -1,12 +1,12 @@
 # Requirements to dev the source code
-# - last checked/updated: 2026-01-11 (c.f. HA 2026.1.0)
+# - last checked/updated: 2026-01-16 (c.f. HA 2026.1.0)
 
 # requirements (dependencies) are in manifest.json
 # - pip list | grep -E 'ramses|serial'
 
   aiousbwatcher         >= 1.1.1                 # as per: manifest.json latest: 1.1.1
   pyserial-asyncio-fast >= 0.16                  # as per: manifest.json latest: 0.16
-  ramses-rf             == 0.53.1                # as per: manifest.json latest:
+  ramses-rf             == 0.53.2                # as per: manifest.json latest:
   pycares               == 4.9.0                 # pinned for compatibility of ha_cc
                                                  # (ha_cc aiodns 3.5.0 not yet compatible with pycares 5.x)
 

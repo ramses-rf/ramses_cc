@@ -1,6 +1,6 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2026-01-11
+# last checked/updated: 2026-01-16
 #
 
 #
@@ -44,7 +44,7 @@ exclude_also = [
     "raise NotImplementedError",
 ]
 format = "text"
-fail_under = 67
+fail_under = 94
 ignore_errors = true
 
 [tool.coverage.html]
