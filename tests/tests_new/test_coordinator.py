@@ -522,8 +522,8 @@ async def test_fan_setup_logs_warning_on_parameter_request_failure(
         side_effect=RuntimeError("Connection lost")
     )
 
-    # 3. Call _async_setup_fan_device to register the callback
-    await mock_broker._async_setup_fan_device(mock_device)
+    # 3. Call fan_handler.async_setup_fan_device to register the callback
+    await mock_broker.fan_handler.async_setup_fan_device(mock_device)
 
     # 4. Extract the lambda passed to set_initialized_callback
     # device.set_initialized_callback(lambda: self.hass.async_create_task(on_fan_first_message()))
@@ -536,7 +536,7 @@ async def test_fan_setup_logs_warning_on_parameter_request_failure(
     coroutine = mock_broker.hass.async_create_task.call_args[0][0]
 
     # 7. Await the coroutine to execute the logic inside the try/except block
-    with patch("custom_components.ramses_cc.broker._LOGGER") as mock_logger:
+    with patch("custom_components.ramses_cc.fan_handler._LOGGER") as mock_logger:
         await coroutine
 
         # 8. Verify the warning was logged correctly

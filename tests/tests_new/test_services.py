@@ -362,7 +362,7 @@ async def test_resolve_device_id_area_string(
 async def test_find_param_entity_registry_only(
     hass: HomeAssistant, mock_broker: RamsesBroker
 ) -> None:
-    """Test _find_param_entity when entity is in registry but not platform."""
+    """Test fan_handler.find_param_entity when entity is in registry but not platform."""
     # Add entity to registry
     ent_reg = er.async_get(hass)
     entry = ent_reg.async_get_or_create(
@@ -381,7 +381,7 @@ async def test_find_param_entity_registry_only(
     mock_broker.platforms = {"number": [MagicMock(entities={})]}
 
     # This should hit line 669 (return None)
-    entity = mock_broker._find_param_entity("30:111222", "0A")
+    entity = mock_broker.fan_handler.find_param_entity("30:111222", "0A")
     assert entity is None
 
 
@@ -396,7 +396,9 @@ async def test_async_set_fan_param_success_clear_pending(
 
     # Mock Command to avoid validation errors
     with (
-        patch.object(mock_broker, "_find_param_entity", return_value=mock_entity),
+        patch.object(
+            mock_broker.fan_handler, "find_param_entity", return_value=mock_entity
+        ),
         patch("custom_components.ramses_cc.broker.Command") as mock_cmd_cls,
     ):
         mock_cmd = MagicMock()
@@ -420,8 +422,8 @@ async def test_async_set_fan_param_success_clear_pending(
 async def test_find_param_entity_found_in_platform(
     hass: HomeAssistant, mock_broker: RamsesBroker
 ) -> None:
-    """Test _find_param_entity when entity is found in the platform."""
-    # 1. Add entity to registry to pass the first check in _find_param_entity
+    """Test fan_handler.find_param_entity when entity is found in the platform."""
+    # 1. Add entity to registry to pass the first check in fan_handler.find_param_entity
     ent_reg = er.async_get(hass)
     entry = ent_reg.async_get_or_create(
         "number",
@@ -443,7 +445,7 @@ async def test_find_param_entity_found_in_platform(
     mock_broker.platforms = {"number": [mock_platform]}
 
     # 3. Call the method
-    entity = mock_broker._find_param_entity("30:111222", "0A")
+    entity = mock_broker.fan_handler.find_param_entity("30:111222", "0A")
 
     # 4. Assert we got the specific entity object from the platform
     assert entity is mock_entity
@@ -515,7 +517,7 @@ async def test_set_fan_param_generic_exception(mock_broker: RamsesBroker) -> Non
     # 2. Setup the entity and its cleanup mock
     mock_entity = MagicMock()
     mock_entity._clear_pending_after_timeout = AsyncMock()
-    mock_broker._find_param_entity = MagicMock(return_value=mock_entity)
+    mock_broker.fan_handler.find_param_entity = MagicMock(return_value=mock_entity)
 
     call_data = {
         "device_id": "30:111111",
@@ -614,7 +616,9 @@ async def test_set_fan_param_exception_handling(
     mock_entity._clear_pending_after_timeout = AsyncMock()
 
     with (
-        patch.object(mock_broker, "_find_param_entity", return_value=mock_entity),
+        patch.object(
+            mock_broker.fan_handler, "find_param_entity", return_value=mock_entity
+        ),
         patch("custom_components.ramses_cc.broker.Command") as mock_cmd,
         # Patch device lookup to ensure we reach the logic
         patch.object(
@@ -699,7 +703,9 @@ async def test_set_fan_param_exception_clears_pending(
     mock_entity._clear_pending_after_timeout = AsyncMock()
 
     with (
-        patch.object(mock_broker, "_find_param_entity", return_value=mock_entity),
+        patch.object(
+            mock_broker.fan_handler, "find_param_entity", return_value=mock_entity
+        ),
         patch("custom_components.ramses_cc.broker.Command") as mock_cmd_cls,
         # Patch device lookup so we don't fail early with 'No valid source'
         patch.object(
@@ -806,7 +812,7 @@ async def test_adjust_sentinel_packet_early_return(mock_broker: RamsesBroker) ->
 async def test_find_param_entity_missing_in_platform(
     hass: HomeAssistant, mock_broker: RamsesBroker
 ) -> None:
-    """Test _find_param_entity returns None if entity in registry but not in platform."""
+    """Test fan_handler.find_param_entity returns None if entity in registry but not in platform."""
     ent_reg = er.async_get(hass)
     entry = ent_reg.async_get_or_create(
         "number", DOMAIN, "30_111111_param_0a", original_icon="mdi:fan"
@@ -820,7 +826,7 @@ async def test_find_param_entity_missing_in_platform(
     mock_platform.entities = {}
     mock_broker.platforms = {"number": [mock_platform]}
 
-    entity = mock_broker._find_param_entity("30:111111", "0A")
+    entity = mock_broker.fan_handler.find_param_entity("30:111111", "0A")
     assert entity is None
 
 
@@ -884,7 +890,9 @@ async def test_get_fan_param_generic_exception(mock_broker: RamsesBroker) -> Non
             "_get_device_and_from_id",
             return_value=("30:111111", "30_111111", "18:000000"),
         ),
-        patch.object(mock_broker, "_find_param_entity", return_value=mock_entity),
+        patch.object(
+            mock_broker.fan_handler, "find_param_entity", return_value=mock_entity
+        ),
         patch("custom_components.ramses_cc.broker.Command") as mock_cmd_cls,
         patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_err,
     ):
@@ -1027,8 +1035,8 @@ async def test_fan_bound_device_bad_config(mock_broker: RamsesBroker) -> None:
     # Setup known_list with bad type (int instead of str)
     mock_broker.options[SZ_KNOWN_LIST] = {"30:111111": {SZ_BOUND_TO: 12345}}
 
-    with patch("custom_components.ramses_cc.broker._LOGGER.warning") as mock_warn:
-        await mock_broker._setup_fan_bound_devices(mock_fan)
+    with patch("custom_components.ramses_cc.fan_handler._LOGGER.warning") as mock_warn:
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan)
         assert mock_warn.called
         assert "invalid bound device id type" in mock_warn.call_args[0][0]
 
@@ -1255,7 +1263,7 @@ async def test_bind_device_lookup_error(hass: HomeAssistant) -> None:
 
 
 def test_find_param_entity_registry_miss(hass: HomeAssistant) -> None:
-    """Test _find_param_entity when entity is in registry but not platform."""
+    """Test fan_handler.find_param_entity when entity is in registry but not platform."""
     entry = MagicMock()
     broker = RamsesBroker(hass, entry)
 
@@ -1269,7 +1277,7 @@ def test_find_param_entity_registry_miss(hass: HomeAssistant) -> None:
     broker.platforms = {"number": [platform]}
 
     with patch("homeassistant.helpers.entity_registry.async_get", return_value=ent_reg):
-        entity = broker._find_param_entity("01:123456", "01")
+        entity = broker.fan_handler.find_param_entity("01:123456", "01")
 
         # Should return None and log the debug message
         assert entity is None
@@ -1349,7 +1357,7 @@ async def test_get_fan_param_sets_pending(hass: HomeAssistant) -> None:
     # Mock Entity - _clear_pending_after_timeout must be awaitable
     mock_entity = MagicMock()
     mock_entity._clear_pending_after_timeout = AsyncMock()
-    broker._find_param_entity = MagicMock(return_value=mock_entity)
+    broker.fan_handler.find_param_entity = MagicMock(return_value=mock_entity)
 
     call = {"device_id": "32:111111", "param_id": "01"}
 
@@ -1407,7 +1415,7 @@ async def test_set_fan_param_errors(hass: HomeAssistant) -> None:
 
     mock_entity = MagicMock()
     mock_entity._clear_pending_after_timeout = AsyncMock()
-    broker._find_param_entity = MagicMock(return_value=mock_entity)
+    broker.fan_handler.find_param_entity = MagicMock(return_value=mock_entity)
 
     # Patch Command.set_fan_param to skip validation for this test
     # This prevents 'value out of range' errors before we reach the send_cmd call
@@ -1559,7 +1567,7 @@ async def test_get_fan_param_value_error_clears_pending(hass: HomeAssistant) -> 
     mock_entity = MagicMock()
     # The method must be an AsyncMock so it can be awaited/scheduled
     mock_entity._clear_pending_after_timeout = AsyncMock()
-    broker._find_param_entity = MagicMock(return_value=mock_entity)
+    broker.fan_handler.find_param_entity = MagicMock(return_value=mock_entity)
 
     # 3. Patch Command.get_fan_param to raise ValueError
     # This ensures 'entity' is already assigned before the exception is raised
@@ -1612,7 +1620,7 @@ async def test_set_fan_param_value_error_clears_pending(hass: HomeAssistant) -> 
     # 2. Setup Mock Entity with the required async method
     mock_entity = MagicMock()
     mock_entity._clear_pending_after_timeout = AsyncMock()
-    broker._find_param_entity = MagicMock(return_value=mock_entity)
+    broker.fan_handler.find_param_entity = MagicMock(return_value=mock_entity)
 
     # 3. Patch Command.set_fan_param to raise ValueError
     # This ensures 'entity' is already assigned before the exception is raised
