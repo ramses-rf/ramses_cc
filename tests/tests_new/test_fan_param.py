@@ -264,10 +264,16 @@ class TestFanParameterSet:
         self.mock_cmd.dst = MagicMock(id=TEST_DEVICE_ID)
         self.mock_set_fan_param.return_value = self.mock_cmd
 
+        # PERFORMANCE OPTIMIZATION:
+        # Patch asyncio.sleep to be instant for set operations which use sleep
+        self.sleep_patcher = patch("asyncio.sleep")
+        self.mock_sleep = self.sleep_patcher.start()
+
         yield  # Test runs here
 
         # Cleanup - stop all patches
         self.patcher.stop()
+        self.sleep_patcher.stop()
 
     @pytest.mark.asyncio
     async def test_basic_fan_param_set(self, hass: HomeAssistant) -> None:
@@ -407,10 +413,18 @@ class TestFanParameterUpdate:
         self.mock_cmd.dst = MagicMock(id=TEST_DEVICE_ID)
         self.mock_get_fan_param.return_value = self.mock_cmd
 
+        # PERFORMANCE OPTIMIZATION:
+        # The broker sleeps for 0.5s between requests.
+        # Patching this sleep is CRITICAL to make this test run in < 1s
+        # instead of 30s+ (schema length * 0.5s).
+        self.sleep_patcher = patch("asyncio.sleep")
+        self.mock_sleep = self.sleep_patcher.start()
+
         yield  # Test runs here
 
         # Cleanup - stop all patches
         self.patcher.stop()
+        self.sleep_patcher.stop()
 
     @pytest.mark.asyncio
     async def test_basic_fan_param_update(self, hass: HomeAssistant) -> None:
