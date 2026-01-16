@@ -8,26 +8,13 @@ from ramses_rf import Gateway
 from ramses_rf.const import DEV_TYPE_MAP, DevType
 from ramses_rf.schemas import SZ_CLASS, SZ_KNOWN_LIST
 
-from .virtual_rf import (
-    HgiFwTypes,  # noqa: F401, pylint: disable=unused-import
-    VirtualRf,
-)
+from .const import MAX_NUM_PORTS, HgiFwTypes
+from .virtual_rf import VirtualRf
 
 # patched constants
 # _DBG_DISABLE_IMPERSONATION_ALERTS = True  # # ramses_tx.protocol
 # _DBG_DISABLE_QOS = False  # #                 ramses_tx.protocol
 MINIMUM_WRITE_GAP = 0  # #                      ramses_tx.protocol
-
-# other constants
-GWY_ID_0 = "18:000000"
-GWY_ID_1 = "18:111111"
-
-_DEFAULT_GWY_CONFIG = {
-    "config": {
-        "disable_discovery": True,
-        "enforce_known_list": False,
-    }
-}
 
 
 def _get_hgi_id_for_schema(
@@ -67,7 +54,7 @@ def _get_hgi_id_for_schema(
     return hgi_id, fw_type
 
 
-@patch("ramses_tx.transport.MINIMUM_WRITE_GAP", MINIMUM_WRITE_GAP)
+@patch("ramses_tx.transport.MINIMUM_WRITE_GAP", MINIMUM_WRITE_GAP, create=True)
 async def rf_factory(
     schemas: list[dict[str, Any] | None], start_gwys: bool = True
 ) -> tuple[VirtualRf, list[Gateway]]:
@@ -78,10 +65,8 @@ async def rf_factory(
     virtual RF pool.
     """
 
-    MAX_PORTS = 6  # 18:666666 is not a valid device_id, but 18:000000 is OK
-
-    if len(schemas) > MAX_PORTS:
-        raise TypeError(f"Only a maximum of {MAX_PORTS} ports is supported")
+    if len(schemas) > MAX_NUM_PORTS:
+        raise TypeError(f"Only a maximum of {MAX_NUM_PORTS} ports is supported")
 
     gwys = []
 
@@ -89,12 +74,12 @@ async def rf_factory(
 
     for idx, schema in enumerate(schemas):
         if schema is None:  # assume no gateway device
-            rf._create_port(idx)
+            # Port already created by VirtualRf.__init__
             continue
 
         hgi_id, fw_type = _get_hgi_id_for_schema(schema, idx)
 
-        rf._create_port(idx)
+        # Port already created by VirtualRf.__init__, just attach gateway info
         rf.set_gateway(rf.ports[idx], hgi_id, fw_type=HgiFwTypes.__members__[fw_type])
 
         with patch("ramses_tx.transport.comports", rf.comports):
