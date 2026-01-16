@@ -1140,7 +1140,7 @@ class RamsesBroker:
                         "Parameter requests will be skipped to avoid communication timeouts.",
                         original_device_id,
                     )
-                    return "", "", ""  # Signal that no valid source is available
+                    return original_device_id, normalized_device_id, ""
         except Exception:
             # Ignore device lookup errors
             pass
@@ -1151,7 +1151,7 @@ class RamsesBroker:
             "FAN parameter operations require a bound REM/DIS device or explicit from_id.",
             original_device_id,
         )
-        return "", "", ""  # Return empty strings to indicate no valid source
+        return original_device_id, normalized_device_id, ""
 
     def _normalize_service_call(
         self, call: dict[str, Any] | ServiceCall
@@ -1201,18 +1201,32 @@ class RamsesBroker:
 
             # Extract id's
             original_device_id, normalized_device_id, from_id = (
-                self._get_device_and_from_id(data)
+                self._get_device_and_from_id(data) # from_id or bound rem
             )
             param_id = self._get_param_id(data)
 
-            # Check if we got valid source device info
-            if not all([original_device_id, normalized_device_id, from_id]):
-                _LOGGER.warning(
-                    "Cannot get parameter: No valid source device available from %s. "
-                    "Need either: explicit from_id, or a REM/DIS device that was 'bound' in the configuration.",
-                    data,
-                )
+            if not original_device_id or not normalized_device_id:
+                _LOGGER.warning("Cannot get parameter: Missing device_id in %s", data)
                 return
+
+            # If no from_id or a bound device was found then try gateway HGI
+            if not from_id:
+                gateway_id = getattr(getattr(self.client, "hgi", None), "id", None)
+                if gateway_id:
+                    from_id = str(gateway_id)
+                    _LOGGER.debug(
+                        "No explicit/bound from_id for %s, using gateway id %s",
+                        original_device_id,
+                        from_id,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "Cannot get parameter: No valid source device available from %s. "
+                        "Need either: explicit from_id, a REM/DIS device that was 'bound' in the configuration, "
+                        "or a configured gateway (HGI).",
+                        data,
+                    )
+                    return
 
             # Find the corresponding entity and set it to pending
             entity = self._find_param_entity(normalized_device_id, param_id)
