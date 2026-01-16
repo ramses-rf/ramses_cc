@@ -24,7 +24,6 @@ from homeassistant.helpers.dispatcher import (
 )
 from homeassistant.helpers.entity_platform import EntityPlatform
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
-from homeassistant.helpers.storage import Store
 
 from ramses_rf.device import Fakeable
 from ramses_rf.device.base import Device
@@ -48,8 +47,6 @@ from .const import (
     DOMAIN,
     SIGNAL_NEW_DEVICES,
     SIGNAL_UPDATE,
-    STORAGE_KEY,
-    STORAGE_VERSION,
     SZ_BOUND_TO,
     SZ_CLIENT_STATE,
     SZ_ENFORCE_KNOWN_LIST,
@@ -61,6 +58,7 @@ from .const import (
     SZ_SERIAL_PORT,
 )
 from .schemas import merge_schemas, schema_is_minimal
+from .store import RamsesStore
 
 if TYPE_CHECKING:
     from . import RamsesEntity
@@ -99,7 +97,7 @@ class RamsesBroker:
         self.hass = hass
         self.entry = entry
         self.options = deepcopy(dict(entry.options))
-        self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self.store = RamsesStore(hass)
 
         _LOGGER.debug("Config = %s", entry.options)
 
@@ -138,7 +136,7 @@ class RamsesBroker:
         :raises ValueError: If there's an error in the configuration
         :raises RuntimeError: If the client fails to start
         """
-        storage = await self._store.async_load() or {}
+        storage = await self.store.async_load()
         _LOGGER.debug("Storage = %s", storage)
 
         remote_commands = {
@@ -296,12 +294,7 @@ class RamsesBroker:
             k: v._commands for k, v in self._entities.items() if hasattr(v, "_commands")
         }
 
-        await self._store.async_save(
-            {
-                SZ_CLIENT_STATE: {SZ_SCHEMA: schema, SZ_PACKETS: packets},
-                SZ_REMOTES: remotes,
-            }
-        )
+        await self.store.async_save(schema, packets, remotes)
 
     def _get_device(self, device_id: str) -> Any | None:
         """Get a device by ID.

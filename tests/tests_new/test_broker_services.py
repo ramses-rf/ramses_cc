@@ -147,14 +147,16 @@ async def test_save_client_state_remotes(mock_broker: RamsesBroker) -> None:
     """
     mock_broker.client.get_state.return_value = ({}, {})
     mock_broker._remotes = {REM_ID: {"boost": "packet_data"}}
-    mock_broker._store = MagicMock(spec=mock_broker._store)
-    mock_broker._store.async_save = AsyncMock()
+    mock_broker.store = MagicMock(spec=mock_broker.store)
+    mock_broker.store.async_save = AsyncMock()
 
     await mock_broker.async_save_client_state()
 
     # Verify remotes were included in the save payload
-    save_data = mock_broker._store.async_save.call_args[0][0]
-    assert save_data["remotes"][REM_ID]["boost"] == "packet_data"
+    args = mock_broker.store.async_save.call_args[0]
+    saved_remotes = args[2]
+
+    assert saved_remotes[REM_ID]["boost"] == "packet_data"
 
 
 async def test_device_registry_update_slugs(mock_broker: RamsesBroker) -> None:

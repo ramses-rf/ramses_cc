@@ -91,7 +91,7 @@ async def test_setup_fails_gracefully_on_bad_config(
 ) -> None:
     """Test that startup catches client creation errors and logs them."""
     broker = RamsesBroker(mock_hass, mock_entry)
-    broker._store.async_load = AsyncMock(return_value={})
+    broker.store.async_load = AsyncMock(return_value={})
 
     # Force _create_client to raise vol.Invalid (simulation of bad schema)
     broker._create_client = MagicMock(side_effect=vol.Invalid("Invalid config"))
@@ -128,7 +128,7 @@ async def test_setup_schema_merge_failure(
     broker = RamsesBroker(mock_hass, mock_entry)
 
     # Provide a non-empty schema so the code enters the "merge" block
-    broker._store.async_load = AsyncMock(
+    broker.store.async_load = AsyncMock(
         return_value={SZ_CLIENT_STATE: {SZ_SCHEMA: {"existing": "data"}}}
     )
 
@@ -330,7 +330,7 @@ async def test_setup_ignores_invalid_cached_packet_timestamps(
     valid_dtm = dt.now().isoformat()
     invalid_dtm = "invalid-iso-format"
 
-    broker._store.async_load = AsyncMock(
+    broker.store.async_load = AsyncMock(
         return_value={
             SZ_CLIENT_STATE: {
                 SZ_PACKETS: {
@@ -436,7 +436,7 @@ async def test_setup_uses_merged_schema_on_success(
 
     # 1. Setup storage to provide a cached schema so we enter the conditional block
     cached_schema = {"cached_key": "cached_val"}
-    broker._store.async_load = AsyncMock(
+    broker.store.async_load = AsyncMock(
         return_value={SZ_CLIENT_STATE: {SZ_SCHEMA: cached_schema}}
     )
 
@@ -483,7 +483,7 @@ async def test_setup_logs_warning_on_non_minimal_schema(
 ) -> None:
     """Test that a warning is logged when the schema is not minimal (Line 155)."""
     broker = RamsesBroker(mock_hass, mock_entry)
-    broker._store.async_load = AsyncMock(return_value={})
+    broker.store.async_load = AsyncMock(return_value={})
 
     # Mock success path for client creation so setup completes
     mock_client = MagicMock()
