@@ -1204,7 +1204,7 @@ class RamsesBroker:
 
             # Extract id's
             original_device_id, normalized_device_id, from_id = (
-                self._get_device_and_from_id(data) # from_id or bound rem
+                self._get_device_and_from_id(data)  # from_id or bound rem
             )
             param_id = self._get_param_id(data)
 
@@ -1215,7 +1215,9 @@ class RamsesBroker:
             # If no from_id or a bound device was found then try gateway HGI
             if not from_id:
                 gateway_id = getattr(getattr(self.client, "hgi", None), "id", None)
-                if isinstance(gateway_id, str) and _DEVICE_ID_RE.match(gateway_id.strip()):
+                if isinstance(gateway_id, str) and _DEVICE_ID_RE.match(
+                    gateway_id.strip()
+                ):
                     from_id = gateway_id.strip()
                     _LOGGER.debug(
                         "No explicit/bound from_id for %s, using gateway id %s",
