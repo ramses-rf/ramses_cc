@@ -204,11 +204,11 @@ async def test_number_entity_set_value(
 async def test_broker_fan_setup(
     mock_broker: RamsesBroker, mock_fan_device: MagicMock
 ) -> None:
-    """Test _async_setup_fan_device logic."""
+    """Test fan_handler.async_setup_fan_device logic."""
     mock_fan_device.set_initialized_callback = MagicMock()
     mock_fan_device.set_param_update_callback = MagicMock()
 
-    await mock_broker._async_setup_fan_device(mock_fan_device)
+    await mock_broker.fan_handler.async_setup_fan_device(mock_fan_device)
 
     assert mock_fan_device.set_initialized_callback.called
     assert mock_fan_device.set_param_update_callback.called
@@ -268,7 +268,7 @@ async def test_setup_fan_bound_invalid_type(
     }
 
     # Trigger the warning and return early
-    await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     # Verify no binding occurred
     mock_fan_device.add_bound_device.assert_not_called()
@@ -286,7 +286,7 @@ async def test_setup_fan_bound_not_rem(
 
     mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {"bound_to": bound_dev.id}}
 
-    await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     mock_fan_device.add_bound_device.assert_not_called()
 
@@ -298,7 +298,7 @@ async def test_fan_setup_callbacks_execution(
     mock_fan_device.set_initialized_callback = MagicMock()
 
     # Call setup
-    await mock_broker._async_setup_fan_device(mock_fan_device)
+    await mock_broker.fan_handler.async_setup_fan_device(mock_fan_device)
 
     # Get the lambda passed to callback
     init_lambda = mock_fan_device.set_initialized_callback.call_args[0][0]
@@ -320,7 +320,7 @@ async def test_fan_setup_callbacks_execution(
 async def test_fan_setup_already_initialized(
     mock_broker: RamsesBroker, mock_fan_device: MagicMock
 ) -> None:
-    """Test _async_setup_fan_device when device is already initialized."""
+    """Test fan_handler.async_setup_fan_device when device is already initialized."""
     mock_fan_device._initialized = True
     mock_fan_device.supports_2411 = True
 
@@ -329,7 +329,7 @@ async def test_fan_setup_already_initialized(
         "custom_components.ramses_cc.number.create_parameter_entities"
     ) as mock_create:
         mock_create.return_value = [MagicMock()]
-        await mock_broker._async_setup_fan_device(mock_fan_device)
+        await mock_broker.fan_handler.async_setup_fan_device(mock_fan_device)
 
         assert mock_create.called
         # Should also request params
@@ -415,14 +415,18 @@ async def test_setup_fan_bound_success_rem(
 
     # Patch the classes in the broker module so isinstance checks pass
     with (
-        patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator),
-        patch("custom_components.ramses_cc.broker.HvacRemoteBase", MockHvacRemoteBase),
+        patch(
+            "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+        ),
+        patch(
+            "custom_components.ramses_cc.fan_handler.HvacRemoteBase", MockHvacRemoteBase
+        ),
     ):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     # Verify binding was added with correct type
     mock_fan_device.add_bound_device.assert_called_once_with(bound_id, DevType.REM)
-    assert mock_broker._fan_bound_to_remote[bound_id] == FAN_ID
+    assert mock_broker.fan_handler._fan_bound_to_remote[bound_id] == FAN_ID
 
 
 async def test_setup_fan_bound_success_dis(
@@ -445,11 +449,13 @@ async def test_setup_fan_bound_success_dis(
 
     # Patch HvacVentilator to pass the first guard clause
     # Do NOT patch HvacRemoteBase, so isinstance(bound_device, HvacRemoteBase) will fail (correct for DIS)
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     mock_fan_device.add_bound_device.assert_called_once_with(bound_id, DevType.DIS)
-    assert mock_broker._fan_bound_to_remote[bound_id] == FAN_ID
+    assert mock_broker.fan_handler._fan_bound_to_remote[bound_id] == FAN_ID
 
 
 async def test_setup_fan_bound_device_not_found(
@@ -468,12 +474,14 @@ async def test_setup_fan_bound_device_not_found(
 
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     # Should log warning and not add binding
     mock_fan_device.add_bound_device.assert_not_called()
-    assert bound_id not in mock_broker._fan_bound_to_remote
+    assert bound_id not in mock_broker.fan_handler._fan_bound_to_remote
 
 
 async def test_setup_fan_bound_no_config(
@@ -487,8 +495,10 @@ async def test_setup_fan_bound_no_config(
 
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     mock_fan_device.add_bound_device.assert_not_called()
 
@@ -512,8 +522,10 @@ async def test_setup_fan_bound_bad_device_type(
 
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     mock_fan_device.add_bound_device.assert_not_called()
 
@@ -531,8 +543,10 @@ async def test_setup_fan_bound_invalid_id_type(
     # Satisfy the isinstance(device, HvacVentilator) check
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     # Verify no binding occurred and code returned early
     mock_fan_device.add_bound_device.assert_not_called()

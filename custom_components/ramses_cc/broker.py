@@ -34,9 +34,9 @@ from ramses_rf.gateway import Gateway
 from ramses_rf.system import Evohome, System, Zone
 from ramses_tx.address import pkt_addrs
 from ramses_tx.command import Command
-from ramses_tx.const import Code, DevType
+from ramses_tx.const import Code
 from ramses_tx.exceptions import PacketAddrSetInvalid  # , TransportSourceInvalid
-from ramses_tx.schemas import DeviceIdT, extract_serial_port
+from ramses_tx.schemas import extract_serial_port
 
 from .const import (
     _2411_PARAMS_SCHEMA,
@@ -47,7 +47,6 @@ from .const import (
     DOMAIN,
     SIGNAL_NEW_DEVICES,
     SIGNAL_UPDATE,
-    SZ_BOUND_TO,
     SZ_CLIENT_STATE,
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST,
@@ -57,6 +56,7 @@ from .const import (
     SZ_SCHEMA,
     SZ_SERIAL_PORT,
 )
+from .fan_handler import RamsesFanHandler
 from .schemas import merge_schemas, schema_is_minimal
 from .store import RamsesStore
 
@@ -98,6 +98,7 @@ class RamsesBroker:
         self.entry = entry
         self.options = deepcopy(dict(entry.options))
         self.store = RamsesStore(hass)
+        self.fan_handler = RamsesFanHandler(self)
 
         _LOGGER.debug("Config = %s", entry.options)
 
@@ -388,230 +389,6 @@ class RamsesBroker:
         _LOGGER.debug("Platform unload completed with result: %s", result)
         return result
 
-    def _create_parameter_entities(self, device: RamsesRFEntity) -> None:
-        """Create parameter entities for a device that supports 2411 parameters.
-
-        This method creates Home Assistant number entities for all 2411 parameters
-        that the device supports. The entities are added to the number platform and
-        will automatically receive parameter updates via the event system.
-
-        :param device: The FAN device to create parameter entities for
-        :type device: RamsesRFEntity
-        :raises RuntimeError: If parameter entity creation fails
-        :note: This method is called automatically during device setup and should
-              not be called manually. Parameter entities are created only once per
-              device per Home Assistant session.
-        """
-        device_id = device.id
-        from .number import create_parameter_entities
-
-        entities = create_parameter_entities(self, device)
-        _LOGGER.debug(
-            "create_parameter_entities returned %d entities for %s",
-            len(entities),
-            device_id,
-        )
-        if entities:
-            _LOGGER.info(
-                "Adding %d parameter entities for %s", len(entities), device_id
-            )
-            async_dispatcher_send(
-                self.hass,
-                SIGNAL_NEW_DEVICES.format("number"),
-                entities,
-            )
-        else:
-            _LOGGER.debug("No parameter entities created for %s", device_id)
-
-    _fan_bound_to_remote: dict[str, DeviceIdT] = {}
-    # hold a reverse lookup dict of remote_id: parent_id's
-    # used to find bound fan for a remote entity target
-
-    async def _setup_fan_bound_devices(self, device: Device) -> None:
-        """Set up bound devices for a FAN device.
-        A FAN will only respond to 2411 messages on RQ from a bound device (REM/DIS).
-        In config flow, a 'bound' trait can be added to a FAN to specify the bound device.
-        Each bound device is added to the broker's _fan_bound_to_remote dict.
-
-        :param device: The FAN device to set up bound devices for
-        :type device: Device
-
-        .. note::
-            Currently supports only one bound device. To support multiple bound devices:
-            - Update the schema to accept a list of bound devices
-            - Modify this method to handle multiple devices
-            - Add appropriate methods to the HVAC class
-        """
-        # Only proceed if this is a FAN device
-        if not isinstance(device, HvacVentilator):
-            return
-
-        # Get device configuration from known_list
-        device_config = self.options.get(SZ_KNOWN_LIST, {}).get(device.id, {})
-
-        # Use .get() and handle None/Empty immediately
-        bound_device_id = device_config.get(SZ_BOUND_TO)
-        if not bound_device_id:
-            return
-
-        # Explicit type check for safety
-        if not isinstance(bound_device_id, str):
-            _LOGGER.warning(
-                "Cannot bind device %s to FAN %s: invalid bound device id type (%s)",
-                bound_device_id,
-                device.id,
-                type(bound_device_id),
-            )
-            return
-
-        _LOGGER.debug("Device config: %s", device_config)
-        _LOGGER.debug("Device type: %s", device.type)
-        _LOGGER.debug("Device class: %s", device.__class__)
-
-        _LOGGER.info("Binding FAN %s and REM/DIS device %s", device.id, bound_device_id)
-
-        # Find the bound device and get its type
-        bound_device = next(
-            (d for d in self.client.devices if d.id == bound_device_id),
-            None,
-        )
-
-        if bound_device:
-            # Determine the device type based on the class
-            if isinstance(bound_device, HvacRemoteBase):
-                device_type = DevType.REM
-            elif hasattr(bound_device, "_SLUG") and bound_device._SLUG == DevType.DIS:
-                device_type = DevType.DIS
-            else:
-                _LOGGER.warning(
-                    "Cannot bind device %s of type %s to FAN %s: must be REM or DIS",
-                    bound_device_id,
-                    getattr(bound_device, "_SLUG", "unknown"),
-                    device.id,
-                )
-                return
-
-            # Add the bound device to the FAN's tracking
-            device.add_bound_device(bound_device_id, device_type)
-            _LOGGER.info(
-                "Bound FAN %s to %s device %s",
-                device.id,
-                device_type,
-                bound_device_id,
-            )
-            # add the HvacVentilator device id to the broker's dict
-            self._fan_bound_to_remote[str(bound_device_id)] = device.id
-        else:
-            _LOGGER.warning(
-                "Bound device %s not found for FAN %s", bound_device_id, device.id
-            )
-
-    async def _async_setup_fan_device(self, device: Device) -> None:
-        """Set up a FAN device and its parameter entities.
-
-        This method is called from async_update() when a FAN device is first discovered.
-        It sets up bound REM/DIS devices, parameter handling, and creates parameter entities.
-
-        :param device: The FAN device to set up
-        :type device: Device
-
-        .. note::
-            This method performs FAN-specific setup including:
-            - Setting up bound REM/DIS devices
-            - Setting up parameter handling callbacks
-            - Creating parameter entities after the first message is received
-            - Requesting all parameter values
-        """
-        _LOGGER.debug("Setting up device: %s", device.id)
-
-        # For FAN devices, set up bound devices and parameter handling
-        if hasattr(device, "_SLUG") and device._SLUG == "FAN":
-            await self._setup_fan_bound_devices(device)
-
-            # Set up the initialization callback - will be called on first message
-            if hasattr(device, "set_initialized_callback"):
-
-                async def on_fan_first_message() -> None:
-                    """Handle the first message received from a FAN device.
-
-                    Creates parameter entities and requests all parameter values.
-                    Set as the initialization callback in hvac.py.
-                    """
-                    _LOGGER.debug(
-                        "First message received from FAN %s, creating parameter entities",
-                        device.id,
-                    )
-                    # Create parameter entities after first message is received
-                    self._create_parameter_entities(device)
-                    # Request all parameters after creating entities (non-blocking if fails)
-                    _call: dict[str, DeviceIdT] = {
-                        "device_id": device.id,
-                    }
-                    try:
-                        self.get_all_fan_params(_call)
-                    except Exception as err:
-                        _LOGGER.warning(
-                            "Failed to request parameters for device %s during startup: %s. "
-                            "Entities will still work for received parameter updates.",
-                            device.id,
-                            err,
-                        )
-
-                device.set_initialized_callback(
-                    lambda: self.hass.async_create_task(on_fan_first_message())
-                )
-
-            # Set up parameter update callback
-            if hasattr(device, "set_param_update_callback"):
-                # Create a closure to capture the current device_id
-                def create_param_callback(dev_id: str) -> Callable[[str, Any], None]:
-                    def param_callback(param_id: str, value: Any) -> None:
-                        _LOGGER.debug(
-                            "Parameter %s updated for device %s: %s (firing event)",
-                            param_id,
-                            dev_id,
-                            value,
-                        )
-                        # Fire the event for Home Assistant entities
-                        self.hass.bus.async_fire(
-                            "ramses_cc.fan_param_updated",
-                            {"device_id": dev_id, "param_id": param_id, "value": value},
-                        )
-
-                    return param_callback
-
-                device.set_param_update_callback(create_param_callback(device.id))
-                _LOGGER.debug(
-                    "Set up parameter update callback for device %s", device.id
-                )
-
-            # Check if device is already initialized (e.g., from cached messages)
-            # This handles the case where we restart but the device already has state
-            if hasattr(device, "supports_2411") and device.supports_2411:
-                if getattr(device, "_initialized", False):
-                    _LOGGER.debug(
-                        "Device %s already initialized, creating parameter entities and requesting parameters",
-                        device.id,
-                    )
-                    self._create_parameter_entities(device)
-                    async_dispatcher_send(
-                        self.hass,
-                        SIGNAL_NEW_DEVICES.format("number"),
-                        [device],
-                    )
-                call: dict[str, Any] = {
-                    "device_id": device.id,
-                }
-                try:
-                    self.get_all_fan_params(call)
-                except Exception as err:
-                    _LOGGER.warning(
-                        "Failed to request parameters for device %s during setup: %s. "
-                        "Entities will still work for received parameter updates.",
-                        device.id,
-                        err,
-                    )
-
     def _update_device(self, device: RamsesRFEntity) -> None:
         """Update device information in the device registry.
 
@@ -643,21 +420,7 @@ class RamsesBroker:
             via_device = (DOMAIN, device.tcs.id)
         elif isinstance(device, Child) and device._parent:
             _LOGGER.info(f"CHILD {model} via_device SET to {device._parent}")
-            # try:
-            #     # check for issue 249, not allowed after HA 2025.12
-            #     # see core/homeassistant/helpers/device_registry.py L968
-            #     _LOGGER.debug(f"Parent {device._parent} has id: {device._parent.id}")
-            #     via = device_registry.async_get(device._parent.id)
-            #     if via is None:
-            #         _LOGGER.info(
-            #             f"Parent device {device._parent} does not exist. Removing via"
-            #         )
-            #         via_device = None
-            #     else:
             via_device = (DOMAIN, device._parent.id)
-            # except TransportSourceInvalid:
-            #     _LOGGER.info(f"Parent {device._parent} HAS NO ID")
-            #     via_device = None
         else:
             via_device = None
 
@@ -733,7 +496,7 @@ class RamsesBroker:
             self._update_device(device)
 
         for device in new_devices + new_systems + new_zones + new_dhws:
-            await self._async_setup_fan_device(device)
+            await self.fan_handler.async_setup_fan_device(device)
 
         new_entities = new_devices + new_systems + new_zones + new_dhws
         # these two are the only opportunity to use async_forward_entry_setups with
@@ -888,56 +651,6 @@ class RamsesBroker:
 
     # fan_param (2411) private and service methods.
     # Called from climate.py and remote.py as service @callback, or directly with dict (only)
-
-    def _find_param_entity(self, device_id: str, param_id: str) -> RamsesEntity | None:
-        """Find a parameter entity by device ID and parameter ID.
-
-        Helper Method that searches for a number entity corresponding to a specific
-        parameter on a device.
-        This method handles device ID normalization automatically and searches both
-        the entity registry and active platform entities.
-
-        :param device_id: The device ID (supports both colon and underscore formats)
-        :type device_id: str
-        :param param_id: The parameter ID of the entity to find
-        :type param_id: str
-        :return: The found number entity or None if not found
-        :rtype: RamsesNumberParam | None
-        :raises ValueError: If parameter ID is not a valid 2-digit hex value
-        """
-        # Normalize device ID to use underscores and lowercase for entity ID (same as entity creation)
-        safe_device_id = str(device_id).replace(":", "_").lower()
-        target_entity_id = f"number.{safe_device_id}_param_{param_id.lower()}"
-
-        # First try to find the entity in the entity registry
-        ent_reg = er.async_get(self.hass)
-        entity_entry = ent_reg.async_get(target_entity_id)
-        if entity_entry:
-            _LOGGER.debug("Found entity %s in entity registry", target_entity_id)
-            # Get the actual entity from the platform to make sure entity is fully loaded
-            platforms = self.platforms.get("number", [])
-            _LOGGER.debug("Checking platforms: %s", platforms)
-            for platform in platforms:
-                if (
-                    hasattr(platform, "entities")
-                    and target_entity_id in platform.entities
-                ):
-                    return platform.entities[target_entity_id]
-                else:
-                    _LOGGER.debug(
-                        "Entity %s not found in platform.entities (yet).",
-                        target_entity_id,
-                    )
-
-            # Entity exists in registry but not yet loaded in platform
-            _LOGGER.debug(
-                "Entity %s exists in registry but not yet loaded in platform",
-                target_entity_id,
-            )
-            return None
-
-        _LOGGER.debug("Entity %s not found in registry.", target_entity_id)
-        return None
 
     def _get_param_id(self, call: dict[str, Any]) -> str:
         """Get and validate parameter ID from service call data.
@@ -1216,7 +929,7 @@ class RamsesBroker:
                 return
 
             # Find the corresponding entity and set it to pending
-            entity = self._find_param_entity(normalized_device_id, param_id)
+            entity = self.fan_handler.find_param_entity(normalized_device_id, param_id)
             if entity and hasattr(entity, "set_pending"):
                 entity.set_pending()
 
@@ -1380,7 +1093,7 @@ class RamsesBroker:
             )
 
             # Set up pending state
-            entity = self._find_param_entity(normalized_device_id, param_id)
+            entity = self.fan_handler.find_param_entity(normalized_device_id, param_id)
             if entity and hasattr(entity, "set_pending"):
                 entity.set_pending()
 
