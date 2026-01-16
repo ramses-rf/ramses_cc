@@ -717,3 +717,42 @@ async def test_target_resolution_failures(mock_broker: RamsesBroker) -> None:
         mock_ent_reg.async_get.return_value = MagicMock(device_id=None)
 
         assert mock_broker._target_to_device_id({"entity_id": "sensor.orphan"}) is None
+
+
+async def test_get_fan_param_fallback_hgi(
+    mock_broker: RamsesBroker,
+    mock_gateway: MagicMock,
+    mock_fan_device: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test async_get_fan_param falls back to HGI ID when no bound remote exists."""
+    import logging
+
+    # 1. Setup HGI with a valid ID (matches _DEVICE_ID_RE)
+    hgi_id = "18:000123"
+    mock_gateway.hgi = MagicMock()
+    mock_gateway.hgi.id = hgi_id
+
+    # 2. Setup Device to have NO bound remote
+    # This forces the broker to look for a fallback (the HGI)
+    mock_broker._devices = [mock_fan_device]
+    mock_fan_device.get_bound_rem.return_value = None
+
+    # 3. Prepare call data without an explicit 'from_id'
+    call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX}
+
+    # 4. Run with log capture to verify the debug logic
+    with caplog.at_level(logging.DEBUG):
+        await mock_broker.async_get_fan_param(call_data)
+
+    # 5. Verify the fallback logic triggered
+    # Check the specific debug message matches the code path
+    assert (
+        f"No explicit/bound from_id for {FAN_ID}, using gateway id {hgi_id}"
+        in caplog.text
+    )
+
+    # Check the command was actually sent with the HGI ID as the source
+    assert mock_gateway.async_send_cmd.called
+    cmd = mock_gateway.async_send_cmd.call_args[0][0]
+    assert cmd.src.id == hgi_id

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Callable, Coroutine
 from copy import deepcopy
 from datetime import datetime as dt, timedelta
@@ -69,6 +70,8 @@ _LOGGER = logging.getLogger(__name__)
 SAVE_STATE_INTERVAL: Final[timedelta] = timedelta(minutes=5)
 
 _CALL_LATER_DELAY: Final = 5  # needed for tests
+
+_DEVICE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9A-F]{2}:[0-9A-F]{6}$", re.I)
 
 
 class RamsesBroker:
@@ -1196,6 +1199,19 @@ class RamsesBroker:
                 self._get_device_and_from_id(data)
             )
             param_id = self._get_param_id(data)
+
+            # If no from_id or a bound device was found then try gateway HGI
+            if not from_id and original_device_id:
+                gateway_id = getattr(getattr(self.client, "hgi", None), "id", None)
+                if isinstance(gateway_id, str) and _DEVICE_ID_RE.match(
+                    gateway_id.strip()
+                ):
+                    from_id = gateway_id.strip()
+                    _LOGGER.debug(
+                        "No explicit/bound from_id for %s, using gateway id %s",
+                        original_device_id,
+                        from_id,
+                    )
 
             # Check if we got valid source device info
             if not all([original_device_id, normalized_device_id, from_id]):
