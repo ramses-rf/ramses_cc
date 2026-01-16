@@ -534,7 +534,15 @@ SCH_UPDATE_FAN_PARAMS = cv.make_entity_service_schema(
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_GET_FAN_PARAM_DOMAIN = SCH_GET_FAN_PARAM
+SCH_GET_FAN_PARAM_DOMAIN = vol.Schema(
+    {
+        vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
+        vol.Optional("device_id"): vol.Any(None, cv.string),
+        vol.Required("param_id"): _SCH_PARAM_ID,
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
 SCH_SET_FAN_PARAM_DOMAIN = vol.Schema(
     {
         vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),

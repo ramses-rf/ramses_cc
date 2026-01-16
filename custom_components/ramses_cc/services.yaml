@@ -134,6 +134,30 @@ set_fan_param:
       selector:
         text:
 
+get_fan_param:
+  fields:
+    device:
+      required: false
+      selector:
+        device:
+          filter:
+            integration: ramses_cc
+    device_id:
+      example: '"32:153289"'
+      required: false
+      selector:
+        text:
+    param_id:
+      example: '"31"'
+      required: true
+      selector:
+        text:
+    from_id:
+      example: '"18:123456"'
+      required: false
+      selector:
+        text:
+
 update_fan_params:
   target:
     entity:
