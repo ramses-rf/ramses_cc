@@ -343,7 +343,9 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             self.__class__.__name__,
             self._device.id,
         )
-        parent: DeviceIdT = self._broker._fan_bound_to_remote.get(self._device.id, None)
+        parent: DeviceIdT = self._broker.fan_handler._fan_bound_to_remote.get(
+            self._device.id, None
+        )
         if parent:
             kwargs[ATTR_DEVICE_ID] = parent
             kwargs["from_id"] = self._device.id  # replaces manual from_id entry
@@ -362,7 +364,9 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             self.entity_id,
             self.__class__.__name__,
         )
-        parent: DeviceIdT = self._broker._fan_bound_to_remote.get(self._device.id, None)
+        parent: DeviceIdT = self._broker.fan_handler._fan_bound_to_remote.get(
+            self._device.id, None
+        )
         if parent:
             kwargs[ATTR_DEVICE_ID] = parent
             kwargs["from_id"] = self._device.id  # replaces manual from_id entry
@@ -380,7 +384,9 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             self.entity_id,
             self.__class__.__name__,
         )
-        parent: DeviceIdT = self._broker._fan_bound_to_remote.get(self._device.id, None)
+        parent: DeviceIdT = self._broker.fan_handler._fan_bound_to_remote.get(
+            self._device.id, None
+        )
         if parent:
             kwargs[ATTR_DEVICE_ID] = parent
             kwargs["from_id"] = self._device.id  # replaces manual from_id entry
