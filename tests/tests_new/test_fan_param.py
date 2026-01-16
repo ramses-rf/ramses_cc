@@ -24,7 +24,11 @@ from pytest_homeassistant_custom_component.common import (  # type: ignore[impor
 
 from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.const import DOMAIN
-from custom_components.ramses_cc.schemas import SVC_SET_FAN_PARAM
+from custom_components.ramses_cc.schemas import (
+    SCH_GET_FAN_PARAM_DOMAIN,
+    SVC_GET_FAN_PARAM,
+    SVC_SET_FAN_PARAM,
+)
 
 # Test constants
 TEST_DEVICE_ID = "32:153289"  # Example fan device ID
@@ -217,6 +221,61 @@ class TestFanParameterGet:
 
         # Verify command was sent
         self.mock_client.async_send_cmd.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_get_fan_param_with_ha_device_selector_resolves_device_id(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test")
+        entry.add_to_hass(hass)
+        dev_reg = dr.async_get(hass)
+        device_entry = dev_reg.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, TEST_DEVICE_ID)},
+            name="Test FAN",
+        )
+
+        service_data = {
+            "device": device_entry.id,
+            "param_id": TEST_PARAM_ID,
+            "from_id": TEST_FROM_ID,
+        }
+        call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
+
+        await self.broker.async_get_fan_param(call)
+
+        self.mock_get_fan_param.assert_called_once_with(
+            TEST_DEVICE_ID,
+            TEST_PARAM_ID,
+            src_id=TEST_FROM_ID,
+        )
+
+
+async def test_get_fan_param_service_schema_accepts_ha_device_selector(
+    hass: HomeAssistant,
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="test")
+    entry.add_to_hass(hass)
+    dev_reg = dr.async_get(hass)
+    device_entry = dev_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, TEST_DEVICE_ID)},
+        name="Test FAN",
+    )
+
+    handler = AsyncMock()
+    hass.services.async_register(
+        DOMAIN, SVC_GET_FAN_PARAM, handler, schema=SCH_GET_FAN_PARAM_DOMAIN
+    )
+
+    await hass.services.async_call(
+        DOMAIN,
+        SVC_GET_FAN_PARAM,
+        {"device": device_entry.id, "param_id": TEST_PARAM_ID},
+        blocking=True,
+    )
+
+    assert handler.called
 
 
 class TestFanParameterSet:
