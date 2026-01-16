@@ -199,7 +199,12 @@ class VirtualRfBase:
             self._push_frame_to_dst_port(dst_port, reply)  # is not echo only
 
     def add_reply_for_cmd(self, cmd: str, reply: str) -> None:
-        """Add a reply packet for a given command frame (for a mocked device)."""
+        """Add a reply packet for a given command frame (for a mocked device).
+
+        For example (note no RSSI, \\r\\n in reply pkt):
+          cmd regex: r"RQ.* 18:.* 01:.* 0006 001 00"
+          reply pkt: "RP --- 01:145038 18:013393 --:------ 0006 004 00050135",
+        """
         self._replies[cmd] = reply.encode() + b"\r\n"
 
     def _find_reply_for_cmd(self, cmd: bytes) -> bytes | None:
