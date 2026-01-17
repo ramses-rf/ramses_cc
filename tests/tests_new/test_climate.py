@@ -35,18 +35,18 @@ SZ_HEAT_DEMAND = "heat_demand"
 
 
 @pytest.fixture
-def mock_broker() -> MagicMock:
-    """Return a mock RamsesBroker.
+def mock_coordinator() -> MagicMock:
+    """Return a mock RamsesCoordinator.
 
-    :return: A mock object simulating the RamsesBroker.
+    :return: A mock object simulating the RamsesCoordinator.
     """
-    broker = MagicMock()
-    broker.async_post_update = MagicMock()
-    broker.async_register_platform = MagicMock()
-    broker.async_get_fan_param = AsyncMock()
-    broker.async_set_fan_param = AsyncMock()
-    broker.get_all_fan_params = MagicMock()
-    return broker
+    coordinator = MagicMock()
+    coordinator.async_post_update = MagicMock()
+    coordinator.async_register_platform = MagicMock()
+    coordinator.async_get_fan_param = AsyncMock()
+    coordinator.async_set_fan_param = AsyncMock()
+    coordinator.get_all_fan_params = MagicMock()
+    return coordinator
 
 
 @pytest.fixture
@@ -58,15 +58,17 @@ def mock_description() -> MagicMock:
     return MagicMock()
 
 
-async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) -> None:
+async def test_async_setup_entry(
+    hass: HomeAssistant, mock_coordinator: MagicMock
+) -> None:
     """Test the platform setup and entity creation callback.
 
     :param hass: The Home Assistant instance.
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     entry = MagicMock()
     entry.entry_id = "test_entry_id"
-    hass.data[DOMAIN] = {entry.entry_id: mock_broker}
+    hass.data[DOMAIN] = {entry.entry_id: mock_coordinator}
     async_add_entities = MagicMock()
 
     # Mock async_get_current_platform to avoid RuntimeError in test env
@@ -76,8 +78,8 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
         mock_plat.return_value = MagicMock()
         await async_setup_entry(hass, entry, async_add_entities)
 
-    mock_broker.async_register_platform.assert_called_once()
-    callback_func = mock_broker.async_register_platform.call_args[0][1]
+    mock_coordinator.async_register_platform.assert_called_once()
+    callback_func = mock_coordinator.async_register_platform.call_args[0][1]
 
     # Use spec mocks to ensure isinstance checks pass
     dev_evo = MagicMock(spec=Evohome)
@@ -97,18 +99,18 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
 
 
 async def test_controller_properties_and_attributes(
-    mock_broker: MagicMock, mock_description: MagicMock
+    mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
     """Test RamsesController properties, extra state attributes, and edge cases.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     """
     mock_device = MagicMock(spec=Evohome)
     mock_device.id = "01:123456"
     mock_device.zones = []
 
-    controller = RamsesController(mock_broker, mock_device, mock_description)
+    controller = RamsesController(mock_coordinator, mock_device, mock_description)
     assert controller.unique_id == "01:123456"
 
     # 1. extra_state_attributes
@@ -159,17 +161,17 @@ async def test_controller_properties_and_attributes(
 
 
 async def test_controller_modes_and_actions(
-    mock_broker: MagicMock, mock_description: MagicMock
+    mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
     """Test RamsesController HVAC modes, actions, and presets.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     """
     mock_device = MagicMock(spec=Evohome)
     mock_device.id = "01:123456"
     mock_device.zones = []
-    controller = RamsesController(mock_broker, mock_device, mock_description)
+    controller = RamsesController(mock_coordinator, mock_device, mock_description)
 
     # 1. hvac_action
     mock_device.system_mode = None
@@ -213,11 +215,11 @@ async def test_controller_modes_and_actions(
 
 
 async def test_controller_services(
-    mock_broker: MagicMock, mock_description: MagicMock, freezer: Any
+    mock_coordinator: MagicMock, mock_description: MagicMock, freezer: Any
 ) -> None:
     """Test RamsesController service calls and mode setting logic.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     :param freezer: The freezer fixture to control time.
     """
@@ -230,7 +232,7 @@ async def test_controller_services(
     mock_device.reset_mode = AsyncMock()
     mock_device.get_faultlog = AsyncMock()
 
-    controller = RamsesController(mock_broker, mock_device, mock_description)
+    controller = RamsesController(mock_coordinator, mock_device, mock_description)
     controller.async_write_ha_state_delayed = MagicMock()
 
     # 1. set_hvac_mode and set_preset_mode wrappers
@@ -283,11 +285,11 @@ async def test_controller_services(
 
 
 async def test_zone_properties_and_config(
-    mock_broker: MagicMock, mock_description: MagicMock
+    mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
     """Test RamsesZone properties, config, and attributes.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     """
     # Removed spec=Zone because it blocks access to .tcs
@@ -299,7 +301,7 @@ async def test_zone_properties_and_config(
     mock_device.setpoint = 20.0
     mock_device.heat_demand = None
 
-    zone = RamsesZone(mock_broker, mock_device, mock_description)
+    zone = RamsesZone(mock_coordinator, mock_device, mock_description)
 
     # Basics
     assert zone.target_temperature == 20.0
@@ -326,11 +328,11 @@ async def test_zone_properties_and_config(
 
 
 async def test_zone_modes_and_actions(
-    mock_broker: MagicMock, mock_description: MagicMock
+    mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
     """Test RamsesZone HVAC modes, actions, and presets.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     """
     # Removed spec=Zone because it blocks access to .tcs
@@ -338,7 +340,7 @@ async def test_zone_modes_and_actions(
     mock_device.id = "04:123456"
     mock_device.tcs.system_mode = {SZ_SYSTEM_MODE: SystemMode.AUTO}
     mock_device.config = {"min_temp": 5, "max_temp": 35}
-    zone = RamsesZone(mock_broker, mock_device, mock_description)
+    zone = RamsesZone(mock_coordinator, mock_device, mock_description)
 
     # 1. hvac_action
     mock_device.tcs.system_mode = None
@@ -397,11 +399,11 @@ async def test_zone_modes_and_actions(
 
 
 async def test_zone_methods_and_services(
-    mock_broker: MagicMock, mock_description: MagicMock, freezer: Any
+    mock_coordinator: MagicMock, mock_description: MagicMock, freezer: Any
 ) -> None:
     """Test RamsesZone methods (set_temp, set_mode) and services.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     :param freezer: The freezer fixture.
     """
@@ -418,7 +420,7 @@ async def test_zone_methods_and_services(
     mock_device.get_schedule = AsyncMock()
     mock_device.set_schedule = AsyncMock()
 
-    zone = RamsesZone(mock_broker, mock_device, mock_description)
+    zone = RamsesZone(mock_coordinator, mock_device, mock_description)
     zone.async_write_ha_state_delayed = MagicMock()
     zone.async_write_ha_state = MagicMock()
 
@@ -533,11 +535,11 @@ async def test_zone_methods_and_services(
 
 
 async def test_hvac_properties_and_modes(
-    mock_broker: MagicMock, mock_description: MagicMock
+    mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
     """Test RamsesHvac properties and mode determination.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     """
     mock_device = MagicMock(spec=HvacVentilator)
@@ -547,7 +549,7 @@ async def test_hvac_properties_and_modes(
     mock_device.fan_info = None
     mock_device.get_bound_rem.return_value = "30:987654"
 
-    hvac = RamsesHvac(mock_broker, mock_device, mock_description)
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
 
     # 1. async_added_to_hass
     # Update: Use the patch context from the new code for cleaner testing
@@ -592,46 +594,48 @@ async def test_hvac_properties_and_modes(
 
 
 async def test_hvac_services(
-    mock_broker: MagicMock, mock_description: MagicMock
+    mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
     """Test RamsesHvac specific service calls.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     """
     mock_device = MagicMock(spec=HvacVentilator)
     mock_device.id = "30:123456"
-    hvac = RamsesHvac(mock_broker, mock_device, mock_description)
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
 
     # async_get_fan_clim_param
     await hvac.async_get_fan_clim_param(param="p1")
-    mock_broker.async_get_fan_param.assert_called_with(
+    mock_coordinator.async_get_fan_param.assert_called_with(
         {"param": "p1", "device_id": mock_device.id}
     )
 
     # async_set_fan_clim_param
     await hvac.async_set_fan_clim_param(param="p1", value=1)
-    mock_broker.async_set_fan_param.assert_called_with(
+    mock_coordinator.async_set_fan_param.assert_called_with(
         {"param": "p1", "value": 1, "device_id": mock_device.id}
     )
 
     # async_update_fan_params
     await hvac.async_update_fan_params()
-    mock_broker.get_all_fan_params.assert_called_with({"device_id": mock_device.id})
+    mock_coordinator.get_all_fan_params.assert_called_with(
+        {"device_id": mock_device.id}
+    )
 
 
 async def test_error_handling(
-    mock_broker: MagicMock, mock_description: MagicMock
+    mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
     """Test that protocol/transport errors are caught and re-raised as HomeAssistantError.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     """
     mock_device = MagicMock(spec=Evohome)
     mock_device.id = "01:999999"
     mock_device.zones = []
-    controller = RamsesController(mock_broker, mock_device, mock_description)
+    controller = RamsesController(mock_coordinator, mock_device, mock_description)
     controller.async_write_ha_state_delayed = MagicMock()
 
     # Define a list of methods and the mock target to fail
@@ -665,7 +669,7 @@ async def test_error_handling(
     # Zone Error Handling
     zone_device = MagicMock()
     zone_device.id = "04:888888"
-    zone = RamsesZone(mock_broker, zone_device, mock_description)
+    zone = RamsesZone(mock_coordinator, zone_device, mock_description)
     zone.async_write_ha_state_delayed = MagicMock()
     zone.async_write_ha_state = MagicMock()
 
@@ -689,33 +693,37 @@ async def test_error_handling(
         with pytest.raises(HomeAssistantError, match="Failed to .*"):
             await method(*args)
 
-    # HVAC Error Handling (calls broker methods)
+    # HVAC Error Handling (calls coordinator methods)
     hvac_device = MagicMock(spec=HvacVentilator)
     hvac_device.id = "30:777777"
-    hvac = RamsesHvac(mock_broker, hvac_device, mock_description)
+    hvac = RamsesHvac(mock_coordinator, hvac_device, mock_description)
 
-    # Broker failures
-    mock_broker.async_get_fan_param.side_effect = ProtocolSendFailed("Broker fail")
+    # Coordinator failures
+    mock_coordinator.async_get_fan_param.side_effect = ProtocolSendFailed(
+        "Coordinator fail"
+    )
     with pytest.raises(HomeAssistantError, match="Failed to get fan param"):
         await hvac.async_get_fan_clim_param(param="p")
 
-    mock_broker.async_set_fan_param.side_effect = TimeoutError("Broker timeout")
+    mock_coordinator.async_set_fan_param.side_effect = TimeoutError(
+        "Coordinator timeout"
+    )
     with pytest.raises(HomeAssistantError, match="Failed to set fan param"):
         await hvac.async_set_fan_clim_param(param="p", value=1)
 
 
 async def test_service_validation_errors(
-    mock_broker: MagicMock, mock_description: MagicMock
+    mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
     """Test ServiceValidationError handling in Controller and Zone.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     """
     mock_device = MagicMock(spec=Evohome)
     mock_device.id = "01:999999"
     mock_device.zones = []
-    controller = RamsesController(mock_broker, mock_device, mock_description)
+    controller = RamsesController(mock_coordinator, mock_device, mock_description)
 
     # 1. Invalid HVAC Mode
     with pytest.raises(ServiceValidationError, match="invalid_hvac_mode"):
@@ -746,7 +754,7 @@ async def test_service_validation_errors(
     # Zone Validation Errors
     mock_zone_dev = MagicMock()
     mock_zone_dev.id = "04:123456"
-    zone = RamsesZone(mock_broker, mock_zone_dev, mock_description)
+    zone = RamsesZone(mock_coordinator, mock_zone_dev, mock_description)
 
     # 5. vol.Invalid in async_set_hvac_mode
     # We patch async_set_zone_mode, which is called by async_set_hvac_mode
@@ -772,11 +780,11 @@ async def test_service_validation_errors(
 
 
 async def test_zone_extended_coverage(
-    mock_broker: MagicMock, mock_description: MagicMock, freezer: Any
+    mock_coordinator: MagicMock, mock_description: MagicMock, freezer: Any
 ) -> None:
     """Test extended Zone logic for presets and config edges.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_description: The mock description fixture.
     :param freezer: The freezer fixture.
     """
@@ -788,7 +796,7 @@ async def test_zone_extended_coverage(
     # Needs async mocks for the awaits
     mock_device.set_mode = AsyncMock()
 
-    zone = RamsesZone(mock_broker, mock_device, mock_description)
+    zone = RamsesZone(mock_coordinator, mock_device, mock_description)
 
     # 1. Preset Temporary (1 hour duration)
     with patch.object(zone, "async_set_zone_mode") as mock_set:

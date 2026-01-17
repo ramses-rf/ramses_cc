@@ -26,9 +26,9 @@ from custom_components.ramses_cc import (
     SVC_FORCE_UPDATE,
     SVC_SEND_PACKET,
 )
-from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.climate import RamsesController, RamsesZone
 from custom_components.ramses_cc.const import SystemMode, ZoneMode
+from custom_components.ramses_cc.coordinator import RamsesCoordinator
 from custom_components.ramses_cc.schemas import (
     SCH_DELETE_COMMAND,
     SCH_LEARN_COMMAND,
@@ -80,7 +80,7 @@ from ..virtual_rf import VirtualRf
 from .helpers import TEST_DIR, cast_packets_to_rf
 
 # patched constants
-_CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.broker.py
+_CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.coordinator.py
 
 
 NUM_DEVS_BEFORE = 3  # HGI, faked THM, faked REM
@@ -129,7 +129,7 @@ TEST_CONFIG: Final = {
 
 SERVICES = {
     SVC_BIND_DEVICE: (
-        "custom_components.ramses_cc.broker.RamsesBroker.async_bind_device",
+        "custom_components.ramses_cc.coordinator.RamsesCoordinator.async_bind_device",
         SCH_BIND_DEVICE,
     ),
     SVC_DELETE_COMMAND: (
@@ -145,7 +145,7 @@ SERVICES = {
         SCH_PUT_ROOM_TEMP,
     ),
     SVC_FORCE_UPDATE: (
-        "custom_components.ramses_cc.broker.RamsesBroker.async_force_update",
+        "custom_components.ramses_cc.coordinator.RamsesCoordinator.async_force_update",
         SCH_NO_SVC_PARAMS,
     ),
     SVC_GET_DHW_SCHEDULE: (
@@ -181,7 +181,7 @@ SERVICES = {
         SCH_SEND_COMMAND,
     ),
     SVC_SEND_PACKET: (
-        "custom_components.ramses_cc.broker.RamsesBroker.async_send_packet",
+        "custom_components.ramses_cc.coordinator.RamsesCoordinator.async_send_packet",
         SCH_SEND_PACKET,
     ),
     SVC_RESET_DHW_MODE: (
@@ -279,16 +279,18 @@ async def _setup_via_entry_(
 
     await _cast_packets_to_rf(hass, rf)
 
-    broker: RamsesBroker = list(hass.data[DOMAIN].values())[0]
+    coordinator: RamsesCoordinator = list(hass.data[DOMAIN].values())[0]
 
-    await broker.async_update()
+    await coordinator.async_update()
     await hass.async_block_till_done()
 
     try:
-        assert len(broker._entities) == NUM_ENTS_AFTER  # proxy for success of above
+        assert (
+            len(coordinator._entities) == NUM_ENTS_AFTER
+        )  # proxy for success of above
     except AssertionError:
         assert (
-            len(broker._entities) == NUM_ENTS_AFTER_ALT  # _setup_via_entry_
+            len(coordinator._entities) == NUM_ENTS_AFTER_ALT  # _setup_via_entry_
         )  # adjust when adding sensors etc
 
     return entry
@@ -1123,8 +1125,8 @@ async def test_svc_send_packet_with_impersonation(
 
 
 @pytest.fixture
-def mock_broker() -> MagicMock:
-    """Mock the RamsesBroker."""
+def mock_coordinator() -> MagicMock:
+    """Mock the RamsesCoordinator."""
     return MagicMock()
 
 
@@ -1171,10 +1173,10 @@ def mock_zone() -> MagicMock:
 
 @patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
 async def test_controller_async_set_hvac_mode(
-    mock_init: MagicMock, mock_broker: MagicMock, mock_evohome: MagicMock
+    mock_init: MagicMock, mock_coordinator: MagicMock, mock_evohome: MagicMock
 ) -> None:
     """Test RamsesController.async_set_hvac_mode awaits set_mode."""
-    entity = RamsesController(mock_broker, mock_evohome, MagicMock())
+    entity = RamsesController(mock_coordinator, mock_evohome, MagicMock())
     entity._device = mock_evohome
     entity.async_write_ha_state_delayed = MagicMock()
 
@@ -1185,10 +1187,10 @@ async def test_controller_async_set_hvac_mode(
 
 @patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
 async def test_controller_async_set_preset_mode(
-    mock_init: MagicMock, mock_broker: MagicMock, mock_evohome: MagicMock
+    mock_init: MagicMock, mock_coordinator: MagicMock, mock_evohome: MagicMock
 ) -> None:
     """Test RamsesController.async_set_preset_mode awaits set_mode."""
-    entity = RamsesController(mock_broker, mock_evohome, MagicMock())
+    entity = RamsesController(mock_coordinator, mock_evohome, MagicMock())
     entity._device = mock_evohome
     entity.async_write_ha_state_delayed = MagicMock()
 
@@ -1199,10 +1201,10 @@ async def test_controller_async_set_preset_mode(
 
 @patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
 async def test_controller_validation_error(
-    mock_init: MagicMock, mock_broker: MagicMock, mock_evohome: MagicMock
+    mock_init: MagicMock, mock_coordinator: MagicMock, mock_evohome: MagicMock
 ) -> None:
     """Test validation errors raise ServiceValidationError."""
-    entity = RamsesController(mock_broker, mock_evohome, MagicMock())
+    entity = RamsesController(mock_coordinator, mock_evohome, MagicMock())
     entity._device = mock_evohome
 
     # Mock set_mode to raise Voluptuous error
@@ -1214,10 +1216,10 @@ async def test_controller_validation_error(
 
 @patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
 async def test_zone_async_set_hvac_mode(
-    mock_init: MagicMock, mock_broker: MagicMock, mock_zone: MagicMock
+    mock_init: MagicMock, mock_coordinator: MagicMock, mock_zone: MagicMock
 ) -> None:
     """Test RamsesZone.async_set_hvac_mode awaits helpers."""
-    entity = RamsesZone(mock_broker, mock_zone, MagicMock())
+    entity = RamsesZone(mock_coordinator, mock_zone, MagicMock())
     entity._device = mock_zone
     entity.async_write_ha_state_delayed = MagicMock()
 
@@ -1235,10 +1237,10 @@ async def test_zone_async_set_hvac_mode(
 
 @patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
 async def test_zone_async_set_temperature(
-    mock_init: MagicMock, mock_broker: MagicMock, mock_zone: MagicMock
+    mock_init: MagicMock, mock_coordinator: MagicMock, mock_zone: MagicMock
 ) -> None:
     """Test RamsesZone.async_set_temperature awaits set_mode."""
-    entity = RamsesZone(mock_broker, mock_zone, MagicMock())
+    entity = RamsesZone(mock_coordinator, mock_zone, MagicMock())
     entity._device = mock_zone
     entity.async_write_ha_state_delayed = MagicMock()
 
@@ -1251,10 +1253,10 @@ async def test_zone_async_set_temperature(
 
 @patch("custom_components.ramses_cc.climate.RamsesEntity.__init__", return_value=None)
 async def test_zone_helpers_are_async(
-    mock_init: MagicMock, mock_broker: MagicMock, mock_zone: MagicMock
+    mock_init: MagicMock, mock_coordinator: MagicMock, mock_zone: MagicMock
 ) -> None:
     """Verify helpers are awaitable."""
-    entity = RamsesZone(mock_broker, mock_zone, MagicMock())
+    entity = RamsesZone(mock_coordinator, mock_zone, MagicMock())
     entity._device = mock_zone
     entity.async_write_ha_state_delayed = MagicMock()
 

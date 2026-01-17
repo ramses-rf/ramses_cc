@@ -21,7 +21,7 @@ from ramses_tx.exceptions import PacketAddrSetInvalid
 from .const import _2411_PARAMS_SCHEMA, DOMAIN
 
 if TYPE_CHECKING:
-    from .broker import RamsesBroker
+    from .coordinator import RamsesCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,17 +32,17 @@ _DEVICE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9A-F]{2}:[0-9A-F]{6}$",
 class RamsesServiceHandler:
     """Handler for RAMSES integration service calls."""
 
-    def __init__(self, broker: RamsesBroker) -> None:
+    def __init__(self, coordinator: RamsesCoordinator) -> None:
         """Initialize the Service Handler."""
-        self._broker = broker
-        self.hass = broker.hass
+        self._coordinator = coordinator
+        self.hass = coordinator.hass
 
     async def async_bind_device(self, call: ServiceCall) -> None:
         """Handle the bind_device service call to bind a device to the system."""
         device: Fakeable
 
         try:
-            device = self._broker.client.fake_device(call.data["device_id"])
+            device = self._coordinator.client.fake_device(call.data["device_id"])
         except LookupError as err:
             _LOGGER.error("%s", err)
             raise HomeAssistantError(
@@ -74,7 +74,7 @@ class RamsesServiceHandler:
                 f"Unexpected error during binding for {device.id}: {err}"
             ) from err
 
-        async_call_later(self.hass, _CALL_LATER_DELAY, self._broker.async_update)
+        async_call_later(self.hass, _CALL_LATER_DELAY, self._coordinator.async_update)
 
     async def async_send_packet(self, call: ServiceCall) -> None:
         """Create and send a raw command packet via the transport layer."""
@@ -82,26 +82,26 @@ class RamsesServiceHandler:
         if (
             call.data["device_id"] == "18:000730"
             and kwargs.get("from_id", "18:000730") == "18:000730"
-            and self._broker.client.hgi.id
+            and self._coordinator.client.hgi.id
         ):
-            kwargs["device_id"] = self._broker.client.hgi.id
+            kwargs["device_id"] = self._coordinator.client.hgi.id
 
-        cmd = self._broker.client.create_cmd(**kwargs)
+        cmd = self._coordinator.client.create_cmd(**kwargs)
 
         self._adjust_sentinel_packet(cmd)
 
-        await self._broker.client.async_send_cmd(cmd)
-        async_call_later(self.hass, _CALL_LATER_DELAY, self._broker.async_update)
+        await self._coordinator.client.async_send_cmd(cmd)
+        async_call_later(self.hass, _CALL_LATER_DELAY, self._coordinator.async_update)
 
     def _adjust_sentinel_packet(self, cmd: Command) -> None:
         """Fix address positioning for specific sentinel packets (18:000730)."""
         # HACK: to fix the device_id when GWY announcing.
-        if cmd.src.id != "18:000730" or cmd.dst.id != self._broker.client.hgi.id:
+        if cmd.src.id != "18:000730" or cmd.dst.id != self._coordinator.client.hgi.id:
             return
 
         try:
             # Validate if the current address structure is acceptable
-            pkt_addrs(self._broker.client.hgi.id + cmd._frame[16:37])
+            pkt_addrs(self._coordinator.client.hgi.id + cmd._frame[16:37])
         except PacketAddrSetInvalid:
             # If invalid, swap addr1 and addr2 to correct the structure
             cmd._addrs[1], cmd._addrs[2] = cmd._addrs[2], cmd._addrs[1]
@@ -128,7 +128,7 @@ class RamsesServiceHandler:
             # If no from_id or a bound device was found then try gateway HGI
             if not from_id and original_device_id:
                 gateway_id = getattr(
-                    getattr(self._broker.client, "hgi", None), "id", None
+                    getattr(self._coordinator.client, "hgi", None), "id", None
                 )
                 if isinstance(gateway_id, str) and _DEVICE_ID_RE.match(
                     gateway_id.strip()
@@ -150,7 +150,7 @@ class RamsesServiceHandler:
                 return
 
             # Find the corresponding entity and set it to pending
-            entity = self._broker.fan_handler.find_param_entity(
+            entity = self._coordinator.fan_handler.find_param_entity(
                 normalized_device_id, param_id
             )
             if entity and hasattr(entity, "set_pending"):
@@ -160,7 +160,7 @@ class RamsesServiceHandler:
             _LOGGER.debug("Sending command: %s", cmd)
 
             # Send the command directly using the gateway
-            await self._broker.client.async_send_cmd(cmd)
+            await self._coordinator.client.async_send_cmd(cmd)
 
             # Clear pending state after timeout (non-blocking)
             if entity and hasattr(entity, "_clear_pending_after_timeout"):
@@ -254,7 +254,7 @@ class RamsesServiceHandler:
                 from_id,
             )
 
-            entity = self._broker.fan_handler.find_param_entity(
+            entity = self._coordinator.fan_handler.find_param_entity(
                 normalized_device_id, param_id
             )
             if entity and hasattr(entity, "set_pending"):
@@ -263,7 +263,7 @@ class RamsesServiceHandler:
             cmd = Command.set_fan_param(
                 original_device_id, param_id, value, src_id=from_id
             )
-            await self._broker.client.async_send_cmd(cmd)
+            await self._coordinator.client.async_send_cmd(cmd)
             await asyncio.sleep(0.2)
 
             if entity and hasattr(entity, "_clear_pending_after_timeout"):
@@ -414,7 +414,7 @@ class RamsesServiceHandler:
         if not device_id:
             return "", "", ""
 
-        device = self._broker._get_device(device_id)
+        device = self._coordinator._get_device(device_id)
         if not device:
             return device_id, device_id.replace(":", "_"), ""
 

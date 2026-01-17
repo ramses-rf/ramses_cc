@@ -20,7 +20,7 @@ from .const import DOMAIN, SIGNAL_NEW_DEVICES, SZ_BOUND_TO, SZ_KNOWN_LIST
 
 if TYPE_CHECKING:
     from . import RamsesEntity
-    from .broker import RamsesBroker
+    from .coordinator import RamsesCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,10 +28,10 @@ _LOGGER = logging.getLogger(__name__)
 class RamsesFanHandler:
     """Handler for FAN (HVAC) specific logic, bindings, and parameters."""
 
-    def __init__(self, broker: RamsesBroker) -> None:
+    def __init__(self, coordinator: RamsesCoordinator) -> None:
         """Initialize the Fan Handler."""
-        self._broker = broker
-        self.hass = broker.hass
+        self._coordinator = coordinator
+        self.hass = coordinator.hass
         self._fan_bound_to_remote: dict[str, DeviceIdT] = {}
 
     def find_param_entity(self, device_id: str, param_id: str) -> RamsesEntity | None:
@@ -50,7 +50,7 @@ class RamsesFanHandler:
         if entity_entry:
             _LOGGER.debug("Found entity %s in entity registry", target_entity_id)
             # Get the actual entity from the platform to make sure entity is fully loaded
-            platforms = self._broker.platforms.get(Platform.NUMBER, [])
+            platforms = self._coordinator.platforms.get(Platform.NUMBER, [])
             for platform in platforms:
                 if (
                     hasattr(platform, "entities")
@@ -69,7 +69,7 @@ class RamsesFanHandler:
         device_id = device.id
         from .number import create_parameter_entities
 
-        entities = create_parameter_entities(self._broker, device)
+        entities = create_parameter_entities(self._coordinator, device)
         _LOGGER.debug(
             "create_parameter_entities returned %d entities for %s",
             len(entities),
@@ -94,7 +94,9 @@ class RamsesFanHandler:
             return
 
         # Get device configuration from known_list
-        device_config = self._broker.options.get(SZ_KNOWN_LIST, {}).get(device.id, {})
+        device_config = self._coordinator.options.get(SZ_KNOWN_LIST, {}).get(
+            device.id, {}
+        )
 
         # Use .get() and handle None/Empty immediately
         bound_device_id = device_config.get(SZ_BOUND_TO)
@@ -115,7 +117,7 @@ class RamsesFanHandler:
 
         # Find the bound device and get its type
         bound_device = next(
-            (d for d in self._broker.client.devices if d.id == bound_device_id),
+            (d for d in self._coordinator.client.devices if d.id == bound_device_id),
             None,
         )
 
@@ -142,7 +144,7 @@ class RamsesFanHandler:
                 device_type,
                 bound_device_id,
             )
-            # add the HvacVentilator device id to the broker's dict
+            # add the HvacVentilator device id to the coordinator's dict
             self._fan_bound_to_remote[str(bound_device_id)] = device.id
         else:
             _LOGGER.warning(
@@ -173,7 +175,7 @@ class RamsesFanHandler:
                         "device_id": device.id,
                     }
                     try:
-                        self._broker.get_all_fan_params(_call)
+                        self._coordinator.get_all_fan_params(_call)
                     except Exception as err:
                         _LOGGER.warning(
                             "Failed to request parameters for device %s during startup: %s. "
@@ -227,7 +229,7 @@ class RamsesFanHandler:
                     "device_id": device.id,
                 }
                 try:
-                    self._broker.get_all_fan_params(call)
+                    self._coordinator.get_all_fan_params(call)
                 except Exception as err:
                     _LOGGER.warning(
                         "Failed to request parameters for device %s during setup: %s. "

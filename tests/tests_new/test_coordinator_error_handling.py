@@ -1,4 +1,4 @@
-"""Tests for error handling in broker service calls."""
+"""Tests for error handling in coordinator service calls."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,27 +6,27 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.const import DOMAIN
+from custom_components.ramses_cc.coordinator import RamsesCoordinator
 from ramses_rf.exceptions import BindingFlowFailed
 
 
 @pytest.fixture
-def mock_broker(hass: HomeAssistant) -> RamsesBroker:
-    """Return a mock broker with an entry attached."""
+def mock_coordinator(hass: HomeAssistant) -> RamsesCoordinator:
+    """Return a mock coordinator with an entry attached."""
     entry = MagicMock()
     entry.entry_id = "service_test_entry"
     entry.options = {"ramses_rf": {}, "serial_port": "/dev/ttyUSB0"}
 
-    broker = RamsesBroker(hass, entry)
-    broker.client = MagicMock()
-    broker.client.async_send_cmd = AsyncMock()
+    coordinator = RamsesCoordinator(hass, entry)
+    coordinator.client = MagicMock()
+    coordinator.client.async_send_cmd = AsyncMock()
 
-    hass.data[DOMAIN] = {entry.entry_id: broker}
-    return broker
+    hass.data[DOMAIN] = {entry.entry_id: coordinator}
+    return coordinator
 
 
-async def test_bind_device_raises_ha_error(mock_broker: RamsesBroker) -> None:
+async def test_bind_device_raises_ha_error(mock_coordinator: RamsesCoordinator) -> None:
     """Test that async_bind_device raises HomeAssistantError on binding failure."""
 
     # Mock the device
@@ -37,7 +37,7 @@ async def test_bind_device_raises_ha_error(mock_broker: RamsesBroker) -> None:
         side_effect=BindingFlowFailed("Timeout waiting for confirm")
     )
 
-    mock_broker.client.fake_device.return_value = mock_device
+    mock_coordinator.client.fake_device.return_value = mock_device
 
     # USE MagicMock instead of ServiceCall to ensure .data is a simple, accessible dict
     call = MagicMock()
@@ -51,11 +51,11 @@ async def test_bind_device_raises_ha_error(mock_broker: RamsesBroker) -> None:
     # Assert that HomeAssistantError is raised (wrapping the original error)
     # instead of the raw BindingFlowFailed exception
     with pytest.raises(HomeAssistantError, match="Binding failed for device"):
-        await mock_broker.async_bind_device(call)
+        await mock_coordinator.async_bind_device(call)
 
 
 async def test_set_fan_param_raises_ha_error_invalid_value(
-    mock_broker: RamsesBroker,
+    mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test that async_set_fan_param raises HomeAssistantError on invalid input."""
 
@@ -69,16 +69,16 @@ async def test_set_fan_param_raises_ha_error_invalid_value(
 
     # Verify that ValueError is caught and re-raised as HomeAssistantError
     with pytest.raises(HomeAssistantError, match="Invalid parameter for set_fan_param"):
-        await mock_broker.async_set_fan_param(call_data)
+        await mock_coordinator.async_set_fan_param(call_data)
 
 
 async def test_set_fan_param_raises_ha_error_no_source(
-    mock_broker: RamsesBroker,
+    mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test that async_set_fan_param raises HomeAssistantError when no source device is found."""
 
     # Force device lookup to return None so no bound remote can be found
-    mock_broker.client.device_by_id.get.return_value = None
+    mock_coordinator.client.device_by_id.get.return_value = None
 
     call_data = {
         "device_id": "30:111222",
@@ -88,4 +88,4 @@ async def test_set_fan_param_raises_ha_error_no_source(
     }
 
     with pytest.raises(HomeAssistantError, match="No valid source device available"):
-        await mock_broker.async_set_fan_param(call_data)
+        await mock_coordinator.async_set_fan_param(call_data)

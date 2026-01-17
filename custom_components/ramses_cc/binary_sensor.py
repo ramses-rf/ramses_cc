@@ -44,7 +44,6 @@ from ramses_rf.system.heat import Logbook, System
 from ramses_tx.const import SZ_BYPASS_POSITION, SZ_IS_EVOFW3
 
 from . import RamsesEntity, RamsesEntityDescription
-from .broker import RamsesBroker
 from .const import (
     ATTR_ACTIVE_FAULTS,
     ATTR_BATTERY_LEVEL,
@@ -53,6 +52,7 @@ from .const import (
     ATTR_WORKING_SCHEMA,
     DOMAIN,
 )
+from .coordinator import RamsesCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,13 +62,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up the binary sensor platform."""
 
-    broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
+    coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
     platform = entity_platform.async_get_current_platform()
 
     @callback
     def add_devices(devices: list[RamsesRFEntity]) -> None:
         entities = [
-            description.ramses_cc_class(broker, rf_device, description)
+            description.ramses_cc_class(coordinator, rf_device, description)
             for rf_device in devices
             for description in BINARY_SENSOR_DESCRIPTIONS
             if isinstance(rf_device, description.ramses_rf_class)
@@ -76,7 +76,7 @@ async def async_setup_entry(
         ]
         async_add_entities(entities)
 
-    broker.async_register_platform(platform, add_devices)
+    coordinator.async_register_platform(platform, add_devices)
 
 
 class RamsesBinarySensor(RamsesEntity, BinarySensorEntity):
@@ -86,13 +86,13 @@ class RamsesBinarySensor(RamsesEntity, BinarySensorEntity):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: RamsesRFEntity,
         entity_description: RamsesEntityDescription,
     ) -> None:
         """Initialize the sensor."""
         _LOGGER.info("Found %s: %s", device.id, entity_description.key)
-        super().__init__(broker, device, entity_description)
+        super().__init__(coordinator, device, entity_description)
 
         self.entity_id = ENTITY_ID_FORMAT.format(
             f"{device.id}_{entity_description.key}"

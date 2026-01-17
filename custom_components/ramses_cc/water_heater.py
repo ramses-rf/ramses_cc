@@ -32,8 +32,8 @@ from ramses_tx.const import SZ_ACTIVE, SZ_MODE, SZ_SYSTEM_MODE
 from ramses_tx.exceptions import ProtocolSendFailed
 
 from . import RamsesEntity, RamsesEntityDescription
-from .broker import RamsesBroker
 from .const import DOMAIN, SystemMode, ZoneMode
+from .coordinator import RamsesCoordinator
 from .schemas import SCH_SET_DHW_MODE_EXTRA
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,20 +54,20 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the water heater platform."""
-    broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
+    coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
     platform: EntityPlatform = async_get_current_platform()
 
     @callback
     def add_devices(devices: list[DhwZone]) -> None:
         entities = [
-            description.ramses_cc_class(broker, device, description)
+            description.ramses_cc_class(coordinator, device, description)
             for device in devices
             for description in WATER_HEATER_DESCRIPTIONS
             if isinstance(device, description.ramses_rf_class)
         ]
         async_add_entities(entities)
 
-    broker.async_register_platform(platform, add_devices)
+    coordinator.async_register_platform(platform, add_devices)
 
 
 class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
@@ -104,13 +104,13 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: DhwZone,
         entity_description: RamsesWaterHeaterEntityDescription,
     ) -> None:
         """Initialize a TCS DHW controller."""
         _LOGGER.info("Found DHW %s", device.id)
-        super().__init__(broker, device, entity_description)
+        super().__init__(coordinator, device, entity_description)
 
         self.entity_id = ENTITY_ID_FORMAT.format(device.id)
 

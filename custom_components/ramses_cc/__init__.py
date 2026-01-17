@@ -57,7 +57,6 @@ from homeassistant.helpers.typing import ConfigType
 from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_tx import exceptions as exc
 
-from .broker import RamsesBroker
 from .const import (
     CONF_ADVANCED_FEATURES,
     CONF_MESSAGE_EVENTS,
@@ -65,6 +64,7 @@ from .const import (
     DOMAIN,
     SIGNAL_UPDATE,
 )
+from .coordinator import RamsesCoordinator
 from .schemas import (
     SCH_BIND_DEVICE,
     SCH_DOMAIN_CONFIG,
@@ -156,12 +156,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.debug("Entry %s is already set up", entry.entry_id)
         return True
 
-    broker = RamsesBroker(hass, entry)
+    coordinator = RamsesCoordinator(hass, entry)
 
     try:
-        # Store the broker in hass.data before setting it up
-        hass.data[DOMAIN][entry.entry_id] = broker
-        await broker.async_setup()
+        # Store the coordinator in hass.data before setting it up
+        hass.data[DOMAIN][entry.entry_id] = coordinator
+        await coordinator.async_setup()
     except exc.TransportSourceInvalid as err:  # not TransportSerialError
         _LOGGER.error("Unrecoverable problem with the serial port: %s", err)
         hass.data[DOMAIN].pop(entry.entry_id, None)  # Clean up if setup fails
@@ -174,12 +174,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)  # Clean up if setup fails
         raise ConfigEntryNotReady(msg) from err
 
-    # Start the broker after successful setup
-    await broker.async_start()
+    # Start the coordinator after successful setup
+    await coordinator.async_start()
 
     _LOGGER.debug("Registering domain services and events")
-    async_register_domain_services(hass, entry, broker)
-    async_register_domain_events(hass, entry, broker)
+    async_register_domain_services(hass, entry, coordinator)
+    async_register_domain_events(hass, entry, coordinator)
     _LOGGER.debug("Finished registering domain services and events")
 
     entry.async_on_unload(entry.add_update_listener(async_update_listener))
@@ -200,8 +200,8 @@ async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
-    if not await broker.async_unload_platforms():
+    coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
+    if not await coordinator.async_unload_platforms():
         return False
 
     for svc in hass.services.async_services_for_domain(DOMAIN):
@@ -214,7 +214,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 @callback  # TODO: the following is a mess - to add register/deregister of clients
 def async_register_domain_events(
-    hass: HomeAssistant, entry: ConfigEntry, broker: RamsesBroker
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: RamsesCoordinator
 ) -> None:
     """Set up the handlers for the system-wide events."""
 
@@ -240,7 +240,7 @@ def async_register_domain_events(
             }
             hass.bus.async_fire(f"{DOMAIN}_message", event_data)
 
-        if broker.learn_device_id and broker.learn_device_id == msg.src.id:
+        if coordinator.learn_device_id and coordinator.learn_device_id == msg.src.id:
             event_data = {
                 "src": msg.src.id,
                 "code": msg.code,
@@ -248,42 +248,42 @@ def async_register_domain_events(
             }
             hass.bus.async_fire(f"{DOMAIN}_learn", event_data)
 
-    broker.client.add_msg_handler(async_process_msg)
+    coordinator.client.add_msg_handler(async_process_msg)
 
 
 @callback
 def async_register_domain_services(
-    hass: HomeAssistant, entry: ConfigEntry, broker: RamsesBroker
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: RamsesCoordinator
 ) -> None:
     """Set up the handlers for the domain-wide services."""
 
     @verify_domain_control(DOMAIN)  # TODO: is a work in progress
     async def async_bind_device(call: ServiceCall) -> None:
-        await broker.async_bind_device(call)
+        await coordinator.async_bind_device(call)
 
     @verify_domain_control(DOMAIN)
     async def async_force_update(call: ServiceCall) -> None:
-        await broker.async_force_update(call)
+        await coordinator.async_force_update(call)
 
     @verify_domain_control(DOMAIN)
     async def async_send_packet(call: ServiceCall) -> None:
-        await broker.async_send_packet(call)
+        await coordinator.async_send_packet(call)
 
     @verify_domain_control(DOMAIN)
     async def async_set_fan_param(call: ServiceCall) -> None:
-        await broker.async_set_fan_param(call)
+        await coordinator.async_set_fan_param(call)
 
     # @verify_domain_control(DOMAIN)
     # async def async_get_fan_param(call: ServiceCall) -> None:
-    #     await broker.async_get_fan_param(call)
+    #     await coordinator.async_get_fan_param(call)
     #
     # @verify_domain_control(DOMAIN)
     # async def async_set_fan_param(call: ServiceCall) -> None:
-    #     await broker.async_set_fan_param(call)
+    #     await coordinator.async_set_fan_param(call)
     #
     # @verify_domain_control(DOMAIN)
     # async def async_update_fan_params(call: ServiceCall) -> None:
-    #     await broker._async_run_fan_param_sequence(call)
+    #     await coordinator._async_run_fan_param_sequence(call)
 
     hass.services.async_register(
         DOMAIN, SVC_BIND_DEVICE, async_bind_device, schema=SCH_BIND_DEVICE
@@ -320,7 +320,7 @@ def async_register_domain_services(
 class RamsesEntity(Entity):
     """Base for any RAMSES II-compatible entity (e.g. Climate, Sensor)."""
 
-    _broker: RamsesBroker
+    _coordinator: RamsesCoordinator
     _device: RamsesRFEntity
 
     _attr_should_poll = False
@@ -329,13 +329,13 @@ class RamsesEntity(Entity):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: RamsesRFEntity,
         entity_description: RamsesEntityDescription,
     ) -> None:
         """Initialize the entity."""
-        self.hass = broker.hass
-        self._broker = broker
+        self.hass = coordinator.hass
+        self._coordinator = coordinator
         self._device = device
         self.entity_description = entity_description
 
@@ -358,7 +358,7 @@ class RamsesEntity(Entity):
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
-        self._broker._entities[self.unique_id] = self
+        self._coordinator._entities[self.unique_id] = self
 
         # Listen for general update signal (for backward compatibility)
         self.async_on_remove(

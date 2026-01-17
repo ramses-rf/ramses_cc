@@ -1,4 +1,4 @@
-"""Tests for the storage aspect of RamsesBroker (Persistence)."""
+"""Tests for the storage aspect of RamsesCoordinator (Persistence)."""
 
 import asyncio
 from datetime import datetime as dt, timedelta
@@ -7,8 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.ramses_cc.broker import SZ_CLIENT_STATE, SZ_PACKETS, RamsesBroker
 from custom_components.ramses_cc.const import CONF_RAMSES_RF, CONF_SCHEMA, DOMAIN
+from custom_components.ramses_cc.coordinator import (
+    SZ_CLIENT_STATE,
+    SZ_PACKETS,
+    RamsesCoordinator,
+)
 from ramses_tx.schemas import SZ_KNOWN_LIST
 
 REM_ID = "32:111111"
@@ -25,7 +29,7 @@ def mock_hass() -> MagicMock:
         return asyncio.create_task(coro)
 
     # Apply this to both loop.create_task AND async_create_task
-    # This ensures any coroutine passed by broker.py gets scheduled (and awaited)
+    # This ensures any coroutine passed by coordinator.py gets scheduled (and awaited)
     hass.loop.create_task.side_effect = _create_task
     hass.async_create_task = MagicMock(side_effect=_create_task)
 
@@ -48,25 +52,25 @@ def mock_entry() -> MagicMock:
 
 
 @pytest.fixture
-def mock_broker(mock_hass: MagicMock, mock_entry: MagicMock) -> RamsesBroker:
-    """Return a mock broker for storage tests."""
-    broker = RamsesBroker(mock_hass, mock_entry)
-    broker.client = MagicMock()
-    broker.store = MagicMock()
-    broker.store.async_load = AsyncMock()
-    broker.store.async_save = AsyncMock()
+def mock_coordinator(mock_hass: MagicMock, mock_entry: MagicMock) -> RamsesCoordinator:
+    """Return a mock coordinator for storage tests."""
+    coordinator = RamsesCoordinator(mock_hass, mock_entry)
+    coordinator.client = MagicMock()
+    coordinator.store = MagicMock()
+    coordinator.store.async_load = AsyncMock()
+    coordinator.store.async_save = AsyncMock()
 
     # Mock hass.data
-    mock_hass.data = {DOMAIN: {mock_entry.entry_id: broker}}
-    return broker
+    mock_hass.data = {DOMAIN: {mock_entry.entry_id: coordinator}}
+    return coordinator
 
 
 async def test_setup_with_corrupted_storage_dates(
     mock_hass: MagicMock, mock_entry: MagicMock
 ) -> None:
     """Test that startup survives invalid date strings in storage."""
-    # 1. Setup Broker
-    broker = RamsesBroker(mock_hass, mock_entry)
+    # 1. Setup Coordinator
+    coordinator = RamsesCoordinator(mock_hass, mock_entry)
 
     # 2. Mock Storage with corrupted date
     # Valid date: 2023-01-01T12:00:00
@@ -80,16 +84,16 @@ async def test_setup_with_corrupted_storage_dates(
         }
     }
 
-    broker.store.async_load = AsyncMock(return_value=mock_storage_data)
+    coordinator.store.async_load = AsyncMock(return_value=mock_storage_data)
 
     # Ensure _create_client returns the mock that we check later
     mock_client = MagicMock()
     mock_client.start = AsyncMock()
-    broker._create_client = MagicMock(return_value=mock_client)
+    coordinator._create_client = MagicMock(return_value=mock_client)
 
     # 3. Run async_setup
     # This should NOT raise ValueError
-    await broker.async_setup()
+    await coordinator.async_setup()
 
     # 4. Verify client started
     assert mock_client.start.called
@@ -102,44 +106,44 @@ async def test_setup_with_corrupted_storage_dates(
     assert "INVALID-DATE-STRING" not in cached_packets
 
 
-async def test_save_client_state_remotes(mock_broker: RamsesBroker) -> None:
+async def test_save_client_state_remotes(mock_coordinator: RamsesCoordinator) -> None:
     """Test saving remote commands to persistent storage."""
-    mock_broker.client.get_state.return_value = ({}, {})
-    mock_broker._remotes = {REM_ID: {"boost": "packet_data"}}
+    mock_coordinator.client.get_state.return_value = ({}, {})
+    mock_coordinator._remotes = {REM_ID: {"boost": "packet_data"}}
 
     # Reset mocks to clear any setup calls
-    mock_broker.store.async_save.reset_mock()
+    mock_coordinator.store.async_save.reset_mock()
 
-    await mock_broker.async_save_client_state()
+    await mock_coordinator.async_save_client_state()
 
     # Verify remotes were included in the save payload
-    assert mock_broker.store.async_save.called
-    args = mock_broker.store.async_save.call_args[0]
+    assert mock_coordinator.store.async_save.called
+    args = mock_coordinator.store.async_save.call_args[0]
     saved_remotes = args[2]
 
-    assert saved_remotes == mock_broker._remotes
+    assert saved_remotes == mock_coordinator._remotes
 
 
 async def test_setup_packet_filtering(
     mock_hass: MagicMock, mock_entry: MagicMock
 ) -> None:
     """Test logic for filtering cached packets based on age and known list."""
-    broker = RamsesBroker(mock_hass, mock_entry)
+    coordinator = RamsesCoordinator(mock_hass, mock_entry)
 
     # Wire up mock_client to be returned by _create_client
     mock_client = MagicMock()
     mock_client.start = AsyncMock()
-    broker._create_client = MagicMock(return_value=mock_client)
-    # Also set broker.client for convenience, though async_setup overwrites it
-    broker.client = mock_client
+    coordinator._create_client = MagicMock(return_value=mock_client)
+    # Also set coordinator.client for convenience, though async_setup overwrites it
+    coordinator.client = mock_client
 
     now = dt.now()
     old_date = (now - timedelta(days=2)).isoformat()
     recent_date = (now - timedelta(hours=1)).isoformat()
 
     # Known list contains a device 01:123456
-    broker.options[SZ_KNOWN_LIST] = {"01:123456": {}}
-    broker.options[CONF_RAMSES_RF] = {"enforce_known_list": True}
+    coordinator.options[SZ_KNOWN_LIST] = {"01:123456": {}}
+    coordinator.options[CONF_RAMSES_RF] = {"enforce_known_list": True}
 
     # Helper to construct a packet where ID matches [11:20]
     # Indices 0-10 (11 chars) are padding.
@@ -157,9 +161,9 @@ async def test_setup_packet_filtering(
             }
         }
     }
-    broker.store.async_load = AsyncMock(return_value=mock_storage_data)
+    coordinator.store.async_load = AsyncMock(return_value=mock_storage_data)
 
-    await broker.async_setup()
+    await coordinator.async_setup()
 
     # Check which packets survived
     call_kwargs = mock_client.start.call_args.kwargs

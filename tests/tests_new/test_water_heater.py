@@ -55,16 +55,18 @@ def mock_device() -> MagicMock:
 
 
 @pytest.fixture
-def mock_broker() -> MagicMock:
-    """Return a mock RamsesBroker."""
+def mock_coordinator() -> MagicMock:
+    """Return a mock RamsesCoordinator."""
     return MagicMock()
 
 
 @pytest.fixture
-def water_heater(mock_broker: MagicMock, mock_device: MagicMock) -> RamsesWaterHeater:
+def water_heater(
+    mock_coordinator: MagicMock, mock_device: MagicMock
+) -> RamsesWaterHeater:
     """Return an instantiated RamsesWaterHeater entity."""
     description = MagicMock()
-    entity = RamsesWaterHeater(mock_broker, mock_device, description)
+    entity = RamsesWaterHeater(mock_coordinator, mock_device, description)
     entity.hass = MagicMock()
     # Mock the internal delayed writer
     entity.async_write_ha_state_delayed = MagicMock()
@@ -78,9 +80,9 @@ async def test_async_setup_entry(hass: HomeAssistant) -> None:
     mock_entry = MagicMock(spec=ConfigEntry)
     mock_entry.entry_id = "test_entry_id"
 
-    # Mock Broker
-    mock_broker = MagicMock()
-    hass.data[DOMAIN] = {mock_entry.entry_id: mock_broker}
+    # Mock Coordinator
+    mock_coordinator = MagicMock()
+    hass.data[DOMAIN] = {mock_entry.entry_id: mock_coordinator}
 
     # Mock AddEntitiesCallback
     mock_add_entities = MagicMock()
@@ -96,8 +98,8 @@ async def test_async_setup_entry(hass: HomeAssistant) -> None:
         await async_setup_entry(hass, mock_entry, mock_add_entities)
 
         # Assert register_platform called
-        mock_broker.async_register_platform.assert_called_once()
-        call_args = mock_broker.async_register_platform.call_args
+        mock_coordinator.async_register_platform.assert_called_once()
+        call_args = mock_coordinator.async_register_platform.call_args
         assert call_args[0][0] == mock_platform
         callback_func = call_args[0][1]
 

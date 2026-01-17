@@ -1,4 +1,4 @@
-"""Broker for RAMSES integration."""
+"""Coordinator for RAMSES integration."""
 
 from __future__ import annotations
 
@@ -61,11 +61,11 @@ _LOGGER = logging.getLogger(__name__)
 SAVE_STATE_INTERVAL: Final[timedelta] = timedelta(minutes=5)
 
 
-class RamsesBroker:
+class RamsesCoordinator:
     """Central coordinator for the RAMSES integration."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the RAMSES broker and its data structures."""
+        """Initialize the RAMSES coordinator and its data structures."""
         self.hass = hass
         self.entry = entry
         self.options = deepcopy(dict(entry.options))
@@ -168,7 +168,7 @@ class RamsesBroker:
         self.entry.async_on_unload(self.client.stop)
 
     async def async_start(self) -> None:
-        """Initialize the update cycle for the RAMSES broker."""
+        """Initialize the update cycle for the RAMSES coordinator."""
         await self.async_update()
 
         self.entry.async_on_unload(
@@ -223,7 +223,7 @@ class RamsesBroker:
         platform: EntityPlatform,
         add_new_devices: Callable[[RamsesRFEntity], None],
     ) -> None:
-        """Register a platform that has entities with the broker."""
+        """Register a platform that has entities with the coordinator."""
         platform_str = platform.domain if hasattr(platform, "domain") else platform
         _LOGGER.debug("Registering platform %s", platform_str)
 

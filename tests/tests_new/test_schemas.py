@@ -43,11 +43,11 @@ def test_normalise_config() -> None:
         CONF_ADVANCED_FEATURES: {"dev_mode": True},
     }
 
-    port, client_config, broker_config = normalise_config(config)
+    port, client_config, coordinator_config = normalise_config(config)
 
     assert port == "/dev/ttyUSB0"
     assert client_config["config"] == {"disable_discovery": True}
-    assert broker_config["remotes"]["18:111111"] == {"boost": "packet_data"}
+    assert coordinator_config["remotes"]["18:111111"] == {"boost": "packet_data"}
     assert CONF_COMMANDS not in client_config[SZ_KNOWN_LIST]["18:111111"]
 
 

@@ -14,10 +14,10 @@ def test_adjust_sentinel_packet_swaps_on_invalid() -> None:
     """Test that addresses are swapped when validation fails for sentinel packet."""
     # Setup
     # Use generic MagicMock because 'client' is an instance attribute
-    broker = MagicMock()
-    # Logic Update: The handler expects self._broker.client..., so we self-reference
-    broker._broker = broker
-    broker.client.hgi.id = HGI_ID
+    coordinator = MagicMock()
+    # Logic Update: The handler expects self._coordinator.client..., so we self-reference
+    coordinator._coordinator = coordinator
+    coordinator.client.hgi.id = HGI_ID
 
     # Mock Command
     # Use generic MagicMock to avoid attribute issues with 'src'/'dst'
@@ -32,7 +32,7 @@ def test_adjust_sentinel_packet_swaps_on_invalid() -> None:
         mock_validate.side_effect = PacketAddrSetInvalid("Invalid structure")
 
         # Execute using the unbound method call, passing our mock as 'self'
-        RamsesServiceHandler._adjust_sentinel_packet(broker, cmd)
+        RamsesServiceHandler._adjust_sentinel_packet(coordinator, cmd)
 
         # Verify swap occurred
         assert cmd._addrs[1] == "addr2"
@@ -43,9 +43,9 @@ def test_adjust_sentinel_packet_swaps_on_invalid() -> None:
 def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
     """Test that addresses are NOT swapped when validation passes."""
     # Setup
-    broker = MagicMock()
-    broker._broker = broker
-    broker.client.hgi.id = HGI_ID
+    coordinator = MagicMock()
+    coordinator._coordinator = coordinator
+    coordinator.client.hgi.id = HGI_ID
 
     cmd = MagicMock()
     cmd.src.id = SENTINEL_ID
@@ -56,7 +56,7 @@ def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
     with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_validate:
         mock_validate.return_value = True  # Validation passes
 
-        RamsesServiceHandler._adjust_sentinel_packet(broker, cmd)
+        RamsesServiceHandler._adjust_sentinel_packet(coordinator, cmd)
 
         # Verify NO swap
         assert cmd._addrs[1] == "addr1"
@@ -65,9 +65,9 @@ def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
 
 def test_adjust_sentinel_packet_ignores_other_devices() -> None:
     """Test that logic is skipped for non-sentinel devices."""
-    broker = MagicMock()
-    broker._broker = broker
-    broker.client.hgi.id = HGI_ID
+    coordinator = MagicMock()
+    coordinator._coordinator = coordinator
+    coordinator.client.hgi.id = HGI_ID
 
     cmd = MagicMock()
     cmd.src.id = "01:123456"  # Not sentinel
@@ -75,7 +75,7 @@ def test_adjust_sentinel_packet_ignores_other_devices() -> None:
     cmd._addrs = ["addr0", "addr1", "addr2"]
 
     # Execute
-    RamsesServiceHandler._adjust_sentinel_packet(broker, cmd)
+    RamsesServiceHandler._adjust_sentinel_packet(coordinator, cmd)
 
     # Verify no swap and repr is untouched
     assert cmd._addrs == ["addr0", "addr1", "addr2"]

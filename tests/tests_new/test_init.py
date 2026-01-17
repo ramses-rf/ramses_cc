@@ -38,23 +38,23 @@ DEVICE_ID = "32:123456"
 
 
 @pytest.fixture
-def mock_broker(hass: HomeAssistant) -> MagicMock:
-    """Return a mock broker.
+def mock_coordinator(hass: HomeAssistant) -> MagicMock:
+    """Return a mock coordinator.
 
     :param hass: The Home Assistant instance.
-    :return: A mock broker object.
+    :return: A mock coordinator object.
     """
-    broker = MagicMock()
-    broker.hass = hass
-    broker.async_unload_platforms = AsyncMock(return_value=True)
-    broker.async_bind_device = AsyncMock()
-    broker.async_force_update = AsyncMock()
-    broker.async_send_packet = AsyncMock()
-    broker.async_set_fan_param = AsyncMock()
-    broker.async_start = AsyncMock()
-    broker.async_setup = AsyncMock()
-    broker._entities = {}
-    return broker
+    coordinator = MagicMock()
+    coordinator.hass = hass
+    coordinator.async_unload_platforms = AsyncMock(return_value=True)
+    coordinator.async_bind_device = AsyncMock()
+    coordinator.async_force_update = AsyncMock()
+    coordinator.async_send_packet = AsyncMock()
+    coordinator.async_set_fan_param = AsyncMock()
+    coordinator.async_start = AsyncMock()
+    coordinator.async_setup = AsyncMock()
+    coordinator._entities = {}
+    return coordinator
 
 
 @pytest.fixture
@@ -98,7 +98,7 @@ async def test_entities(
 
 
 async def test_setup_entry_transport_error(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test setup fails with ConfigEntryNotReady on TransportError."""
     entry = MagicMock()
@@ -106,14 +106,17 @@ async def test_setup_entry_transport_error(
     # Ensure options are present to avoid KeyError
     entry.options = {}
 
-    # Mock RamsesBroker class to return our mock_broker
+    # Mock RamsesCoordinator class to return our mock_coordinator
     with (
-        patch("custom_components.ramses_cc.RamsesBroker", return_value=mock_broker),
+        patch(
+            "custom_components.ramses_cc.RamsesCoordinator",
+            return_value=mock_coordinator,
+        ),
         patch("custom_components.ramses_cc.async_register_domain_services"),
         patch("custom_components.ramses_cc.async_register_domain_events"),
     ):
-        # Configure broker.async_setup to raise TransportError
-        mock_broker.async_setup.side_effect = exc.TransportError("Boom")
+        # Configure coordinator.async_setup to raise TransportError
+        mock_coordinator.async_setup.side_effect = exc.TransportError("Boom")
 
         # Import the function to test
         from custom_components.ramses_cc import async_setup_entry
@@ -130,7 +133,7 @@ async def test_setup_entry_transport_error(
 
 
 async def test_setup_entry_source_invalid(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test setup returns False on TransportSourceInvalid."""
     entry = MagicMock()
@@ -138,12 +141,17 @@ async def test_setup_entry_source_invalid(
     entry.options = {}
 
     with (
-        patch("custom_components.ramses_cc.RamsesBroker", return_value=mock_broker),
+        patch(
+            "custom_components.ramses_cc.RamsesCoordinator",
+            return_value=mock_coordinator,
+        ),
         patch("custom_components.ramses_cc.async_register_domain_services"),
         patch("custom_components.ramses_cc.async_register_domain_events"),
     ):
-        # Configure broker.async_setup to raise TransportSourceInvalid
-        mock_broker.async_setup.side_effect = exc.TransportSourceInvalid("Bad Path")
+        # Configure coordinator.async_setup to raise TransportSourceInvalid
+        mock_coordinator.async_setup.side_effect = exc.TransportSourceInvalid(
+            "Bad Path"
+        )
 
         from custom_components.ramses_cc import async_setup_entry
 
@@ -158,14 +166,14 @@ async def test_setup_entry_source_invalid(
 
 
 async def test_setup_entry_already_setup(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test setup returns True if entry is already set up."""
     entry = MagicMock()
     entry.entry_id = "test_already_setup"
 
     # Pre-populate hass.data to simulate already setup entry
-    hass.data[DOMAIN] = {entry.entry_id: mock_broker}
+    hass.data[DOMAIN] = {entry.entry_id: mock_coordinator}
 
     from custom_components.ramses_cc import async_setup_entry
 
@@ -184,13 +192,13 @@ async def test_async_update_listener(hass: HomeAssistant) -> None:
 
 
 async def test_async_unload_entry_success(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test successful unloading of a config entry."""
     entry = MagicMock()
     entry.entry_id = "test_unload_success"
 
-    hass.data[DOMAIN] = {entry.entry_id: mock_broker}
+    hass.data[DOMAIN] = {entry.entry_id: mock_coordinator}
     hass.services.async_register(DOMAIN, "test_service", lambda x: None)
 
     assert await async_unload_entry(hass, entry) is True
@@ -198,30 +206,30 @@ async def test_async_unload_entry_success(
 
 
 async def test_async_unload_entry_failure(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test unloading failure when platforms fail to unload."""
     entry = MagicMock()
     entry.entry_id = "test_unload_fail"
-    hass.data[DOMAIN] = {entry.entry_id: mock_broker}
+    hass.data[DOMAIN] = {entry.entry_id: mock_coordinator}
 
     # Simulate platform unload failure
-    mock_broker.async_unload_platforms.return_value = False
+    mock_coordinator.async_unload_platforms.return_value = False
 
     assert await async_unload_entry(hass, entry) is False
-    # Broker should still be in hass.data if unload failed
+    # Coordinator should still be in hass.data if unload failed
     assert entry.entry_id in hass.data[DOMAIN]
 
 
 async def test_ramses_entity_extra_attributes(
-    mock_broker: MagicMock, mock_device: MagicMock
+    mock_coordinator: MagicMock, mock_device: MagicMock
 ) -> None:
     """Test the extra_state_attributes logic in RamsesEntity."""
     desc = RamsesEntityDescription(
         key="test",
         ramses_cc_extra_attributes={"custom_attr": "trait_val"},
     )
-    entity = RamsesEntity(mock_broker, mock_device, desc)
+    entity = RamsesEntity(mock_coordinator, mock_device, desc)
 
     attrs = entity.extra_state_attributes
     # Verify both standard ID and custom trait mapping
@@ -230,40 +238,40 @@ async def test_ramses_entity_extra_attributes(
 
 
 async def test_ramses_entity_delayed_update(
-    mock_broker: MagicMock, mock_device: MagicMock
+    mock_coordinator: MagicMock, mock_device: MagicMock
 ) -> None:
     """Test async_write_ha_state_delayed calls call_later."""
     desc = RamsesEntityDescription(key="test")
-    entity = RamsesEntity(mock_broker, mock_device, desc)
+    entity = RamsesEntity(mock_coordinator, mock_device, desc)
 
-    with patch.object(mock_broker.hass.loop, "call_later") as mock_call_later:
+    with patch.object(mock_coordinator.hass.loop, "call_later") as mock_call_later:
         entity.async_write_ha_state_delayed(5)
         mock_call_later.assert_called_once_with(5, entity.async_write_ha_state)
 
 
 async def test_ramses_entity_added_to_hass(
-    mock_broker: MagicMock, mock_device: MagicMock
+    mock_coordinator: MagicMock, mock_device: MagicMock
 ) -> None:
-    """Test the registration of entities in the broker upon addition."""
+    """Test the registration of entities in the coordinator upon addition."""
     desc = RamsesEntityDescription(key="test")
-    entity = RamsesEntity(mock_broker, mock_device, desc)
+    entity = RamsesEntity(mock_coordinator, mock_device, desc)
     entity.unique_id = "unique_32_123456"
 
     # Simulate HA addition
     await entity.async_added_to_hass()
 
-    assert mock_broker._entities["unique_32_123456"] == entity
+    assert mock_coordinator._entities["unique_32_123456"] == entity
 
 
 async def test_init_service_wrappers(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Exercise the service wrapper functions in __init__.py."""
     entry = MagicMock()
     entry.options = {}  # No advanced features
 
     # Register the services
-    async_register_domain_services(hass, entry, mock_broker)
+    async_register_domain_services(hass, entry, mock_coordinator)
 
     # 1. Bind Device
     await hass.services.async_call(
@@ -272,7 +280,7 @@ async def test_init_service_wrappers(
         {"device_id": DEVICE_ID, "offer": {"1FC9": None}},
         blocking=True,
     )
-    assert mock_broker.async_bind_device.called
+    assert mock_coordinator.async_bind_device.called
 
     # 2. Force Update
     await hass.services.async_call(
@@ -281,7 +289,7 @@ async def test_init_service_wrappers(
         {},
         blocking=True,
     )
-    assert mock_broker.async_force_update.called
+    assert mock_coordinator.async_force_update.called
 
     # 3. Set Fan Param
     await hass.services.async_call(
@@ -290,21 +298,21 @@ async def test_init_service_wrappers(
         {"device_id": DEVICE_ID, "param_id": "01", "value": 1.0},
         blocking=True,
     )
-    assert mock_broker.async_set_fan_param.called
+    assert mock_coordinator.async_set_fan_param.called
 
     # 4. Check that Send Packet is NOT registered by default
     assert not hass.services.has_service(DOMAIN, "send_packet")
 
 
 async def test_init_service_wrappers_advanced(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test registration of advanced services (send_packet)."""
     entry = MagicMock()
     # Enable advanced features
     entry.options = {CONF_ADVANCED_FEATURES: {CONF_SEND_PACKET: True}}
 
-    async_register_domain_services(hass, entry, mock_broker)
+    async_register_domain_services(hass, entry, mock_coordinator)
 
     # Check that Send Packet IS registered
     assert hass.services.has_service(DOMAIN, "send_packet")
@@ -316,18 +324,18 @@ async def test_init_service_wrappers_advanced(
         {"device_id": DEVICE_ID, "verb": "RQ", "code": "1234", "payload": "00"},
         blocking=True,
     )
-    assert mock_broker.async_send_packet.called
+    assert mock_coordinator.async_send_packet.called
 
 
-async def test_domain_events(hass: HomeAssistant, mock_broker: MagicMock) -> None:
+async def test_domain_events(hass: HomeAssistant, mock_coordinator: MagicMock) -> None:
     """Test async_register_domain_events callbacks."""
     # 1. Test with configured message events
     entry = MagicMock()
     entry.options = {CONF_ADVANCED_FEATURES: {CONF_MESSAGE_EVENTS: ".*"}}
 
     # We need to capture the inner 'async_process_msg' function defined inside async_register_domain_events
-    with patch.object(mock_broker.client, "add_msg_handler") as mock_add_handler:
-        async_register_domain_events(hass, entry, mock_broker)
+    with patch.object(mock_coordinator.client, "add_msg_handler") as mock_add_handler:
+        async_register_domain_events(hass, entry, mock_coordinator)
         assert mock_add_handler.called
         callback_func = mock_add_handler.call_args[0][0]
 
@@ -358,8 +366,8 @@ async def test_domain_events(hass: HomeAssistant, mock_broker: MagicMock) -> Non
     assert events[0].data["packet"] == "PACKET_STRING"
 
     # 2. Test Learn Mode Event Firing
-    # Set broker to learn mode for this device
-    mock_broker.learn_device_id = "01:111111"  # Matches msg.src.id
+    # Set coordinator to learn mode for this device
+    mock_coordinator.learn_device_id = "01:111111"  # Matches msg.src.id
     learn_events = []
 
     async def capture_learn(event: Any) -> None:
@@ -377,15 +385,15 @@ async def test_domain_events(hass: HomeAssistant, mock_broker: MagicMock) -> Non
 
 
 async def test_domain_events_no_config(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test async_register_domain_events with no message events configured."""
     entry = MagicMock()
     # No advanced features / message events configured
     entry.options = {}
 
-    with patch.object(mock_broker.client, "add_msg_handler") as mock_add_handler:
-        async_register_domain_events(hass, entry, mock_broker)
+    with patch.object(mock_coordinator.client, "add_msg_handler") as mock_add_handler:
+        async_register_domain_events(hass, entry, mock_coordinator)
         assert mock_add_handler.called
         callback_func = mock_add_handler.call_args[0][0]
 

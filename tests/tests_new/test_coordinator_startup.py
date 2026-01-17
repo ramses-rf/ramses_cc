@@ -1,4 +1,4 @@
-"""Tests for the ramses_cc broker startup resilience."""
+"""Tests for the ramses_cc coordinator startup resilience."""
 
 from datetime import datetime as dt
 from unittest.mock import AsyncMock, MagicMock
@@ -6,8 +6,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import voluptuous as vol
 
-from custom_components.ramses_cc.broker import SZ_CLIENT_STATE, SZ_PACKETS, RamsesBroker
 from custom_components.ramses_cc.const import CONF_RAMSES_RF, CONF_SCHEMA
+from custom_components.ramses_cc.coordinator import (
+    SZ_CLIENT_STATE,
+    SZ_PACKETS,
+    RamsesCoordinator,
+)
 from ramses_tx.schemas import SZ_KNOWN_LIST
 
 
@@ -49,8 +53,8 @@ async def test_setup_with_corrupted_storage_dates(
     :param mock_hass: Mock Home Assistant instance.
     :param mock_entry: Mock ConfigEntry.
     """
-    # 1. Setup Broker
-    broker = RamsesBroker(mock_hass, mock_entry)
+    # 1. Setup Coordinator
+    coordinator = RamsesCoordinator(mock_hass, mock_entry)
 
     # 2. Mock Storage with corrupted date
     # Valid date: 2023-01-01T12:00:00
@@ -64,20 +68,20 @@ async def test_setup_with_corrupted_storage_dates(
         }
     }
 
-    broker.store.async_load = AsyncMock(return_value=mock_storage_data)
-    broker._create_client = MagicMock()
-    broker.client = MagicMock()
-    broker.client.start = AsyncMock()
+    coordinator.store.async_load = AsyncMock(return_value=mock_storage_data)
+    coordinator._create_client = MagicMock()
+    coordinator.client = MagicMock()
+    coordinator.client.start = AsyncMock()
 
     # 3. Run async_setup
     # This should NOT raise ValueError
-    await broker.async_setup()
+    await coordinator.async_setup()
 
     # 4. Verify client started
-    assert broker.client.start.called
+    assert coordinator.client.start.called
 
     # 5. Verify only valid packet was passed to start
-    call_args = broker.client.start.call_args
+    call_args = coordinator.client.start.call_args
     cached_packets = call_args.kwargs.get("cached_packets", {})
 
     assert len(cached_packets) == 1
@@ -92,12 +96,12 @@ async def test_setup_fails_gracefully_on_bad_config(
     :param mock_hass: Mock Home Assistant instance.
     :param mock_entry: Mock ConfigEntry.
     """
-    broker = RamsesBroker(mock_hass, mock_entry)
-    broker.store.async_load = AsyncMock(return_value={})
+    coordinator = RamsesCoordinator(mock_hass, mock_entry)
+    coordinator.store.async_load = AsyncMock(return_value={})
 
     # Force _create_client to raise vol.Invalid (simulation of bad schema)
-    broker._create_client = MagicMock(side_effect=vol.Invalid("Invalid config"))
+    coordinator._create_client = MagicMock(side_effect=vol.Invalid("Invalid config"))
 
     # Verify it raises a clean ValueError with helpful message
     with pytest.raises(ValueError, match="Failed to initialise RAMSES client"):
-        await broker.async_setup()
+        await coordinator.async_setup()

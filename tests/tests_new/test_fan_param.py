@@ -22,8 +22,8 @@ from pytest_homeassistant_custom_component.common import (  # type: ignore[impor
     MockConfigEntry,
 )
 
-from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.const import DOMAIN
+from custom_components.ramses_cc.coordinator import RamsesCoordinator
 from custom_components.ramses_cc.schemas import SVC_SET_FAN_PARAM
 
 # Test constants
@@ -43,7 +43,7 @@ class TestFanParameterGet:
     """Test cases for the get_fan_param service.
 
     This test class verifies the behaviour of the async_get_fan_param and
-    _async_run_fan_param_sequence methods in the RamsesBroker class, including
+    _async_run_fan_param_sequence methods in the RamsesCoordinator class, including
     error handling and edge cases for parameter reading operations.
     """
 
@@ -52,7 +52,7 @@ class TestFanParameterGet:
         """Set up test environment for GET operations.
 
         This fixture runs before each test method and sets up:
-        - A real RamsesBroker instance
+        - A real RamsesCoordinator instance
         - A mock client with an HGI device
         - Patches for Command.get_fan_param
         - Test command objects for GET operations
@@ -60,20 +60,20 @@ class TestFanParameterGet:
         Args:
             hass: Home Assistant fixture for creating a test environment.
         """
-        # Create a real broker instance with a mock config entry
-        self.broker = RamsesBroker(hass, MagicMock())
+        # Create a real coordinator instance with a mock config entry
+        self.coordinator = RamsesCoordinator(hass, MagicMock())
 
         # Create a mock client with HGI device
         self.mock_client = AsyncMock()
-        self.broker.client = self.mock_client
-        self.broker.client.hgi = MagicMock(id=TEST_FROM_ID)
+        self.coordinator.client = self.mock_client
+        self.coordinator.client.hgi = MagicMock(id=TEST_FROM_ID)
 
         # Create a mock device and add it to the registry
         # This prevents _get_device_and_from_id from returning early with empty from_id
         self.mock_device = MagicMock()
         self.mock_device.id = TEST_DEVICE_ID
         self.mock_device.get_bound_rem.return_value = None
-        self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
+        self.coordinator.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
 
         # Patch Command.get_fan_param to control command creation
         self.patcher = patch(
@@ -96,7 +96,7 @@ class TestFanParameterGet:
 
     @pytest.mark.asyncio
     async def test_basic_fan_param_request(self, hass: HomeAssistant) -> None:
-        """Test basic fan parameter request with all required parameters directly on broker.
+        """Test basic fan parameter request with all required parameters directly on coordinator.
 
         Verifies that:
         1. The command is constructed with correct parameters
@@ -112,7 +112,7 @@ class TestFanParameterGet:
         call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
 
         # Act - Call the method under test
-        await self.broker.async_get_fan_param(call)
+        await self.coordinator.async_get_fan_param(call)
 
         # Assert - Verify command construction
         self.mock_get_fan_param.assert_called_once_with(
@@ -143,7 +143,7 @@ class TestFanParameterGet:
     #     caplog.set_level(logging.ERROR)
     #
     #     # Act - Call the method under test
-    #     await self.broker.async_get_fan_param(call)
+    #     await self.coordinator.async_get_fan_param(call)
     #
     #     # Assert - Verify error was logged
     #     error_message = "Missing required parameter: device_id"
@@ -175,7 +175,7 @@ class TestFanParameterGet:
         caplog.set_level(logging.ERROR)
 
         # Act - Call the method under test
-        await self.broker.async_get_fan_param(call)
+        await self.coordinator.async_get_fan_param(call)
 
         # Assert - Verify error was logged
         error_message = "Missing required parameter: param_id"
@@ -208,7 +208,7 @@ class TestFanParameterGet:
         call = ServiceCall(hass, "ramses_cc", SERVICE_GET_NAME, service_data)
 
         # Act - Call the method under test
-        await self.broker.async_get_fan_param(call)
+        await self.coordinator.async_get_fan_param(call)
 
         # Assert - Verify command was constructed with custom fan_id
         self.mock_get_fan_param.assert_called_once_with(
@@ -231,12 +231,12 @@ class TestFanParameterSet:
     Safety measures in place:
     - Command.set_fan_param is patched with mock
     - Client.async_send_cmd is mocked
-    - Broker uses mock client, not real hardware
+    - Coordinator uses mock client, not real hardware
     - All assertions verify mock behaviour only
     - No real hardware communication can occur
 
     This test class verifies the behaviour of the async_set_fan_param method
-    in the RamsesBroker class, including error handling and edge cases for
+    in the RamsesCoordinator class, including error handling and edge cases for
     parameter writing operations.
     """
 
@@ -245,7 +245,7 @@ class TestFanParameterSet:
         """Set up test environment for SET operations.
 
         This fixture runs before each test method and sets up:
-        - A real RamsesBroker instance
+        - A real RamsesCoordinator instance
         - A mock client with an HGI device
         - Patches for Command.set_fan_param
         - Test command objects for SET operations
@@ -253,19 +253,19 @@ class TestFanParameterSet:
         Args:
             hass: Home Assistant fixture for creating a test environment.
         """
-        # Create a real broker instance with a mock config entry
-        self.broker = RamsesBroker(hass, MagicMock())
+        # Create a real coordinator instance with a mock config entry
+        self.coordinator = RamsesCoordinator(hass, MagicMock())
 
         # Create a mock client with HGI device
         self.mock_client = AsyncMock()
-        self.broker.client = self.mock_client
-        self.broker.client.hgi = MagicMock(id=TEST_FROM_ID)
+        self.coordinator.client = self.mock_client
+        self.coordinator.client.hgi = MagicMock(id=TEST_FROM_ID)
 
         # Create a mock device and add it to the registry
         self.mock_device = MagicMock()
         self.mock_device.id = TEST_DEVICE_ID
         self.mock_device.get_bound_rem.return_value = None
-        self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
+        self.coordinator.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
 
         # Patch Command.set_fan_param to control command creation
         self.patcher = patch(
@@ -311,7 +311,7 @@ class TestFanParameterSet:
         call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
 
         # Act - Call the method under test
-        await self.broker.async_set_fan_param(call)
+        await self.coordinator.async_set_fan_param(call)
 
         # Assert - Verify command construction
         self.mock_set_fan_param.assert_called_once_with(
@@ -345,7 +345,7 @@ class TestFanParameterSet:
         }
         call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
 
-        await self.broker.async_set_fan_param(call)
+        await self.coordinator.async_set_fan_param(call)
 
         self.mock_set_fan_param.assert_called_once_with(
             TEST_DEVICE_ID,
@@ -375,7 +375,7 @@ class TestFanParameterSet:
         #     call = ServiceCall(hass, "ramses_cc", SERVICE_SET_NAME, service_data)
         #
         #     # Act - Call the method under test
-        #     await self.broker.async_set_fan_param(call)
+        #     await self.coordinator.async_set_fan_param(call)
         #
         #     # Assert - Verify command was constructed with fan_id as target
         #     self.mock_set_fan_param.assert_called_once_with(
@@ -393,7 +393,7 @@ class TestFanParameterUpdate:
     """Test cases for the update_fan_params service.
 
     This test class verifies the behaviour of the _async_run_fan_param_sequence method
-    in the RamsesBroker class, which sends parameter read requests for all parameters
+    in the RamsesCoordinator class, which sends parameter read requests for all parameters
     defined in the 2411 parameter schema to the specified FAN device.
     """
 
@@ -402,7 +402,7 @@ class TestFanParameterUpdate:
         """Set up test environment for UPDATE operations.
 
         This fixture runs before each test method and sets up:
-        - A real RamsesBroker instance
+        - A real RamsesCoordinator instance
         - A mock client with an HGI device
         - Patches for Command.get_fan_param
         - Test command objects for UPDATE operations
@@ -410,19 +410,19 @@ class TestFanParameterUpdate:
         Args:
             hass: Home Assistant fixture for creating a test environment.
         """
-        # Create a real broker instance with a mock config entry
-        self.broker = RamsesBroker(hass, MagicMock())
+        # Create a real coordinator instance with a mock config entry
+        self.coordinator = RamsesCoordinator(hass, MagicMock())
 
         # Create a mock client with HGI device
         self.mock_client = AsyncMock()
-        self.broker.client = self.mock_client
-        self.broker.client.hgi = MagicMock(id=TEST_FROM_ID)
+        self.coordinator.client = self.mock_client
+        self.coordinator.client.hgi = MagicMock(id=TEST_FROM_ID)
 
         # Create a mock device and add it to the registry
         self.mock_device = MagicMock()
         self.mock_device.id = TEST_DEVICE_ID
         self.mock_device.get_bound_rem.return_value = None
-        self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
+        self.coordinator.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
 
         # Patch Command.get_fan_param to control command creation
         self.patcher = patch(
@@ -466,7 +466,7 @@ class TestFanParameterUpdate:
         call = ServiceCall(hass, "ramses_cc", "update_fan_params", service_data)
 
         # Act - Call the method under test
-        await self.broker.service_handler._async_run_fan_param_sequence(call)
+        await self.coordinator.service_handler._async_run_fan_param_sequence(call)
 
         # Verify all parameters in the schema were requested
         # Note: We can't easily test the exact number without importing the schema,

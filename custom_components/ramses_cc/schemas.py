@@ -152,7 +152,7 @@ SCH_MINIMUM_TCS = vol.Schema(
 
 
 def normalise_config(config: _SchemaT) -> tuple[str, _SchemaT, _SchemaT]:
-    """Return a port/client_config/broker_config for the library."""
+    """Return a port/client_config/coordinator_config for the library."""
 
     config = deepcopy(config)
 
@@ -166,12 +166,12 @@ def normalise_config(config: _SchemaT) -> tuple[str, _SchemaT, _SchemaT]:
         if v.get(CONF_COMMANDS)
     }
 
-    broker_keys = (CONF_SCAN_INTERVAL, CONF_ADVANCED_FEATURES, SZ_RESTORE_CACHE)
+    coordinator_keys = (CONF_SCAN_INTERVAL, CONF_ADVANCED_FEATURES, SZ_RESTORE_CACHE)
     return (  # type: ignore[return-value]
         port_name,
-        {k: v for k, v in config.items() if k not in broker_keys}
+        {k: v for k, v in config.items() if k not in coordinator_keys}
         | {SZ_PORT_CONFIG: port_config},
-        {k: v for k, v in config.items() if k in broker_keys}
+        {k: v for k, v in config.items() if k in coordinator_keys}
         | {"remotes": remote_commands},
     )
 
@@ -751,5 +751,5 @@ SVCS_RAMSES_REMOTE = {
 
 # Service schemas for number platform
 SVCS_RAMSES_NUMBER: dict[str, Any] = {
-    # set_fan_param is registered as a broker/domain service (not an entity service)
+    # set_fan_param is registered as a coordinator/domain service (not an entity service)
 }

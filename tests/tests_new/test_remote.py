@@ -27,37 +27,37 @@ VALID_PKT = "RQ --- 30:123456 18:111111 --:------ 22F1 003 000030"
 
 
 @pytest.fixture
-def mock_broker(hass: HomeAssistant) -> MagicMock:
-    """Return a mock broker with required internal structures."""
-    broker = MagicMock()
-    broker._remotes = {REMOTE_ID: {"boost": VALID_PKT}}
+def mock_coordinator(hass: HomeAssistant) -> MagicMock:
+    """Return a mock coordinator with required internal structures."""
+    coordinator = MagicMock()
+    coordinator._remotes = {REMOTE_ID: {"boost": VALID_PKT}}
 
     # Updated: Mock fan_handler to support new architecture
-    broker.fan_handler = MagicMock()
-    broker.fan_handler._fan_bound_to_remote = {REMOTE_ID: "18:654321"}
+    coordinator.fan_handler = MagicMock()
+    coordinator.fan_handler._fan_bound_to_remote = {REMOTE_ID: "18:654321"}
 
     # Mock semaphore to support sync 'with' block as used in remote.py
     mock_sem = MagicMock()
     mock_sem.__enter__ = MagicMock(return_value=None)
     mock_sem.__exit__ = MagicMock(return_value=None)
-    broker._sem = mock_sem
+    coordinator._sem = mock_sem
 
-    broker.client = MagicMock()
-    broker.client.async_send_cmd = AsyncMock()
-    broker.async_update = AsyncMock()
+    coordinator.client = MagicMock()
+    coordinator.client.async_send_cmd = AsyncMock()
+    coordinator.async_update = AsyncMock()
 
     # Async methods for fan params
-    # NOTE: Even though these now delegate to service_handler in the real broker,
-    # mocking them here on the broker instance is correct because RamsesRemote
-    # calls them on the broker instance.
-    broker.async_get_fan_param = AsyncMock()
-    broker.async_set_fan_param = AsyncMock()
-    broker.get_all_fan_params = MagicMock()
+    # NOTE: Even though these now delegate to service_handler in the real coordinator,
+    # mocking them here on the coordinator instance is correct because RamsesRemote
+    # calls them on the coordinator instance.
+    coordinator.async_get_fan_param = AsyncMock()
+    coordinator.async_set_fan_param = AsyncMock()
+    coordinator.get_all_fan_params = MagicMock()
 
     # Proactive: Mock service_handler just in case logic traverses it
-    broker.service_handler = MagicMock()
+    coordinator.service_handler = MagicMock()
 
-    return broker
+    return coordinator
 
 
 @pytest.fixture
@@ -71,20 +71,22 @@ def mock_remote_device() -> MagicMock:
 
 @pytest.fixture
 def remote_entity(
-    hass: HomeAssistant, mock_broker: MagicMock, mock_remote_device: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock, mock_remote_device: MagicMock
 ) -> RamsesRemote:
     """Return a RamsesRemote entity."""
     desc = RamsesRemoteEntityDescription()
-    entity = RamsesRemote(mock_broker, mock_remote_device, desc)
+    entity = RamsesRemote(mock_coordinator, mock_remote_device, desc)
     entity.hass = hass
     return entity
 
 
-async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) -> None:
+async def test_async_setup_entry(
+    hass: HomeAssistant, mock_coordinator: MagicMock
+) -> None:
     """Test the setup entry logic."""
     entry = MagicMock()
     entry.entry_id = "test_entry"
-    hass.data[DOMAIN] = {entry.entry_id: mock_broker}
+    hass.data[DOMAIN] = {entry.entry_id: mock_coordinator}
 
     async_add_entities = MagicMock()
 
@@ -94,8 +96,8 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
     ):
         await async_setup_entry(hass, entry, async_add_entities)
 
-    assert mock_broker.async_register_platform.called
-    call_args = mock_broker.async_register_platform.call_args
+    assert mock_coordinator.async_register_platform.called
+    call_args = mock_coordinator.async_register_platform.call_args
     # Handle both positional and keyword arguments for the callback
     add_devices_cb = (
         call_args[0][1] if len(call_args[0]) > 1 else call_args[1]["add_devices"]
@@ -109,11 +111,11 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
 
 
 async def test_remote_entity_unique_id(
-    mock_broker: MagicMock, mock_remote_device: MagicMock
+    mock_coordinator: MagicMock, mock_remote_device: MagicMock
 ) -> None:
     """Test the RamsesRemote unique ID logic."""
     description = RamsesRemoteEntityDescription()
-    remote = RamsesRemote(mock_broker, mock_remote_device, description)
+    remote = RamsesRemote(mock_coordinator, mock_remote_device, description)
 
     assert remote.unique_id == REMOTE_ID
     assert REMOTE_ID in remote.unique_id
@@ -191,17 +193,17 @@ async def test_remote_add_command(remote_entity: RamsesRemote) -> None:
 
 
 async def test_remote_send_command_logic(
-    remote_entity: RamsesRemote, mock_broker: MagicMock
+    remote_entity: RamsesRemote, mock_coordinator: MagicMock
 ) -> None:
-    """Test send loop, delay, and broker calls."""
+    """Test send loop, delay, and coordinator calls."""
     with patch("asyncio.sleep", AsyncMock()):
         await remote_entity.async_send_command("boost", num_repeats=2, delay_secs=0.5)
 
     # Expectation: Called ONCE, with QoS parameters passed in kwargs
-    # The broker client is responsible for the repeats, not the remote entity loop
-    assert mock_broker.client.async_send_cmd.call_count == 1
+    # The coordinator client is responsible for the repeats, not the remote entity loop
+    assert mock_coordinator.client.async_send_cmd.call_count == 1
 
-    call_args = mock_broker.client.async_send_cmd.call_args
+    call_args = mock_coordinator.client.async_send_cmd.call_args
     sent_cmd = call_args[0][0]
     kwargs = call_args[1]
 
@@ -210,12 +212,12 @@ async def test_remote_send_command_logic(
     assert kwargs["num_repeats"] == 2
     assert kwargs["gap_duration"] == 0.5  # delay_secs mapped 1-to-1 to gap_duration
 
-    assert mock_broker.async_update.called
+    assert mock_coordinator.async_update.called
 
 
 async def test_remote_send_command_exception_handling(
     caplog: pytest.LogCaptureFixture,
-    mock_broker: MagicMock,
+    mock_coordinator: MagicMock,
     mock_remote_device: MagicMock,
 ) -> None:
     """Test that exceptions during send do not bubble up and stop execution.
@@ -224,11 +226,13 @@ async def test_remote_send_command_exception_handling(
     is still called and the automation flow isn't aborted.
     """
     desc = RamsesRemoteEntityDescription()
-    remote = RamsesRemote(mock_broker, mock_remote_device, desc)
+    remote = RamsesRemote(mock_coordinator, mock_remote_device, desc)
     await remote.async_add_command("boost", VALID_PKT)
 
     # Simulate a TimeoutError from the underlying client
-    mock_broker.client.async_send_cmd.side_effect = TimeoutError("Simulated Timeout")
+    mock_coordinator.client.async_send_cmd.side_effect = TimeoutError(
+        "Simulated Timeout"
+    )
 
     # Capture logs to verify the warning
     with caplog.at_level(logging.WARNING):
@@ -240,18 +244,18 @@ async def test_remote_send_command_exception_handling(
     assert "Simulated Timeout" in caplog.text
 
     # Verify async_update was still called
-    mock_broker.async_update.assert_called_once()
+    mock_coordinator.async_update.assert_called_once()
 
 
 async def test_remote_learn_command_success(
     remote_entity: RamsesRemote,
     hass: HomeAssistant,
-    mock_broker: MagicMock,
+    mock_coordinator: MagicMock,
     mock_remote_device: MagicMock,
 ) -> None:
     """Test the successful learning of a command via event bus listener."""
     remote = RamsesRemote(
-        mock_broker, mock_remote_device, RamsesRemoteEntityDescription()
+        mock_coordinator, mock_remote_device, RamsesRemoteEntityDescription()
     )
     remote.hass = hass
 
@@ -287,11 +291,11 @@ async def test_remote_learn_command_success(
 
 
 async def test_remote_learn_filter_logic(
-    mock_broker: MagicMock, mock_remote_device: MagicMock, hass: HomeAssistant
+    mock_coordinator: MagicMock, mock_remote_device: MagicMock, hass: HomeAssistant
 ) -> None:
     """Thoroughly test the event_filter logic for various packet scenarios."""
     remote = RamsesRemote(
-        mock_broker, mock_remote_device, RamsesRemoteEntityDescription()
+        mock_coordinator, mock_remote_device, RamsesRemoteEntityDescription()
     )
     remote.hass = hass
 
@@ -333,10 +337,10 @@ async def test_remote_services(
     remote.entity_id = entity_id
     remote.hass = hass
 
-    # Setup the broker mock structure for awaitable calls
-    remote._broker = MagicMock()
-    remote._broker.client.async_send_cmd = AsyncMock()
-    remote._broker.async_update = AsyncMock()
+    # Setup the coordinator mock structure for awaitable calls
+    remote._coordinator = MagicMock()
+    remote._coordinator.client.async_send_cmd = AsyncMock()
+    remote._coordinator.async_update = AsyncMock()
 
     # Mock the internal send_command method provided by the backend library
     remote._commands = {"cmd_1": "mock_hex_packet"}
@@ -356,7 +360,7 @@ async def test_remote_services(
         # Test send_command with simple valid command
         await remote.async_send_command(["cmd_1"], num_repeats=1, delay_secs=0)
 
-    remote._broker.client.async_send_cmd.assert_awaited()
+    remote._coordinator.client.async_send_cmd.assert_awaited()
 
 
 async def test_send_command_edge_cases(hass: HomeAssistant) -> None:
@@ -369,10 +373,10 @@ async def test_send_command_edge_cases(hass: HomeAssistant) -> None:
     remote.entity_id = "remote.test_remote"
     remote.hass = hass
 
-    # Setup the broker mock structure
-    remote._broker = MagicMock()
-    remote._broker.client.async_send_cmd = AsyncMock()
-    remote._broker.async_update = AsyncMock()
+    # Setup the coordinator mock structure
+    remote._coordinator = MagicMock()
+    remote._coordinator.client.async_send_cmd = AsyncMock()
+    remote._coordinator.async_update = AsyncMock()
 
     remote._commands = {"cmd_1": "mock_hex_packet"}
 
@@ -381,10 +385,10 @@ async def test_send_command_edge_cases(hass: HomeAssistant) -> None:
     with patch("custom_components.ramses_cc.remote.Command", side_effect=lambda x: x):
         await remote.async_send_command(["cmd_1"], num_repeats=2, delay_secs=0.1)
 
-    # Expect exactly 1 call to the broker client
-    assert remote._broker.client.async_send_cmd.call_count == 1
+    # Expect exactly 1 call to the coordinator client
+    assert remote._coordinator.client.async_send_cmd.call_count == 1
     # Verify the arguments passed to that call
-    call_kwargs = remote._broker.client.async_send_cmd.call_args[1]
+    call_kwargs = remote._coordinator.client.async_send_cmd.call_args[1]
     assert call_kwargs["num_repeats"] == 2
     assert call_kwargs["gap_duration"] == 0.1  # delay_secs mapped 1-to-1
 
@@ -399,21 +403,21 @@ async def test_send_command_failure(hass: HomeAssistant) -> None:
     remote.entity_id = "remote.test_remote"
     remote.hass = hass
 
-    # Setup the broker mock structure
-    remote._broker = MagicMock()
-    remote._broker.client.async_send_cmd = AsyncMock()
-    remote._broker.async_update = AsyncMock()
+    # Setup the coordinator mock structure
+    remote._coordinator = MagicMock()
+    remote._coordinator.client.async_send_cmd = AsyncMock()
+    remote._coordinator.async_update = AsyncMock()
 
     # Mock sending to raise an exception (e.g. timeout or validation error)
     remote._commands = {"cmd_fail": "mock_hex_packet"}
-    remote._broker.client.async_send_cmd.side_effect = TimeoutError("Timeout")
+    remote._coordinator.client.async_send_cmd.side_effect = TimeoutError("Timeout")
 
     with patch("custom_components.ramses_cc.remote.Command", side_effect=lambda x: x):
         # This should NOT raise an exception (it is caught and logged)
         await remote.async_send_command(["cmd_fail"])
 
     # Ensure async_update is still called even after failure
-    remote._broker.async_update.assert_awaited()
+    remote._coordinator.async_update.assert_awaited()
 
 
 async def test_learn_command(hass: HomeAssistant) -> None:
@@ -427,7 +431,7 @@ async def test_learn_command(hass: HomeAssistant) -> None:
     # Use a standalone mock for hass to avoid "Event loop is closed" errors
     remote.hass = MagicMock()
     remote._commands = {}
-    remote._broker = MagicMock()
+    remote._coordinator = MagicMock()
 
     # The implementation likely returns silently on timeout rather than raising.
     # We assert that the command was NOT added to the commands list.
@@ -447,7 +451,7 @@ async def test_learn_command_failure(hass: HomeAssistant) -> None:
     # Use a standalone mock for hass
     remote.hass = MagicMock()
     remote._commands = {}
-    remote._broker = MagicMock()
+    remote._coordinator = MagicMock()
 
     # The implementation returns silently on timeout.
     # We assert that the command was NOT added to the commands list.
@@ -458,16 +462,16 @@ async def test_learn_command_failure(hass: HomeAssistant) -> None:
 
 async def test_setup_entry_platform(hass: HomeAssistant) -> None:
     """Test platform setup."""
-    mock_broker = MagicMock()
-    mock_broker.devices = []
+    mock_coordinator = MagicMock()
+    mock_coordinator.devices = []
 
     # Create a mock config entry with an ID
     entry = MagicMock()
     entry.entry_id = "test_entry_id"
 
-    # Populate hass.data with the broker
+    # Populate hass.data with the coordinator
     hass.data[DOMAIN] = {}
-    hass.data[DOMAIN][entry.entry_id] = mock_broker
+    hass.data[DOMAIN][entry.entry_id] = mock_coordinator
 
     with (
         patch("custom_components.ramses_cc.remote.RamsesRemote", autospec=True),
@@ -542,14 +546,14 @@ async def test_fan_param_methods(
     device_id = "12:123456"
     fan_id = "18:654321"
 
-    # 1. Setup Mock Broker first
-    mock_broker = MagicMock()
-    mock_broker.fan_handler = MagicMock()
-    mock_broker.fan_handler._fan_bound_to_remote = {device_id: fan_id}
+    # 1. Setup Mock Coordinator first
+    mock_coordinator = MagicMock()
+    mock_coordinator.fan_handler = MagicMock()
+    mock_coordinator.fan_handler._fan_bound_to_remote = {device_id: fan_id}
 
-    mock_broker.async_get_fan_param = AsyncMock()
-    mock_broker.async_set_fan_param = AsyncMock()
-    mock_broker.get_all_fan_params = MagicMock()
+    mock_coordinator.async_get_fan_param = AsyncMock()
+    mock_coordinator.async_set_fan_param = AsyncMock()
+    mock_coordinator.get_all_fan_params = MagicMock()
 
     # 2. Setup Remote Entity
     mock_device = MagicMock()
@@ -557,7 +561,7 @@ async def test_fan_param_methods(
     mock_device.unique_id = "unique_id"
 
     remote = RamsesRemote(
-        mock_broker,
+        mock_coordinator,
         mock_device,
         MagicMock(),
     )
@@ -568,13 +572,13 @@ async def test_fan_param_methods(
 
     # --- Test 1: Async Get (Bound) ---
     await remote.async_get_fan_rem_param(**kwargs)
-    mock_broker.async_get_fan_param.assert_awaited()
-    call_args = mock_broker.async_get_fan_param.call_args[0][0]
+    mock_coordinator.async_get_fan_param.assert_awaited()
+    call_args = mock_coordinator.async_get_fan_param.call_args[0][0]
     assert call_args["device_id"] == fan_id
 
     # --- Test 2: Async Set (Bound) ---
     await remote.async_set_fan_rem_param(**kwargs)
-    mock_broker.async_set_fan_param.assert_awaited()
+    mock_coordinator.async_set_fan_param.assert_awaited()
 
     # --- Test 3: Update Params (Bound + Thread Safety Check) ---
     # Create a completed Future to simulate the return value of async_add_executor_job
@@ -589,15 +593,15 @@ async def test_fan_param_methods(
         # The method should now run directly on the event loop.
         mock_exec.assert_not_called()
 
-        # Check that broker.get_all_fan_params was called directly
+        # Check that coordinator.get_all_fan_params was called directly
         expected_kwargs = {"key": "value", "device_id": fan_id, "from_id": device_id}
-        mock_broker.get_all_fan_params.assert_called_with(expected_kwargs)
+        mock_coordinator.get_all_fan_params.assert_called_with(expected_kwargs)
 
     # --- Test 4: Unbound Scenarios ---
-    mock_broker.fan_handler._fan_bound_to_remote = {}
-    mock_broker.get_all_fan_params.reset_mock()
-    mock_broker.async_get_fan_param.reset_mock()
-    mock_broker.async_set_fan_param.reset_mock()
+    mock_coordinator.fan_handler._fan_bound_to_remote = {}
+    mock_coordinator.get_all_fan_params.reset_mock()
+    mock_coordinator.async_get_fan_param.reset_mock()
+    mock_coordinator.async_set_fan_param.reset_mock()
 
     with caplog.at_level(logging.WARNING):
         # Update
@@ -609,18 +613,18 @@ async def test_fan_param_methods(
         # Set
         await remote.async_set_fan_rem_param(**kwargs)
 
-    # Verify broker methods were NOT called for unbound remote
-    mock_broker.get_all_fan_params.assert_not_called()
-    mock_broker.async_get_fan_param.assert_not_called()
-    mock_broker.async_set_fan_param.assert_not_called()
+    # Verify coordinator methods were NOT called for unbound remote
+    mock_coordinator.get_all_fan_params.assert_not_called()
+    mock_coordinator.async_get_fan_param.assert_not_called()
+    mock_coordinator.async_set_fan_param.assert_not_called()
 
 
 async def test_remote_learn_cleanup_on_timeout(
-    hass: HomeAssistant, mock_broker: MagicMock, mock_remote_device: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock, mock_remote_device: MagicMock
 ) -> None:
     """Test that the event listener is removed even if learning times out."""
     remote = RamsesRemote(
-        mock_broker, mock_remote_device, RamsesRemoteEntityDescription()
+        mock_coordinator, mock_remote_device, RamsesRemoteEntityDescription()
     )
     remote.hass = hass
 
@@ -639,5 +643,5 @@ async def test_remote_learn_cleanup_on_timeout(
     # Verify that the command was NOT added
     assert "timeout_cmd" not in remote._commands
 
-    # Verify broker state was reset
-    assert mock_broker.learn_device_id is None
+    # Verify coordinator state was reset
+    assert mock_coordinator.learn_device_id is None

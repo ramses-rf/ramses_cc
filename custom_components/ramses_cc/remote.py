@@ -28,8 +28,8 @@ from ramses_tx.command import Command
 from ramses_tx.const import Priority
 
 from . import RamsesEntity, RamsesEntityDescription
-from .broker import RamsesBroker
 from .const import ATTR_DEVICE_ID, DOMAIN
+from .coordinator import RamsesCoordinator
 from .schemas import DEFAULT_DELAY_SECS, DEFAULT_NUM_REPEATS, DEFAULT_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,20 +44,20 @@ async def async_setup_entry(
     :param entry: The config entry.
     :param async_add_entities: Callback to add entities.
     """
-    broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
+    coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
     platform: EntityPlatform = async_get_current_platform()
 
     @callback
     def add_devices(devices: list[HvacRemote]) -> None:
         entities = [
             RamsesRemoteEntityDescription.ramses_cc_class(
-                broker, device, RamsesRemoteEntityDescription()
+                coordinator, device, RamsesRemoteEntityDescription()
             )
             for device in devices
         ]
         async_add_entities(entities)
 
-    broker.async_register_platform(platform, add_devices)
+    coordinator.async_register_platform(platform, add_devices)
 
 
 class RamsesRemote(RamsesEntity, RemoteEntity):
@@ -72,23 +72,23 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: HvacRemote,
         entity_description: RamsesRemoteEntityDescription,
     ) -> None:
         """Initialize a HVAC remote.
 
-        :param broker: The RamsesBroker instance.
+        :param coordinator: The RamsesCoordinator instance.
         :param device: The backend device instance.
         :param entity_description: The entity description.
         """
         _LOGGER.info("Found %s", device.id)
-        super().__init__(broker, device, entity_description)
+        super().__init__(coordinator, device, entity_description)
 
         self.entity_id = ENTITY_ID_FORMAT.format(device.id)
 
         self._attr_is_on = True
-        self._commands: dict[str, str] = broker._remotes.get(device.id, {})
+        self._commands: dict[str, str] = coordinator._remotes.get(device.id, {})
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -185,8 +185,8 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             self._commands[command[0]] = event.data["packet"]
             learn_event.set()
 
-        with self._broker._sem:
-            self._broker.learn_device_id = self._device.id
+        with self._coordinator._sem:
+            self._coordinator.learn_device_id = self._device.id
             remove_listener = self.hass.bus.async_listen(
                 f"{DOMAIN}_learn", listener, event_filter
             )
@@ -200,7 +200,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
                     command[0],
                 )
             finally:
-                self._broker.learn_device_id = None
+                self._coordinator.learn_device_id = None
                 remove_listener()
 
     async def async_send_command(
@@ -252,7 +252,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         cmd = Command(self._commands[command[0]])
 
         try:
-            await self._broker.client.async_send_cmd(
+            await self._coordinator.client.async_send_cmd(
                 cmd,
                 priority=Priority.HIGH,
                 num_repeats=num_repeats,
@@ -269,7 +269,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             )
 
         # This will now execute even if the transmission failed
-        await self._broker.async_update()
+        await self._coordinator.async_update()
 
     async def async_add_command(
         self,
@@ -343,13 +343,13 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             self.__class__.__name__,
             self._device.id,
         )
-        parent: DeviceIdT = self._broker.fan_handler._fan_bound_to_remote.get(
+        parent: DeviceIdT = self._coordinator.fan_handler._fan_bound_to_remote.get(
             self._device.id, None
         )
         if parent:
             kwargs[ATTR_DEVICE_ID] = parent
             kwargs["from_id"] = self._device.id  # replaces manual from_id entry
-            await self._broker.async_get_fan_param(kwargs)
+            await self._coordinator.async_get_fan_param(kwargs)
         else:
             _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
 
@@ -364,13 +364,13 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             self.entity_id,
             self.__class__.__name__,
         )
-        parent: DeviceIdT = self._broker.fan_handler._fan_bound_to_remote.get(
+        parent: DeviceIdT = self._coordinator.fan_handler._fan_bound_to_remote.get(
             self._device.id, None
         )
         if parent:
             kwargs[ATTR_DEVICE_ID] = parent
             kwargs["from_id"] = self._device.id  # replaces manual from_id entry
-            await self._broker.async_set_fan_param(kwargs)
+            await self._coordinator.async_set_fan_param(kwargs)
         else:
             _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
 
@@ -384,16 +384,16 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             self.entity_id,
             self.__class__.__name__,
         )
-        parent: DeviceIdT = self._broker.fan_handler._fan_bound_to_remote.get(
+        parent: DeviceIdT = self._coordinator.fan_handler._fan_bound_to_remote.get(
             self._device.id, None
         )
         if parent:
             kwargs[ATTR_DEVICE_ID] = parent
             kwargs["from_id"] = self._device.id  # replaces manual from_id entry
-            # Call broker method directly on the loop.
-            # broker.get_all_fan_params internally calls loop.create_task().
+            # Call coordinator method directly on the loop.
+            # coordinator.get_all_fan_params internally calls loop.create_task().
             # It is NOT blocking and must NOT be run in an executor.
-            self._broker.get_all_fan_params(kwargs)
+            self._coordinator.get_all_fan_params(kwargs)
         else:
             _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
 

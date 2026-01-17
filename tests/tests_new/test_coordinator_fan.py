@@ -1,6 +1,6 @@
-"""Tests for ramses_cc broker fan parameter logic and number entities.
+"""Tests for ramses_cc coordinator fan parameter logic and number entities.
 
-This module tests the interaction between the RamsesBroker, the Gateway,
+This module tests the interaction between the RamsesCoordinator, the Gateway,
 and the Number entities used for Fan parameters (2411).
 """
 
@@ -10,8 +10,8 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.const import DOMAIN
+from custom_components.ramses_cc.coordinator import RamsesCoordinator
 from custom_components.ramses_cc.number import (
     RamsesNumberEntityDescription,
     RamsesNumberParam,
@@ -38,25 +38,25 @@ def mock_gateway() -> MagicMock:
 
 
 @pytest.fixture
-def mock_broker(hass: HomeAssistant, mock_gateway: MagicMock) -> RamsesBroker:
-    """Return a configured RamsesBroker.
+def mock_coordinator(hass: HomeAssistant, mock_gateway: MagicMock) -> RamsesCoordinator:
+    """Return a configured RamsesCoordinator.
 
     :param hass: The Home Assistant instance.
     :param mock_gateway: The mock gateway fixture.
-    :return: A RamsesBroker instance with the mock gateway attached.
+    :return: A RamsesCoordinator instance with the mock gateway attached.
     """
     entry = MagicMock()
     entry.options = {}
     entry.entry_id = "test_entry"
 
-    broker = RamsesBroker(hass, entry)
-    broker.client = mock_gateway
-    broker._device_info = {}
+    coordinator = RamsesCoordinator(hass, entry)
+    coordinator.client = mock_gateway
+    coordinator._device_info = {}
 
     # Mock the hass.data structure
-    hass.data[DOMAIN] = {entry.entry_id: broker}
+    hass.data[DOMAIN] = {entry.entry_id: coordinator}
 
-    return broker
+    return coordinator
 
 
 @pytest.fixture
@@ -73,23 +73,25 @@ def mock_fan_device() -> MagicMock:
     return device
 
 
-async def test_broker_get_fan_param(
-    mock_broker: RamsesBroker, mock_gateway: MagicMock, mock_fan_device: MagicMock
+async def test_coordinator_get_fan_param(
+    mock_coordinator: RamsesCoordinator,
+    mock_gateway: MagicMock,
+    mock_fan_device: MagicMock,
 ) -> None:
-    """Test async_get_fan_param service call in broker.py.
+    """Test async_get_fan_param service call in coordinator.py.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_gateway: The mock gateway fixture.
     :param mock_fan_device: The mock fan device fixture.
     """
-    # Register the mock device so the broker finds it and proceeds to extract from_id
-    mock_broker._devices = [mock_fan_device]
+    # Register the mock device so the coordinator finds it and proceeds to extract from_id
+    mock_coordinator._devices = [mock_fan_device]
     mock_gateway.device_by_id = {FAN_ID: mock_fan_device}
 
     # 1. Test with explicit from_id
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX, "from_id": REM_ID}
 
-    await mock_broker.async_get_fan_param(call_data)
+    await mock_coordinator.async_get_fan_param(call_data)
 
     # Verify command sent
     assert mock_gateway.async_send_cmd.called
@@ -100,24 +102,26 @@ async def test_broker_get_fan_param(
     assert cmd.code == "2411"
 
 
-async def test_broker_set_fan_param(
-    mock_broker: RamsesBroker, mock_gateway: MagicMock, mock_fan_device: MagicMock
+async def test_coordinator_set_fan_param(
+    mock_coordinator: RamsesCoordinator,
+    mock_gateway: MagicMock,
+    mock_fan_device: MagicMock,
 ) -> None:
-    """Test async_set_fan_param service call in broker.py.
+    """Test async_set_fan_param service call in coordinator.py.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_gateway: The mock gateway fixture.
     :param mock_fan_device: The mock fan device fixture.
     """
-    # Mock the device lookup so the broker can find the bound remote
-    mock_broker._devices = [mock_fan_device]
-    # Also update the gateway registry if the broker checks there (fallback)
+    # Mock the device lookup so the coordinator can find the bound remote
+    mock_coordinator._devices = [mock_fan_device]
+    # Also update the gateway registry if the coordinator checks there (fallback)
     mock_gateway.device_by_id = {FAN_ID: mock_fan_device}
 
     # 1. Test with automatic bound device lookup (no from_id)
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX, "value": 21.5}
 
-    await mock_broker.async_set_fan_param(call_data)
+    await mock_coordinator.async_set_fan_param(call_data)
 
     # Verify command sent
     assert mock_gateway.async_send_cmd.called
@@ -130,13 +134,13 @@ async def test_broker_set_fan_param(
 
 async def test_number_entity_state(
     hass: HomeAssistant,
-    mock_broker: RamsesBroker,
+    mock_coordinator: RamsesCoordinator,
     mock_fan_device: MagicMock,
 ) -> None:
     """Test RamsesNumberParam entity initialization and state updates.
 
     :param hass: The Home Assistant instance.
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_fan_device: The mock fan device fixture.
     """
     # 1. Setup the entity description
@@ -150,7 +154,7 @@ async def test_number_entity_state(
     )
 
     # 2. Create the entity
-    entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
+    entity = RamsesNumberParam(mock_coordinator, mock_fan_device, desc)
     entity.hass = hass
 
     # 3. Test Initial State
@@ -167,13 +171,13 @@ async def test_number_entity_state(
 
 async def test_number_entity_set_value(
     hass: HomeAssistant,
-    mock_broker: RamsesBroker,
+    mock_coordinator: RamsesCoordinator,
     mock_fan_device: MagicMock,
 ) -> None:
     """Test RamsesNumberParam set value logic.
 
     :param hass: The Home Assistant instance.
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_fan_device: The mock fan device fixture.
     """
     # 1. Setup the entity description
@@ -187,7 +191,7 @@ async def test_number_entity_set_value(
     )
 
     # 2. Create the entity
-    entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
+    entity = RamsesNumberParam(mock_coordinator, mock_fan_device, desc)
     entity.hass = hass
 
     # 3. Register a mock handler for the 'set_fan_param' service
@@ -215,19 +219,19 @@ async def test_number_entity_set_value(
     assert entity.icon == "mdi:timer-sand"
 
 
-async def test_broker_fan_setup(
-    mock_broker: RamsesBroker, mock_fan_device: MagicMock
+async def test_coordinator_fan_setup(
+    mock_coordinator: RamsesCoordinator, mock_fan_device: MagicMock
 ) -> None:
     """Test fan_handler.async_setup_fan_device logic in fan_handler.py.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_fan_device: The mock fan device fixture.
     """
     # Mock callbacks
     mock_fan_device.set_initialized_callback = MagicMock()
     mock_fan_device.set_param_update_callback = MagicMock()
 
-    await mock_broker.fan_handler.async_setup_fan_device(mock_fan_device)
+    await mock_coordinator.fan_handler.async_setup_fan_device(mock_fan_device)
 
     # Verify callbacks were registered
     assert mock_fan_device.set_initialized_callback.called
@@ -239,13 +243,15 @@ async def test_broker_fan_setup(
 
     # Instead of patching hass.bus.async_fire (read-only), we create a mock listener
     event_callback = MagicMock()
-    mock_broker.hass.bus.async_listen("ramses_cc.fan_param_updated", event_callback)
+    mock_coordinator.hass.bus.async_listen(
+        "ramses_cc.fan_param_updated", event_callback
+    )
 
     # Simulate a parameter update from the device library
     callback_fn(PARAM_ID_HEX, 19.5)
 
     # Wait for event loop to process (fire is sync, but handlers are async)
-    await mock_broker.hass.async_block_till_done()
+    await mock_coordinator.hass.async_block_till_done()
 
     # Verify our listener was called
     assert event_callback.called
@@ -255,46 +261,47 @@ async def test_broker_fan_setup(
     assert event.data["value"] == 19.5
 
 
-async def test_param_validation_logic(mock_broker: RamsesBroker) -> None:
-    """Test validation logic in broker helper methods.
+async def test_param_validation_logic(mock_coordinator: RamsesCoordinator) -> None:
+    """Test validation logic in coordinator helper methods.
 
     Uses try-except blocks to avoid Mypy unreachable code errors with pytest.raises.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     # 1. Invalid Parameter ID - Not Hex
     try:
-        mock_broker.service_handler._get_param_id({"param_id": "ZZ"})
+        mock_coordinator.service_handler._get_param_id({"param_id": "ZZ"})
         pytest.fail("Should have raised ValueError for non-hex param_id")
     except ValueError:
         pass
 
     # 2. Invalid Parameter ID - Too Long
     try:
-        mock_broker.service_handler._get_param_id({"param_id": "123"})
+        mock_coordinator.service_handler._get_param_id({"param_id": "123"})
         pytest.fail("Should have raised ValueError for long param_id")
     except ValueError:
         pass
 
     # 3. Valid Parameter ID
-    assert mock_broker.service_handler._get_param_id({"param_id": "75"}) == "75"
+    assert mock_coordinator.service_handler._get_param_id({"param_id": "75"}) == "75"
     assert (
-        mock_broker.service_handler._get_param_id({"param_id": 75}) == "75"
+        mock_coordinator.service_handler._get_param_id({"param_id": 75}) == "75"
     )  # Hex 4B is Int 75 (if passed as int/string mix up)
 
     # 4. Device Resolution (Target to ID)
-    # The broker.service_handler handles this now, access via handler
+    # The coordinator.service_handler handles this now, access via handler
     assert (
-        mock_broker.service_handler._resolve_device_id({"device_id": FAN_ID}) == FAN_ID
+        mock_coordinator.service_handler._resolve_device_id({"device_id": FAN_ID})
+        == FAN_ID
     )
     assert (
-        mock_broker.service_handler._resolve_device_id({"device_id": [FAN_ID]})
+        mock_coordinator.service_handler._resolve_device_id({"device_id": [FAN_ID]})
         == FAN_ID
     )
 
 
 async def test_update_fan_params_sequence(
-    mock_broker: RamsesBroker,
+    mock_coordinator: RamsesCoordinator,
     mock_gateway: MagicMock,
     mock_fan_device: MagicMock,
 ) -> None:
@@ -304,13 +311,13 @@ async def test_update_fan_params_sequence(
     to ensure the test runs instantly without waiting for the 0.5s delay between
     requests.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     :param mock_gateway: The mock gateway fixture.
     :param mock_fan_device: The mock fan device fixture.
     """
-    # Register the mock device so the broker can find the bound remote (source ID)
-    mock_broker._devices = [mock_fan_device]
-    # Also update the gateway registry if the broker checks there (fallback)
+    # Register the mock device so the coordinator can find the bound remote (source ID)
+    mock_coordinator._devices = [mock_fan_device]
+    # Also update the gateway registry if the coordinator checks there (fallback)
     mock_gateway.device_by_id = {FAN_ID: mock_fan_device}
 
     # Define a tiny schema for testing (just 2 params) to avoid 30+ iterations
@@ -322,8 +329,8 @@ async def test_update_fan_params_sequence(
         patch("asyncio.sleep", new_callable=AsyncMock),
     ):
         call_data = {"device_id": FAN_ID}
-        # Call the method on service_handler, NOT directly on broker
-        await mock_broker.service_handler._async_run_fan_param_sequence(call_data)
+        # Call the method on service_handler, NOT directly on coordinator
+        await mock_coordinator.service_handler._async_run_fan_param_sequence(call_data)
 
     # Verify that exactly 2 commands were sent (one for each param in tiny_schema)
     assert mock_gateway.async_send_cmd.call_count == 2
@@ -334,21 +341,23 @@ async def test_update_fan_params_sequence(
     assert calls[1][0][0].code == "2411"  # Second command
 
 
-async def test_broker_set_fan_param_no_binding(
-    mock_broker: RamsesBroker, mock_gateway: MagicMock, mock_fan_device: MagicMock
+async def test_coordinator_set_fan_param_no_binding(
+    mock_coordinator: RamsesCoordinator,
+    mock_gateway: MagicMock,
+    mock_fan_device: MagicMock,
 ) -> None:
     """Test set_fan_param when the fan has NO bound remote (unbound)."""
 
     # Mock the device lookup
-    mock_broker._devices = [mock_fan_device]
-    # Also update the gateway registry if the broker checks there (fallback)
+    mock_coordinator._devices = [mock_fan_device]
+    # Also update the gateway registry if the coordinator checks there (fallback)
     mock_gateway.device_by_id = {FAN_ID: mock_fan_device}
 
     # 1. Simulate an Unbound Fan (get_bound_rem returns None)
     mock_fan_device.get_bound_rem = MagicMock(return_value=None)
 
     # 2. Try to set a parameter WITHOUT providing a 'from_id'
-    # This forces the broker to look for the bound remote
+    # This forces the coordinator to look for the bound remote
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX, "value": 21.5}
 
     # 3. Expectation: It SHOULD raise HomeAssistantError
@@ -356,7 +365,7 @@ async def test_broker_set_fan_param_no_binding(
     with pytest.raises(
         HomeAssistantError, match="Cannot set parameter: No valid source device"
     ):
-        await mock_broker.async_set_fan_param(call_data)
+        await mock_coordinator.async_set_fan_param(call_data)
 
     # Verify NO command was sent (because there is no source ID)
     mock_gateway.async_send_cmd.assert_not_called()

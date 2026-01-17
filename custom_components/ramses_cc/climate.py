@@ -44,7 +44,6 @@ from ramses_tx.const import SZ_MODE, SZ_SETPOINT, SZ_SYSTEM_MODE
 from ramses_tx.exceptions import ProtocolSendFailed, TransportError
 
 from . import RamsesEntity, RamsesEntityDescription
-from .broker import RamsesBroker
 from .const import (
     ATTR_DEVICE_ID,
     DOMAIN,
@@ -54,6 +53,7 @@ from .const import (
     SystemMode,
     ZoneMode,
 )
+from .coordinator import RamsesCoordinator
 from .schemas import SCH_SET_SYSTEM_MODE_EXTRA, SCH_SET_ZONE_MODE_EXTRA
 
 _LOGGER = logging.getLogger(__name__)
@@ -115,20 +115,20 @@ async def async_setup_entry(
     :param entry: The config entry.
     :param async_add_entities: The callback to add entities.
     """
-    broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
+    coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
     platform: EntityPlatform = async_get_current_platform()
 
     @callback
     def add_devices(devices: list[Evohome | Zone | HvacVentilator]) -> None:
         entities = [
-            description.ramses_cc_class(broker, device, description)
+            description.ramses_cc_class(coordinator, device, description)
             for device in devices
             for description in CLIMATE_DESCRIPTIONS
             if isinstance(device, description.ramses_rf_class)
         ]
         async_add_entities(entities)
 
-    broker.async_register_platform(platform, add_devices)
+    coordinator.async_register_platform(platform, add_devices)
 
 
 class RamsesController(RamsesEntity, ClimateEntity):
@@ -153,18 +153,18 @@ class RamsesController(RamsesEntity, ClimateEntity):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: Evohome,
         entity_description: RamsesClimateEntityDescription,
     ) -> None:
         """Initialize a TCS controller.
 
-        :param broker: The Ramses broker.
+        :param coordinator: The Ramses coordinator.
         :param device: The Evohome device.
         :param entity_description: The entity description.
         """
         _LOGGER.info("Found controller %s", device.id)
-        super().__init__(broker, device, entity_description)
+        super().__init__(coordinator, device, entity_description)
 
         self.entity_id = ENTITY_ID_FORMAT.format(device.id)
 
@@ -382,18 +382,18 @@ class RamsesZone(RamsesEntity, ClimateEntity):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: Zone,
         entity_description: RamsesClimateEntityDescription,
     ) -> None:
         """Initialize a TCS zone.
 
-        :param broker: The Ramses broker.
+        :param coordinator: The Ramses coordinator.
         :param device: The Zone device.
         :param entity_description: The entity description.
         """
         _LOGGER.info("Found zone %s", device.id)
-        super().__init__(broker, device, entity_description)
+        super().__init__(coordinator, device, entity_description)
 
         self.entity_id = ENTITY_ID_FORMAT.format(device.id)
 
@@ -725,18 +725,18 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: HvacVentilator,
         entity_description: RamsesClimateEntityDescription,
     ) -> None:
         """Initialize a HVAC system.
 
-        :param broker: The Ramses broker.
+        :param coordinator: The Ramses coordinator.
         :param device: The Hvac device.
         :param entity_description: The entity description.
         """
         _LOGGER.info("Found HVAC %s", device.id)
-        super().__init__(broker, device, entity_description)
+        super().__init__(coordinator, device, entity_description)
 
         self.entity_id = ENTITY_ID_FORMAT.format(device.id)
         self._device = device
@@ -839,7 +839,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         )
         kwargs[ATTR_DEVICE_ID] = self._device.id
         try:
-            await self._broker.async_get_fan_param(kwargs)
+            await self._coordinator.async_get_fan_param(kwargs)
         except (ProtocolSendFailed, TimeoutError, TransportError) as err:
             raise HomeAssistantError(f"Failed to get fan param: {err}") from err
 
@@ -857,7 +857,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         )
         kwargs[ATTR_DEVICE_ID] = self._device.id
         try:
-            await self._broker.async_set_fan_param(kwargs)
+            await self._coordinator.async_set_fan_param(kwargs)
         except (ProtocolSendFailed, TimeoutError, TransportError) as err:
             raise HomeAssistantError(f"Failed to set fan param: {err}") from err
 
@@ -875,7 +875,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         kwargs[ATTR_DEVICE_ID] = self._device.id
         # Note: This spawns a task and is not awaited, so simple try/except here
         # won't catch exceptions from the task.
-        self._broker.get_all_fan_params(kwargs)  # don't await
+        self._coordinator.get_all_fan_params(kwargs)  # don't await
 
 
 @dataclass(frozen=True, kw_only=True)

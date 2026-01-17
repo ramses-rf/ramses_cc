@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant  # , ServiceCall
 
-from custom_components.ramses_cc.broker import RamsesBroker
+from custom_components.ramses_cc.coordinator import RamsesCoordinator
 
 # Test constants
 TEST_DEVICE_ID = "32:153289"  # FAN device ID
@@ -41,7 +41,7 @@ class TestBoundDeviceFunctionality:
         """Set up test environment for bound device operations.
 
         This fixture runs before each test method and sets up:
-        - A real RamsesBroker instance
+        - A real RamsesCoordinator instance
         - A mock client with an HGI device
         - Patches for Command.set_fan_param and Command.get_fan_param
         - Test command objects for bound device operations
@@ -49,13 +49,13 @@ class TestBoundDeviceFunctionality:
         Args:
             hass: Home Assistant fixture for creating a test environment.
         """
-        # Create a real broker instance with a mock config entry
-        self.broker = RamsesBroker(hass, MagicMock())
+        # Create a real coordinator instance with a mock config entry
+        self.coordinator = RamsesCoordinator(hass, MagicMock())
 
         # Create a mock client with HGI device
         self.mock_client = AsyncMock()
-        self.broker.client = self.mock_client
-        self.broker.client.hgi = MagicMock(id=TEST_FROM_ID)
+        self.coordinator.client = self.mock_client
+        self.coordinator.client.hgi = MagicMock(id=TEST_FROM_ID)
 
         # Create a mock device and add it to the client's registry
         self.mock_device = MagicMock()
@@ -63,7 +63,7 @@ class TestBoundDeviceFunctionality:
         self.mock_device.get_bound_rem.return_value = None
 
         # Ensure device_by_id behaves like a dict (synchronous .get)
-        self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
+        self.coordinator.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
 
         # Patch Command.set_fan_param to control command creation
         self.set_patcher = patch(
@@ -118,7 +118,7 @@ class TestBoundDeviceFunctionality:
         call = service_data
 
         # Act - Call the method under test
-        await self.broker.async_set_fan_param(call)
+        await self.coordinator.async_set_fan_param(call)
 
         # Assert - Verify explicit from_id was used
         self.mock_set_fan_param.assert_called_once_with(
@@ -152,7 +152,7 @@ class TestBoundDeviceFunctionality:
         call = service_data
 
         # Act - Call the method under test
-        await self.broker.async_get_fan_param(call)
+        await self.coordinator.async_get_fan_param(call)
 
         # Assert - Verify explicit from_id was used for get operation
         self.mock_get_fan_param.assert_called_once_with(
@@ -189,7 +189,7 @@ class TestBoundDeviceFunctionality:
         call = service_data
 
         # Act - Call the method under test
-        await self.broker.async_set_fan_param(call)
+        await self.coordinator.async_set_fan_param(call)
 
         # Assert - Verify fan_id was used as target, explicit from_id as source
         self.mock_set_fan_param.assert_called_once_with(

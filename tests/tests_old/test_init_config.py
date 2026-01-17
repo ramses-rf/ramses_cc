@@ -15,7 +15,7 @@ from pytest_homeassistant_custom_component.common import (  # type: ignore[impor
     MockConfigEntry,
 )
 
-from custom_components.ramses_cc import CONFIG_SCHEMA, DOMAIN, RamsesBroker
+from custom_components.ramses_cc import CONFIG_SCHEMA, DOMAIN, RamsesCoordinator
 from custom_components.ramses_cc.config_flow import SZ_RESTORE_CACHE
 from ramses_rf.gateway import Gateway
 
@@ -87,7 +87,7 @@ async def _test_common(hass: HomeAssistant, entry: ConfigEntry = None) -> None:
     """The main tests are here."""
 
     # hass.data["custom_components"][DOMAIN]  # homeassistant.loader.Integration
-    assert isinstance(list(hass.data[DOMAIN].values())[0], RamsesBroker)
+    assert isinstance(list(hass.data[DOMAIN].values())[0], RamsesCoordinator)
     assert isinstance(list(hass.data[DOMAIN].values())[0].client, Gateway)
 
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -99,10 +99,10 @@ async def _test_common(hass: HomeAssistant, entry: ConfigEntry = None) -> None:
     assert entry.state is ConfigEntryState.LOADED
 
     assert hass.data["setup_tasks"] == {}
-    assert isinstance(hass.data[DOMAIN][entry.entry_id], RamsesBroker)
+    assert isinstance(hass.data[DOMAIN][entry.entry_id], RamsesCoordinator)
 
-    broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
-    assert len(broker._devices) == 1  # 18_000730
+    coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
+    assert len(coordinator._devices) == 1  # 18_000730
 
     assert (
         len(hass.states.async_entity_ids(Platform.BINARY_SENSOR)) == 1

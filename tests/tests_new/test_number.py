@@ -47,17 +47,17 @@ class FakeParam(RamsesNumberParam):
 
 
 @pytest.fixture
-def mock_broker(hass: HomeAssistant) -> MagicMock:
-    """Return a mock RamsesBroker configured for entity creation."""
-    broker = MagicMock()
-    # broker.hass needs .data and .services to satisfy internal HA helpers
-    broker.hass = MagicMock(spec=HomeAssistant)
-    broker.hass.data = {}
-    broker.hass.services = MagicMock(spec=ServiceRegistry)
+def mock_coordinator(hass: HomeAssistant) -> MagicMock:
+    """Return a mock RamsesCoordinator configured for entity creation."""
+    coordinator = MagicMock()
+    # coordinator.hass needs .data and .services to satisfy internal HA helpers
+    coordinator.hass = MagicMock(spec=HomeAssistant)
+    coordinator.hass.data = {}
+    coordinator.hass.services = MagicMock(spec=ServiceRegistry)
     # Mock config_dir and bus for entity registry
-    broker.hass.config = MagicMock()
-    broker.hass.config.config_dir = "/tmp"
-    broker.hass.bus = MagicMock()
+    coordinator.hass.config = MagicMock()
+    coordinator.hass.config.config_dir = "/tmp"
+    coordinator.hass.bus = MagicMock()
 
     # Handle async_create_task to avoid RuntimeWarning for unawaited coroutines
     def mock_create_task(coro: Any) -> MagicMock:
@@ -65,15 +65,15 @@ def mock_broker(hass: HomeAssistant) -> MagicMock:
             coro.close()
         return MagicMock()
 
-    broker.hass.async_create_task = MagicMock(side_effect=mock_create_task)
+    coordinator.hass.async_create_task = MagicMock(side_effect=mock_create_task)
 
-    broker.entry = MagicMock()
-    broker.entry.entry_id = "test_entry"
-    broker.async_set_fan_param = AsyncMock()
-    broker.devices = []
+    coordinator.entry = MagicMock()
+    coordinator.entry.entry_id = "test_entry"
+    coordinator.async_set_fan_param = AsyncMock()
+    coordinator.devices = []
 
-    hass.data[DOMAIN] = {"test_entry": broker}
-    return broker
+    hass.data[DOMAIN] = {"test_entry": coordinator}
+    return coordinator
 
 
 @pytest.fixture
@@ -89,12 +89,12 @@ def mock_fan_device() -> MagicMock:
 
 @pytest.fixture
 def number_entity(
-    mock_broker: MagicMock, mock_fan_device: MagicMock
+    mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> RamsesNumberParam:
     """Return an initialized RamsesNumberParam."""
     desc = RamsesNumberEntityDescription(key="param_01", ramses_rf_attr="01")
-    entity = RamsesNumberParam(mock_broker, mock_fan_device, desc)
-    entity.hass = mock_broker.hass
+    entity = RamsesNumberParam(mock_coordinator, mock_fan_device, desc)
+    entity.hass = mock_coordinator.hass
     # Mock async_write_ha_state to avoid coroutine warnings
     entity.async_write_ha_state = MagicMock()
     return entity
@@ -107,7 +107,7 @@ def test_normalize_device_id() -> None:
 
 
 async def test_setup_entry_direct_entities(
-    hass: HomeAssistant, mock_broker: MagicMock, number_entity: RamsesNumberParam
+    hass: HomeAssistant, mock_coordinator: MagicMock, number_entity: RamsesNumberParam
 ) -> None:
     """Test adding entities directly to the platform."""
     entry = MagicMock(entry_id="test_entry")
@@ -118,7 +118,7 @@ async def test_setup_entry_direct_entities(
         return_value=MagicMock(entities={}),
     ):
         await async_setup_entry(hass, entry, async_add_entities)
-        add_devices_cb = mock_broker.async_register_platform.call_args[0][1]
+        add_devices_cb = mock_coordinator.async_register_platform.call_args[0][1]
 
         # Test adding new entity directly
         # Ensure the mock passes isinstance(x, RamsesNumberParam)
@@ -133,7 +133,7 @@ async def test_setup_entry_direct_entities(
 
 
 async def test_setup_entry_direct_duplicate(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test adding direct entity that already exists in platform."""
     entry = MagicMock(entry_id="test_entry")
@@ -148,7 +148,7 @@ async def test_setup_entry_direct_duplicate(
         return_value=MagicMock(entities={"number.existing": existing_entity}),
     ):
         await async_setup_entry(hass, entry, async_add_entities)
-        add_devices_cb = mock_broker.async_register_platform.call_args[0][1]
+        add_devices_cb = mock_coordinator.async_register_platform.call_args[0][1]
 
         # Pass duplicate entity
         duplicate = MagicMock(spec=FakeParam)
@@ -160,13 +160,13 @@ async def test_setup_entry_direct_duplicate(
 
 
 async def test_setup_entry_device_processing(
-    hass: HomeAssistant, mock_broker: MagicMock, mock_fan_device: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test device processing, including existing devices and filtering."""
     entry = MagicMock(entry_id="test_entry")
     async_add_entities = MagicMock()
 
-    mock_broker.devices = [mock_fan_device]
+    mock_coordinator.devices = [mock_fan_device]
 
     with (
         patch.object(hass, "async_create_task"),
@@ -203,7 +203,7 @@ async def test_setup_entry_device_processing(
             assert added_entities[0] == mock_entity
 
         # Case 2: Device callback
-        add_devices_cb = mock_broker.async_register_platform.call_args[0][1]
+        add_devices_cb = mock_coordinator.async_register_platform.call_args[0][1]
         async_add_entities.reset_mock()
 
         add_devices_cb(["not_a_device"])
@@ -218,7 +218,7 @@ async def test_setup_entry_device_processing(
 
 
 async def test_setup_entry_empty_devices(
-    hass: HomeAssistant, mock_broker: MagicMock
+    hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
     """Test setup entry with empty devices list."""
     entry = MagicMock(entry_id="test_entry")
@@ -229,18 +229,18 @@ async def test_setup_entry_empty_devices(
         return_value=MagicMock(entities={}),
     ):
         await async_setup_entry(hass, entry, async_add_entities)
-        add_devices_cb = mock_broker.async_register_platform.call_args[0][1]
+        add_devices_cb = mock_coordinator.async_register_platform.call_args[0][1]
 
         # Call with empty list
         add_devices_cb([])
         assert not async_add_entities.called
 
 
-async def test_scaling_logic(mock_broker: MagicMock) -> None:
+async def test_scaling_logic(mock_coordinator: MagicMock) -> None:
     """Test RamsesNumberBase scaling and conversion methods."""
     desc = RamsesNumberEntityDescription(key="test", ramses_rf_attr="01")
-    entity = RamsesNumberBase(mock_broker, MagicMock(id="10:111111"), desc)
-    entity.hass = mock_broker.hass
+    entity = RamsesNumberBase(mock_coordinator, MagicMock(id="10:111111"), desc)
+    entity.hass = mock_coordinator.hass
 
     assert entity._scale_for_storage(None) is None
     entity._is_percentage = True
@@ -259,10 +259,10 @@ async def test_scaling_logic(mock_broker: MagicMock) -> None:
     assert entity._scale_for_display(0.5) == 0.5
 
 
-async def test_validation_logic(mock_broker: MagicMock) -> None:
+async def test_validation_logic(mock_coordinator: MagicMock) -> None:
     """Test value validation logic."""
     desc = RamsesNumberEntityDescription(key="test", ramses_rf_attr="01")
-    entity = RamsesNumberBase(mock_broker, MagicMock(id="10:111111"), desc)
+    entity = RamsesNumberBase(mock_coordinator, MagicMock(id="10:111111"), desc)
 
     valid, err = entity._validate_value_range(None)
     assert not valid
@@ -285,7 +285,7 @@ async def test_validation_logic(mock_broker: MagicMock) -> None:
 
 
 async def test_init_special_params(
-    mock_broker: MagicMock, mock_fan_device: MagicMock
+    mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test initialization logic for special parameters."""
     desc_95 = RamsesNumberEntityDescription(
@@ -295,24 +295,24 @@ async def test_init_special_params(
         min_value=0,
         max_value=1,
     )
-    entity_95 = RamsesNumberParam(mock_broker, mock_fan_device, desc_95)
+    entity_95 = RamsesNumberParam(mock_coordinator, mock_fan_device, desc_95)
     assert entity_95._attr_native_max_value == 100
     assert entity_95._is_percentage is True
 
     desc_75 = RamsesNumberEntityDescription(key="param_75", ramses_rf_attr="75")
-    entity_75 = RamsesNumberParam(mock_broker, mock_fan_device, desc_75)
+    entity_75 = RamsesNumberParam(mock_coordinator, mock_fan_device, desc_75)
     assert entity_75.mode == "slider"
     assert entity_75._attr_native_step == 0.1
 
     desc_prec = RamsesNumberEntityDescription(
         key="p", ramses_rf_attr="01", precision=0.5
     )
-    entity_prec = RamsesNumberParam(mock_broker, mock_fan_device, desc_prec)
+    entity_prec = RamsesNumberParam(mock_coordinator, mock_fan_device, desc_prec)
     assert entity_prec._attr_native_step == 0.5
 
 
 async def test_init_generic_percentage(
-    mock_broker: MagicMock, mock_fan_device: MagicMock
+    mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test generic percentage scaling."""
     desc_perc = RamsesNumberEntityDescription(
@@ -322,7 +322,7 @@ async def test_init_generic_percentage(
         min_value=0,
         max_value=1,
     )
-    entity_perc = RamsesNumberParam(mock_broker, mock_fan_device, desc_perc)
+    entity_perc = RamsesNumberParam(mock_coordinator, mock_fan_device, desc_perc)
     assert entity_perc._is_percentage is True
     # Should scale 0->0, 1->100
     assert entity_perc._attr_native_min_value == 0
@@ -330,7 +330,7 @@ async def test_init_generic_percentage(
 
 
 async def test_init_parameter_52(
-    mock_broker: MagicMock, mock_fan_device: MagicMock
+    mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test initialization logic for parameter 52 (not scaled)."""
     desc_52 = RamsesNumberEntityDescription(
@@ -340,7 +340,7 @@ async def test_init_parameter_52(
         min_value=0,
         max_value=100,
     )
-    entity_52 = RamsesNumberParam(mock_broker, mock_fan_device, desc_52)
+    entity_52 = RamsesNumberParam(mock_coordinator, mock_fan_device, desc_52)
     # Check that is_percentage is False for param 52 despite unit being %
     assert entity_52._is_percentage is False
     # Check bounds are not scaled
@@ -416,13 +416,13 @@ async def test_request_parameter_value_init_dict(
 
 
 async def test_request_parameter_value_missing_attributes(
-    number_entity: RamsesNumberParam, mock_broker: MagicMock
+    number_entity: RamsesNumberParam, mock_coordinator: MagicMock
 ) -> None:
     """Test request parameter value early returns due to missing attrs."""
     # Test 1: No device
     number_entity._device = None
     await number_entity._request_parameter_value()
-    assert not mock_broker.hass.async_create_task.called
+    assert not mock_coordinator.hass.async_create_task.called
 
     # Restore device
     number_entity._device = MagicMock()
@@ -438,13 +438,13 @@ async def test_request_parameter_value_missing_attributes(
         mock_hasattr.side_effect = side_effect
         await number_entity._request_parameter_value()
         # Should return early
-        assert not mock_broker.hass.async_create_task.called
+        assert not mock_coordinator.hass.async_create_task.called
 
     # Test 3: No parameter ID in desc
     desc = dataclasses.replace(number_entity.entity_description, ramses_rf_attr="")
     number_entity.entity_description = desc
     await number_entity._request_parameter_value()
-    assert not mock_broker.hass.async_create_task.called
+    assert not mock_coordinator.hass.async_create_task.called
 
 
 async def test_native_value_properties(number_entity: RamsesNumberParam) -> None:
@@ -567,7 +567,7 @@ async def test_icon_logic(number_entity: RamsesNumberParam) -> None:
 
 
 async def test_create_parameter_entities_registry(
-    mock_broker: MagicMock, mock_fan_device: MagicMock
+    mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test registry interaction in create_parameter_entities."""
     mock_reg = MagicMock()
@@ -585,13 +585,13 @@ async def test_create_parameter_entities_registry(
             RamsesNumberEntityDescription(key="p2", ramses_rf_attr="02"),
         ]
 
-        entities = create_parameter_entities(mock_broker, mock_fan_device)
+        entities = create_parameter_entities(mock_coordinator, mock_fan_device)
         assert len(entities) == 2
         assert mock_reg.async_get_or_create.call_count == 1
 
 
 async def test_create_parameter_entities_skip_empty_attr(
-    mock_broker: MagicMock, mock_fan_device: MagicMock
+    mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test skipping parameters with no attribute ID."""
     with (
@@ -604,22 +604,22 @@ async def test_create_parameter_entities_skip_empty_attr(
             RamsesNumberEntityDescription(key="no_attr", ramses_rf_attr=""),
             RamsesNumberEntityDescription(key="ok_attr", ramses_rf_attr="01"),
         ]
-        entities = create_parameter_entities(mock_broker, mock_fan_device)
+        entities = create_parameter_entities(mock_coordinator, mock_fan_device)
         assert len(entities) == 1
         assert entities[0].entity_description.key == "ok_attr"
 
 
 async def test_create_parameter_entities_no_support(
-    mock_broker: MagicMock, mock_fan_device: MagicMock
+    mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test early return when device does not support 2411."""
     mock_fan_device.supports_2411 = False
-    entities = create_parameter_entities(mock_broker, mock_fan_device)
+    entities = create_parameter_entities(mock_coordinator, mock_fan_device)
     assert len(entities) == 0
 
 
 async def test_create_parameter_entities_error(
-    mock_broker: MagicMock, mock_fan_device: MagicMock
+    mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test error handling in entity creation."""
     mock_reg = MagicMock()
@@ -632,7 +632,7 @@ async def test_create_parameter_entities_error(
             return_value=[RamsesNumberEntityDescription(key="p1", ramses_rf_attr="01")],
         ),
     ):
-        entities = create_parameter_entities(mock_broker, mock_fan_device)
+        entities = create_parameter_entities(mock_coordinator, mock_fan_device)
         assert len(entities) == 0
 
 

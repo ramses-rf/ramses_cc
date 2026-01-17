@@ -16,8 +16,8 @@ from pytest_homeassistant_custom_component.common import (  # type: ignore[impor
 )
 
 from custom_components.ramses_cc import DOMAIN, RamsesEntity
-from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.climate import RamsesController, RamsesHvac, RamsesZone
+from custom_components.ramses_cc.coordinator import RamsesCoordinator
 from ramses_rf.gateway import Gateway
 
 from ..virtual_rf import VirtualRf
@@ -91,27 +91,31 @@ async def _test_common(hass: HomeAssistant, entry: ConfigEntry, rf: VirtualRf) -
 
     assert len(hass.services.async_services_for_domain(DOMAIN)) == NUM_SVCS_AFTER
 
-    broker: RamsesBroker = list(hass.data[DOMAIN].values())[0]
-    assert len(broker._entities) == 1
+    coordinator: RamsesCoordinator = list(hass.data[DOMAIN].values())[0]
+    assert len(coordinator._entities) == 1
 
-    await broker.async_update()
+    await coordinator.async_update()
     await hass.async_block_till_done()
 
-    # for x in broker._entities:  # debug issue 278, 249
+    # for x in coordinator._entities:  # debug issue 278, 249
     #     if x not in EXPECTED_ENTITIES:
     #         print("_test_common extra: " + str(x))
-    assert not [x for x in broker._entities if x not in EXPECTED_ENTITIES]  # extras
+    assert not [
+        x for x in coordinator._entities if x not in EXPECTED_ENTITIES
+    ]  # extras
     # for x in EXPECTED_ENTITIES:  # debug issue 278, 249
-    #     if x not in broker._entities:
+    #     if x not in coordinator._entities:
     #         print("_test_common missing: " + str(x))
-    assert not [x for x in EXPECTED_ENTITIES if x not in broker._entities]  # missing
+    assert not [
+        x for x in EXPECTED_ENTITIES if x not in coordinator._entities
+    ]  # missing
 
     # ramses_rf entities
-    assert len(broker._devices) == NUM_DEVS_AFTER  # adjust when adding sensors etc
-    assert len(broker._dhws) == 1
-    assert len(broker._remotes) == 0
-    assert len(broker._systems) == 1
-    assert len(broker._zones) == 2
+    assert len(coordinator._devices) == NUM_DEVS_AFTER  # adjust when adding sensors etc
+    assert len(coordinator._dhws) == 1
+    assert len(coordinator._remotes) == 0
+    assert len(coordinator._systems) == 1
+    assert len(coordinator._zones) == 2
 
 
 def find_entities(hass: HomeAssistant, platform: Platform) -> list[RamsesEntity]:
@@ -121,8 +125,8 @@ def find_entities(hass: HomeAssistant, platform: Platform) -> list[RamsesEntity]
 async def _test_names(hass: HomeAssistant, entry: ConfigEntry, rf: VirtualRf) -> None:
     """The main tests are here."""
 
-    broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
-    await broker.async_update()
+    coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
+    await coordinator.async_update()
 
     for entity in find_entities(hass, Platform.CLIMATE):
         if isinstance(entity, RamsesController):
@@ -224,9 +228,9 @@ async def test_startup_with_unbound_fan(hass: HomeAssistant, rf: VirtualRf) -> N
     assert len(entries) == 1
     assert entries[0].state == ConfigEntryState.LOADED
 
-    # 3. Verify the broker exists (Proof of life)
-    broker = hass.data[DOMAIN][entries[0].entry_id]
+    # 3. Verify the coordinator exists (Proof of life)
+    coordinator = hass.data[DOMAIN][entries[0].entry_id]
 
     # Create a list of IDs strings from the objects, then check that list
-    device_ids = [d.id for d in broker._devices]
+    device_ids = [d.id for d in coordinator._devices]
     assert "18:006402" in device_ids  # The Gateway should be present

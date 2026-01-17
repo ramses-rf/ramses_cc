@@ -687,7 +687,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
     ) -> FlowResult:
         """Clear cache step."""
         if user_input is not None:
-            # Unload immediately to stop scheduled broker state saves
+            # Unload immediately to stop scheduled coordinator state saves
             if self.config_entry.state == ConfigEntryState.LOADED:
                 await self.hass.config_entries.async_unload(self.config_entry.entry_id)
 

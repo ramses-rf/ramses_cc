@@ -27,25 +27,27 @@ from ramses_tx.const import SZ_IS_EVOFW3
 
 
 @pytest.fixture
-def mock_broker() -> MagicMock:
-    """Return a mock RamsesBroker.
+def mock_coordinator() -> MagicMock:
+    """Return a mock RamsesCoordinator.
 
-    :return: A mock object simulating the RamsesBroker.
+    :return: A mock object simulating the RamsesCoordinator.
     """
-    broker = MagicMock()
-    broker.async_register_platform = MagicMock()
-    return broker
+    coordinator = MagicMock()
+    coordinator.async_register_platform = MagicMock()
+    return coordinator
 
 
-async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) -> None:
+async def test_async_setup_entry(
+    hass: HomeAssistant, mock_coordinator: MagicMock
+) -> None:
     """Test the platform setup and entity creation callback.
 
     :param hass: The Home Assistant instance.
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     entry = MagicMock()
     entry.entry_id = "test_entry_id"
-    hass.data[DOMAIN] = {entry.entry_id: mock_broker}
+    hass.data[DOMAIN] = {entry.entry_id: mock_coordinator}
     async_add_entities = MagicMock()
 
     # Mock async_get_current_platform to avoid RuntimeError
@@ -55,8 +57,8 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
         mock_plat.return_value = MagicMock()
         await async_setup_entry(hass, entry, async_add_entities)
 
-    mock_broker.async_register_platform.assert_called_once()
-    callback_func = mock_broker.async_register_platform.call_args[0][1]
+    mock_coordinator.async_register_platform.assert_called_once()
+    callback_func = mock_coordinator.async_register_platform.call_args[0][1]
 
     # Create mock devices corresponding to descriptions
     # 1. Gateway (HgiGateway)
@@ -80,7 +82,7 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
     assert any(isinstance(e, RamsesSystemBinarySensor) for e in entities)
 
 
-async def test_ramses_binary_sensor_on(mock_broker: MagicMock) -> None:
+async def test_ramses_binary_sensor_on(mock_coordinator: MagicMock) -> None:
     """Test RamsesBinarySensor when on."""
     description = RamsesBinarySensorEntityDescription(
         key="test_generic",
@@ -93,14 +95,14 @@ async def test_ramses_binary_sensor_on(mock_broker: MagicMock) -> None:
     mock_device.id = "13:123456"
     setattr(mock_device, description.ramses_rf_attr, True)
 
-    sensor = RamsesBinarySensor(mock_broker, mock_device, description)
+    sensor = RamsesBinarySensor(mock_coordinator, mock_device, description)
 
     assert sensor.available is True
     assert sensor.is_on is True
     assert sensor.icon == description.icon
 
 
-async def test_ramses_binary_sensor_off(mock_broker: MagicMock) -> None:
+async def test_ramses_binary_sensor_off(mock_coordinator: MagicMock) -> None:
     """Test RamsesBinarySensor when off."""
     description = RamsesBinarySensorEntityDescription(
         key="test_generic",
@@ -113,16 +115,16 @@ async def test_ramses_binary_sensor_off(mock_broker: MagicMock) -> None:
     mock_device.id = "13:123456"
     setattr(mock_device, description.ramses_rf_attr, False)
 
-    sensor = RamsesBinarySensor(mock_broker, mock_device, description)
+    sensor = RamsesBinarySensor(mock_coordinator, mock_device, description)
 
     assert sensor.is_on is False
     assert sensor.icon == description.icon_off
 
 
-async def test_battery_binary_sensor(mock_broker: MagicMock) -> None:
+async def test_battery_binary_sensor(mock_coordinator: MagicMock) -> None:
     """Test RamsesBatteryBinarySensor.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     description = RamsesBinarySensorEntityDescription(
         key="test_battery",
@@ -135,7 +137,7 @@ async def test_battery_binary_sensor(mock_broker: MagicMock) -> None:
     mock_device = MagicMock()
     mock_device.id = "04:123456"
 
-    sensor: Any = RamsesBatteryBinarySensor(mock_broker, mock_device, description)
+    sensor: Any = RamsesBatteryBinarySensor(mock_coordinator, mock_device, description)
 
     # 1. Battery state present
     mock_device.battery_state = {
@@ -155,10 +157,10 @@ async def test_battery_binary_sensor(mock_broker: MagicMock) -> None:
     assert attrs[ATTR_BATTERY_LEVEL] is None
 
 
-async def test_logbook_binary_sensor_availability(mock_broker: MagicMock) -> None:
+async def test_logbook_binary_sensor_availability(mock_coordinator: MagicMock) -> None:
     """Test RamsesLogbookBinarySensor availability based on message age.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     description = RamsesBinarySensorEntityDescription(
         key="active_fault",
@@ -171,7 +173,7 @@ async def test_logbook_binary_sensor_availability(mock_broker: MagicMock) -> Non
     mock_device = MagicMock(spec=Logbook)
     mock_device.id = "01:123456"
 
-    sensor: Any = RamsesLogbookBinarySensor(mock_broker, mock_device, description)
+    sensor: Any = RamsesLogbookBinarySensor(mock_coordinator, mock_device, description)
 
     # Case A: No message -> Not available
     mock_device._msgs = {}
@@ -190,10 +192,10 @@ async def test_logbook_binary_sensor_availability(mock_broker: MagicMock) -> Non
     assert sensor.available is True
 
 
-async def test_logbook_binary_sensor_state(mock_broker: MagicMock) -> None:
+async def test_logbook_binary_sensor_state(mock_coordinator: MagicMock) -> None:
     """Test RamsesLogbookBinarySensor state based on faults.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     description = RamsesBinarySensorEntityDescription(
         key="active_fault",
@@ -206,7 +208,7 @@ async def test_logbook_binary_sensor_state(mock_broker: MagicMock) -> None:
     mock_device = MagicMock(spec=Logbook)
     mock_device.id = "01:123456"
 
-    sensor: Any = RamsesLogbookBinarySensor(mock_broker, mock_device, description)
+    sensor: Any = RamsesLogbookBinarySensor(mock_coordinator, mock_device, description)
 
     # 1. Test is_on = False (No faults)
     mock_device.active_faults = []
@@ -224,10 +226,10 @@ async def test_logbook_binary_sensor_state(mock_broker: MagicMock) -> None:
     assert sensor.is_on is True
 
 
-async def test_system_binary_sensor_availability(mock_broker: MagicMock) -> None:
+async def test_system_binary_sensor_availability(mock_coordinator: MagicMock) -> None:
     """Test RamsesSystemBinarySensor availability calculation.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     description = RamsesBinarySensorEntityDescription(
         key="status",
@@ -240,7 +242,7 @@ async def test_system_binary_sensor_availability(mock_broker: MagicMock) -> None
     mock_device = MagicMock(spec=System)
     mock_device.id = "01:123456"
 
-    sensor: Any = RamsesSystemBinarySensor(mock_broker, mock_device, description)
+    sensor: Any = RamsesSystemBinarySensor(mock_coordinator, mock_device, description)
 
     # 1. Case A: No message -> Not available
     mock_device._msgs = {}
@@ -266,10 +268,10 @@ async def test_system_binary_sensor_availability(mock_broker: MagicMock) -> None
     assert avail_c is False
 
 
-async def test_system_binary_sensor_state(mock_broker: MagicMock) -> None:
+async def test_system_binary_sensor_state(mock_coordinator: MagicMock) -> None:
     """Test RamsesSystemBinarySensor state logic.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     description = RamsesBinarySensorEntityDescription(
         key="status",
@@ -282,7 +284,7 @@ async def test_system_binary_sensor_state(mock_broker: MagicMock) -> None:
     mock_device = MagicMock(spec=System)
     mock_device.id = "01:123456"
 
-    sensor: Any = RamsesSystemBinarySensor(mock_broker, mock_device, description)
+    sensor: Any = RamsesSystemBinarySensor(mock_coordinator, mock_device, description)
 
     # is_on logic: Inverse of super().is_on which returns ID/True
     # super().is_on returns getattr(id) -> "01:123456" -> Truthy
@@ -290,10 +292,10 @@ async def test_system_binary_sensor_state(mock_broker: MagicMock) -> None:
     assert sensor.is_on is False
 
 
-async def test_gateway_binary_sensor_attributes(mock_broker: MagicMock) -> None:
+async def test_gateway_binary_sensor_attributes(mock_coordinator: MagicMock) -> None:
     """Test RamsesGatewayBinarySensor extra state attributes.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     description = RamsesBinarySensorEntityDescription(
         key="status",
@@ -317,7 +319,7 @@ async def test_gateway_binary_sensor_attributes(mock_broker: MagicMock) -> None:
     gwy._exclude = {}
     gwy._transport.get_extra_info.return_value = True  # SZ_IS_EVOFW3
 
-    sensor: Any = RamsesGatewayBinarySensor(mock_broker, mock_device, description)
+    sensor: Any = RamsesGatewayBinarySensor(mock_coordinator, mock_device, description)
 
     # 1. Extra State Attributes
     attrs: dict[str, Any] = sensor.extra_state_attributes
@@ -333,10 +335,10 @@ async def test_gateway_binary_sensor_attributes(mock_broker: MagicMock) -> None:
     assert known["faked"] is True
 
 
-async def test_gateway_binary_sensor_state(mock_broker: MagicMock) -> None:
+async def test_gateway_binary_sensor_state(mock_coordinator: MagicMock) -> None:
     """Test RamsesGatewayBinarySensor is_on state logic.
 
-    :param mock_broker: The mock broker fixture.
+    :param mock_coordinator: The mock coordinator fixture.
     """
     description = RamsesBinarySensorEntityDescription(
         key="status",
@@ -351,7 +353,7 @@ async def test_gateway_binary_sensor_state(mock_broker: MagicMock) -> None:
     gwy = MagicMock()
     mock_device._gwy = gwy
 
-    sensor: Any = RamsesGatewayBinarySensor(mock_broker, mock_device, description)
+    sensor: Any = RamsesGatewayBinarySensor(mock_coordinator, mock_device, description)
 
     # 1. Case A: Recent message -> is_on False (Problem = False -> OK)
     msg = MagicMock()

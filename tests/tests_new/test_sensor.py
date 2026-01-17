@@ -26,12 +26,12 @@ from ramses_rf.entity_base import Entity as RamsesRFEntity
 
 
 @pytest.fixture
-def mock_broker() -> MagicMock:
-    """Return a mock RamsesBroker."""
-    broker = MagicMock()
-    broker.hass = MagicMock()
-    broker.async_register_platform = MagicMock()
-    return broker
+def mock_coordinator() -> MagicMock:
+    """Return a mock RamsesCoordinator."""
+    coordinator = MagicMock()
+    coordinator.hass = MagicMock()
+    coordinator.async_register_platform = MagicMock()
+    return coordinator
 
 
 @pytest.fixture
@@ -42,11 +42,13 @@ def mock_device() -> MagicMock:
     return device
 
 
-async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) -> None:
+async def test_async_setup_entry(
+    hass: HomeAssistant, mock_coordinator: MagicMock
+) -> None:
     """Test the platform setup and entity creation callback."""
     entry = MagicMock()
     entry.entry_id = "test_entry_id"
-    hass.data[DOMAIN] = {entry.entry_id: mock_broker}
+    hass.data[DOMAIN] = {entry.entry_id: mock_coordinator}
     async_add_entities = MagicMock()
 
     # Mock async_get_current_platform
@@ -57,8 +59,8 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
         await async_setup_entry(hass, entry, async_add_entities)
 
     # Verify platform registration
-    mock_broker.async_register_platform.assert_called_once()
-    callback_func = mock_broker.async_register_platform.call_args[0][1]
+    mock_coordinator.async_register_platform.assert_called_once()
+    callback_func = mock_coordinator.async_register_platform.call_args[0][1]
 
     # Use the first description (SZ_TEMPERATURE for HvacHumiditySensor | TrvActuator)
     # We patch SENSOR_DESCRIPTIONS to ONLY contain this one description
@@ -95,7 +97,7 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_broker: MagicMock) ->
 
 
 def test_sensor_init_and_properties(
-    mock_broker: MagicMock, mock_device: MagicMock
+    mock_coordinator: MagicMock, mock_device: MagicMock
 ) -> None:
     """Test initialization and basic properties of RamsesSensor."""
     # Create a description
@@ -106,7 +108,7 @@ def test_sensor_init_and_properties(
     desc.icon = "mdi:thermometer"
 
     # Initialize
-    sensor = RamsesSensor(mock_broker, mock_device, desc)
+    sensor = RamsesSensor(mock_coordinator, mock_device, desc)
 
     assert sensor.unique_id == "01:123456-test_key"
     # Note: sensor.py generates entity_id using device.id directly, preserving colons
@@ -114,7 +116,7 @@ def test_sensor_init_and_properties(
 
 
 def test_sensor_available_property(
-    mock_broker: MagicMock, mock_device: MagicMock
+    mock_coordinator: MagicMock, mock_device: MagicMock
 ) -> None:
     """Test the 'available' property logic."""
     desc = MagicMock(spec=SensorEntityDescription)
@@ -123,7 +125,7 @@ def test_sensor_available_property(
     # Ensure translation_key is None to avoid ValueError in validation if called
     desc.translation_key = None
 
-    sensor = RamsesSensor(mock_broker, mock_device, desc)
+    sensor = RamsesSensor(mock_coordinator, mock_device, desc)
 
     # 1. Not Fakeable, State is None -> False
     # We patch SensorEntity.state because RamsesSensor inherits from it
@@ -144,7 +146,7 @@ def test_sensor_available_property(
         mock_fake_device = MagicMock(spec=Fakeable)
         mock_fake_device.id = "02:000000"
         mock_fake_device.is_faked = True
-        sensor_fake = RamsesSensor(mock_broker, mock_fake_device, desc)
+        sensor_fake = RamsesSensor(mock_coordinator, mock_fake_device, desc)
 
         mock_state.return_value = None
         # We must verify available on the sensor_fake instance
@@ -153,13 +155,15 @@ def test_sensor_available_property(
         assert is_available is True
 
 
-def test_sensor_native_value(mock_broker: MagicMock, mock_device: MagicMock) -> None:
+def test_sensor_native_value(
+    mock_coordinator: MagicMock, mock_device: MagicMock
+) -> None:
     """Test native_value logic including percentage handling."""
     desc = MagicMock(spec=SensorEntityDescription)
     desc.key = "test_key"
     desc.ramses_rf_attr = "test_attr"
 
-    sensor = RamsesSensor(mock_broker, mock_device, desc)
+    sensor = RamsesSensor(mock_coordinator, mock_device, desc)
 
     # 1. Normal value
     mock_device.test_attr = 15.5
@@ -176,7 +180,7 @@ def test_sensor_native_value(mock_broker: MagicMock, mock_device: MagicMock) -> 
     assert sensor.native_value is None
 
 
-def test_sensor_icon(mock_broker: MagicMock, mock_device: MagicMock) -> None:
+def test_sensor_icon(mock_coordinator: MagicMock, mock_device: MagicMock) -> None:
     """Test icon property logic."""
     desc = MagicMock(spec=SensorEntityDescription)
     desc.key = "test_key"
@@ -184,7 +188,7 @@ def test_sensor_icon(mock_broker: MagicMock, mock_device: MagicMock) -> None:
     desc.icon = "mdi:on"
     desc.ramses_cc_icon_off = "mdi:off"
 
-    sensor = RamsesSensor(mock_broker, mock_device, desc)
+    sensor = RamsesSensor(mock_coordinator, mock_device, desc)
 
     # 1. Value is Truthy -> returns normal icon (via super)
     mock_device.val = 10
@@ -201,7 +205,7 @@ def test_sensor_icon(mock_broker: MagicMock, mock_device: MagicMock) -> None:
     assert sensor.icon == "mdi:on"
 
 
-def test_async_put_co2_level(mock_broker: MagicMock) -> None:
+def test_async_put_co2_level(mock_coordinator: MagicMock) -> None:
     """Test async_put_co2_level."""
     device = MagicMock(spec=HvacCarbonDioxideSensor)
     device.id = "30:111111"
@@ -209,7 +213,7 @@ def test_async_put_co2_level(mock_broker: MagicMock) -> None:
     desc.key = "co2"
     desc.ramses_rf_attr = "co2_level"
 
-    sensor = RamsesSensor(mock_broker, device, desc)
+    sensor = RamsesSensor(mock_coordinator, device, desc)
     sensor._attr_device_class = SensorDeviceClass.CO2
     sensor._attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
 
@@ -226,7 +230,7 @@ def test_async_put_co2_level(mock_broker: MagicMock) -> None:
     # 3. TypeError: Wrong device type
     wrong_device = MagicMock(spec=RamsesRFEntity)
     wrong_device.id = "01:222222"
-    sensor_bad = RamsesSensor(mock_broker, wrong_device, desc)
+    sensor_bad = RamsesSensor(mock_coordinator, wrong_device, desc)
     sensor_bad._attr_device_class = SensorDeviceClass.CO2
     sensor_bad._attr_native_unit_of_measurement = CONCENTRATION_PARTS_PER_MILLION
 
@@ -234,7 +238,7 @@ def test_async_put_co2_level(mock_broker: MagicMock) -> None:
         sensor_bad.async_put_co2_level(800)
 
 
-def test_async_put_dhw_temp(mock_broker: MagicMock) -> None:
+def test_async_put_dhw_temp(mock_coordinator: MagicMock) -> None:
     """Test async_put_dhw_temp."""
     device = MagicMock(spec=DhwSensor)
     device.id = "07:111111"
@@ -242,7 +246,7 @@ def test_async_put_dhw_temp(mock_broker: MagicMock) -> None:
     desc.key = "dhw"
     desc.ramses_rf_attr = "temperature"
 
-    sensor = RamsesSensor(mock_broker, device, desc)
+    sensor = RamsesSensor(mock_coordinator, device, desc)
     sensor._attr_device_class = SensorDeviceClass.TEMPERATURE
     sensor._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 
@@ -253,7 +257,7 @@ def test_async_put_dhw_temp(mock_broker: MagicMock) -> None:
     # 2. TypeError: Wrong device type
     wrong_device = MagicMock(spec=RamsesRFEntity)
     wrong_device.id = "01:222222"
-    sensor_bad = RamsesSensor(mock_broker, wrong_device, desc)
+    sensor_bad = RamsesSensor(mock_coordinator, wrong_device, desc)
     sensor_bad._attr_device_class = SensorDeviceClass.TEMPERATURE
     sensor_bad._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 
@@ -262,7 +266,7 @@ def test_async_put_dhw_temp(mock_broker: MagicMock) -> None:
         sensor_bad.async_put_dhw_temp(50.0)
 
 
-def test_async_put_indoor_humidity(mock_broker: MagicMock) -> None:
+def test_async_put_indoor_humidity(mock_coordinator: MagicMock) -> None:
     """Test async_put_indoor_humidity."""
     device = MagicMock(spec=HvacHumiditySensor)
     device.id = "30:222222"
@@ -270,7 +274,7 @@ def test_async_put_indoor_humidity(mock_broker: MagicMock) -> None:
     desc.key = "hum"
     desc.ramses_rf_attr = "indoor_humidity"
 
-    sensor = RamsesSensor(mock_broker, device, desc)
+    sensor = RamsesSensor(mock_coordinator, device, desc)
     sensor._attr_device_class = SensorDeviceClass.HUMIDITY
     sensor._attr_native_unit_of_measurement = PERCENTAGE
 
@@ -281,7 +285,7 @@ def test_async_put_indoor_humidity(mock_broker: MagicMock) -> None:
     # 2. TypeError
     wrong_device = MagicMock(spec=RamsesRFEntity)
     wrong_device.id = "01:333333"
-    sensor_bad = RamsesSensor(mock_broker, wrong_device, desc)
+    sensor_bad = RamsesSensor(mock_coordinator, wrong_device, desc)
     sensor_bad._attr_device_class = SensorDeviceClass.HUMIDITY
     sensor_bad._attr_native_unit_of_measurement = PERCENTAGE
 
@@ -289,7 +293,7 @@ def test_async_put_indoor_humidity(mock_broker: MagicMock) -> None:
         sensor_bad.async_put_indoor_humidity(50.0)
 
 
-def test_async_put_room_temp(mock_broker: MagicMock) -> None:
+def test_async_put_room_temp(mock_coordinator: MagicMock) -> None:
     """Test async_put_room_temp."""
     device = MagicMock(spec=Thermostat)
     device.id = "03:111111"
@@ -297,7 +301,7 @@ def test_async_put_room_temp(mock_broker: MagicMock) -> None:
     desc.key = "temp"
     desc.ramses_rf_attr = "temperature"
 
-    sensor = RamsesSensor(mock_broker, device, desc)
+    sensor = RamsesSensor(mock_coordinator, device, desc)
     sensor._attr_device_class = SensorDeviceClass.TEMPERATURE
     sensor._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 
@@ -308,7 +312,7 @@ def test_async_put_room_temp(mock_broker: MagicMock) -> None:
     # 2. TypeError
     wrong_device = MagicMock(spec=RamsesRFEntity)
     wrong_device.id = "01:444444"
-    sensor_bad = RamsesSensor(mock_broker, wrong_device, desc)
+    sensor_bad = RamsesSensor(mock_coordinator, wrong_device, desc)
     sensor_bad._attr_device_class = SensorDeviceClass.TEMPERATURE
     sensor_bad._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 

@@ -27,8 +27,8 @@ from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
 
 from custom_components.ramses_cc.binary_sensor import BINARY_SENSOR_DESCRIPTIONS
-from custom_components.ramses_cc.broker import RamsesBroker
 from custom_components.ramses_cc.climate import CLIMATE_DESCRIPTIONS
+from custom_components.ramses_cc.coordinator import RamsesCoordinator
 from custom_components.ramses_cc.sensor import SENSOR_DESCRIPTIONS
 from custom_components.ramses_cc.water_heater import WATER_HEATER_DESCRIPTIONS
 from ramses_rf.gateway import Gateway
@@ -40,7 +40,7 @@ INPUT_FILE = "/system_1.log"
 SCHEMA_FILE = "/system_1.json"
 
 
-class MockRamsesBroker:
+class MockRamsesCoordinator:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
 
@@ -60,14 +60,14 @@ async def instantiate_entities(
         await gwy.start()
         await gwy.stop()  # have to stop MessageIndex thread, aka: gwy.msg_db.stop()
 
-    broker: RamsesBroker = MockRamsesBroker(hass)
+    coordinator: RamsesCoordinator = MockRamsesCoordinator(hass)
 
     # climate entities (TCS, zones)
     rf_climates = [s for s in gwy.systems if isinstance(s, Evohome)]
     rf_climates += [z for s in gwy.systems for z in s.zones if isinstance(s, Evohome)]
 
     climates: list[ClimateEntity] = [
-        description.ramses_cc_class(broker, device, description)
+        description.ramses_cc_class(coordinator, device, description)
         for device in rf_climates
         for description in CLIMATE_DESCRIPTIONS
         if isinstance(device, description.ramses_rf_class)
@@ -77,7 +77,7 @@ async def instantiate_entities(
     rf_heaters = [s.dhw for s in gwy.systems if s.dhw if isinstance(s, Evohome)]
 
     water_heaters: list[WaterHeaterEntity] = [
-        description.ramses_cc_class(broker, device, description)
+        description.ramses_cc_class(coordinator, device, description)
         for device in rf_heaters
         for description in WATER_HEATER_DESCRIPTIONS
         if isinstance(device, description.ramses_rf_class)
@@ -87,7 +87,7 @@ async def instantiate_entities(
     rf_devices = gwy.devices + rf_climates + rf_heaters
 
     binary_sensors: list[BinarySensorEntity] = [
-        description.ramses_cc_class(broker, device, description)
+        description.ramses_cc_class(coordinator, device, description)
         for device in rf_devices
         for description in BINARY_SENSOR_DESCRIPTIONS
         if isinstance(device, description.ramses_rf_class)
@@ -95,7 +95,7 @@ async def instantiate_entities(
     ]
 
     sensors: list[SensorEntity] = [
-        description.ramses_cc_class(broker, device, description)
+        description.ramses_cc_class(coordinator, device, description)
         for device in rf_devices
         for description in SENSOR_DESCRIPTIONS
         if isinstance(device, description.ramses_rf_class)

@@ -24,7 +24,7 @@
     Get parameter descriptions for a device. Returns a list of entity descriptions
     for all parameters supported by the device.
 
-.. py:function:: create_parameter_entities(broker: RamsesBroker, device: RamsesRFEntity) -> list[RamsesNumberParam]
+.. py:function:: create_parameter_entities(coordinator: RamsesCoordinator, device: RamsesRFEntity) -> list[RamsesNumberParam]
     :module: number
 
     Create parameter entities for a device. This function creates number entities for
@@ -75,8 +75,8 @@ from ramses_tx import (
 )
 
 from . import RamsesEntity, RamsesEntityDescription
-from .broker import RamsesBroker
 from .const import DOMAIN
+from .coordinator import RamsesCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ async def async_setup_entry(
     :rtype: None
     """
 
-    broker: RamsesBroker = hass.data[DOMAIN][entry.entry_id]
+    coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
     platform: EntityPlatform = async_get_current_platform()
     # Initialize entities list for both new and existing devices
     entities: list[RamsesNumberBase] = []
@@ -164,7 +164,7 @@ async def async_setup_entry(
 
             # Always try to create parameter entities, even if they exist
             # The create_parameter_entities function will handle duplicates
-            param_entities = create_parameter_entities(broker, device)
+            param_entities = create_parameter_entities(coordinator, device)
             if param_entities:
                 # Filter out entities that are already loaded in the platform
                 for entity in param_entities:
@@ -178,7 +178,7 @@ async def async_setup_entry(
                         new_entities.append(entity)
 
             # Future: Add other entity types here
-            # if other_entities := await async_create_other_entities(broker, devices):
+            # if other_entities := await async_create_other_entities(coordinator, devices):
             #     entities.extend(other_entities)
 
         if new_entities:
@@ -199,17 +199,21 @@ async def async_setup_entry(
             for entity in new_entities:
                 if hasattr(entity, "_request_parameter_value"):
                     # Schedule the async request without awaiting it here
-                    broker.hass.async_create_task(entity._request_parameter_value())
+                    coordinator.hass.async_create_task(
+                        entity._request_parameter_value()
+                    )
 
-    # Register the callback with the broker
-    broker.async_register_platform(platform, add_devices)
+    # Register the callback with the coordinator
+    coordinator.async_register_platform(platform, add_devices)
 
     # Load any existing devices that were discovered before platform registration
-    if hasattr(broker, "devices") and broker.devices:
-        _LOGGER.debug("Processing %d existing devices", len(broker.devices))
+    if hasattr(coordinator, "devices") and coordinator.devices:
+        _LOGGER.debug("Processing %d existing devices", len(coordinator.devices))
         # Filter only devices that support parameters
         fan_devices = [
-            d for d in broker.devices if hasattr(d, "supports_2411") and d.supports_2411
+            d
+            for d in coordinator.devices
+            if hasattr(d, "supports_2411") and d.supports_2411
         ]
         if fan_devices:
             _LOGGER.debug("Found %d FAN devices to process", len(fan_devices))
@@ -220,7 +224,7 @@ async def async_setup_entry(
                         "Loading parameter entities from registry for %s", device.id
                     )
                     # Create parameter entities (create_parameter_entities handles registry duplicates)
-                    param_entities = create_parameter_entities(broker, device)
+                    param_entities = create_parameter_entities(coordinator, device)
                     if param_entities:
                         entities.extend(param_entities)
 
@@ -301,12 +305,12 @@ class RamsesNumberBase(RamsesEntity, NumberEntity):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: RamsesRFEntity,
         entity_description: RamsesNumberEntityDescription,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(broker, device, entity_description)
+        super().__init__(coordinator, device, entity_description)
         self._is_percentage = getattr(self.entity_description, "percentage", False)
 
     def _scale_for_storage(self, value: float | None) -> float | None:
@@ -458,18 +462,18 @@ class RamsesNumberParam(RamsesNumberBase):
 
     def __init__(
         self,
-        broker: RamsesBroker,
+        coordinator: RamsesCoordinator,
         device: RamsesRFEntity,
         entity_description: RamsesEntityDescription,
     ) -> None:
         """Initialize the RAMSES number parameter entity.
 
-        This constructor sets up the entity with the provided broker, device, and
+        This constructor sets up the entity with the provided coordinator, device, and
         entity description. It also initializes the parameter value storage and
         configures the entity based on the parameter type.
 
-        :param broker: The RAMSES broker instance for device communication
-        :type broker: RamsesBroker
+        :param coordinator: The RAMSES coordinator instance for device communication
+        :type coordinator: RamsesCoordinator
         :param device: The device this entity is associated with
         :type device: RamsesRFEntity
         :param entity_description: The entity description containing parameter metadata
@@ -477,7 +481,7 @@ class RamsesNumberParam(RamsesNumberBase):
         :return: None
         :rtype: None
         """
-        super().__init__(broker, device, entity_description)
+        super().__init__(coordinator, device, entity_description)
 
         # Initialize parameter storage
         self._param_native_value = {}  # Dictionary to store parameter values
@@ -586,7 +590,7 @@ class RamsesNumberParam(RamsesNumberBase):
         1. Calls the parent class's async_added_to_hass method
         2. Sets up an event listener for parameter updates
 
-        Note: Parameter values are requested by the broker's
+        Note: Parameter values are requested by the coordinator's
         get_all_fan_params method in a controlled manner to prevent
         flooding the RF protocol.
 
@@ -961,7 +965,7 @@ def get_param_descriptions(
 
 
 def create_parameter_entities(
-    broker: RamsesBroker, device: RamsesRFEntity
+    coordinator: RamsesCoordinator, device: RamsesRFEntity
 ) -> list[RamsesNumberParam]:
     """Create parameter entities for a device.
 
@@ -969,8 +973,8 @@ def create_parameter_entities(
     It checks if the device supports 2411 parameters and creates appropriate entities.
     It also ensures that duplicate entities are not created.
 
-    :param broker: The broker instance
-    :type broker: RamsesBroker
+    :param coordinator: The coordinator instance
+    :type coordinator: RamsesCoordinator
     :param device: The device to create parameter entities for
     :type device: RamsesRFEntity
     :return: A list of created RamsesNumberParam entities
@@ -995,7 +999,7 @@ def create_parameter_entities(
     entities: list[RamsesNumberParam] = []
 
     # Get entity registry for proper entity creation
-    ent_reg = er.async_get(broker.hass)
+    ent_reg = er.async_get(coordinator.hass)
 
     for description in param_descriptions:
         if not description.ramses_rf_attr:
@@ -1023,7 +1027,7 @@ def create_parameter_entities(
                     "ramses_cc",
                     unique_id,
                     suggested_object_id=f"{device_id}_param_{param_id.lower()}",
-                    config_entry=broker.entry,
+                    config_entry=coordinator.entry,
                 )
             else:
                 _LOGGER.debug(
@@ -1034,7 +1038,7 @@ def create_parameter_entities(
 
             # Always create the entity object for the platform
             # Home Assistant will restore state from registry for existing entities
-            entity = description.ramses_cc_class(broker, device, description)
+            entity = description.ramses_cc_class(coordinator, device, description)
             entities.append(entity)
             _LOGGER.info(
                 "Created parameter entity: %s for %s (param_id=%s)",
