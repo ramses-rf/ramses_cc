@@ -536,7 +536,7 @@ async def test_fan_param_methods(
 
     # 1. Setup Mock Broker first
     mock_broker = MagicMock()
-    mock_broker._fan_bound_to_remote = {device_id: fan_id}
+    mock_broker.fan_handler._fan_bound_to_remote = {device_id: fan_id}
 
     mock_broker.async_get_fan_param = AsyncMock()
     mock_broker.async_set_fan_param = AsyncMock()
@@ -585,7 +585,7 @@ async def test_fan_param_methods(
         mock_broker.get_all_fan_params.assert_called_with(expected_kwargs)
 
     # --- Test 4: Unbound Scenarios ---
-    mock_broker._fan_bound_to_remote = {}
+    mock_broker.fan_handler._fan_bound_to_remote = {}
     mock_broker.get_all_fan_params.reset_mock()
     mock_broker.async_get_fan_param.reset_mock()
     mock_broker.async_set_fan_param.reset_mock()
