@@ -943,7 +943,7 @@ async def test_cached_packets_filtering(mock_broker: RamsesBroker) -> None:
     filtered_dt = (dt_now - timedelta(minutes=1)).isoformat()
 
     # Mock store load
-    mock_broker._store.async_load = AsyncMock(
+    mock_broker.store.async_load = AsyncMock(
         return_value={
             SZ_CLIENT_STATE: {
                 SZ_PACKETS: {
@@ -1136,7 +1136,7 @@ async def test_setup_schema_merge_failure(hass: HomeAssistant) -> None:
     broker = RamsesBroker(hass, entry)
 
     # Mock store load to return a cached schema
-    broker._store.async_load = AsyncMock(
+    broker.store.async_load = AsyncMock(
         return_value={"client_state": {"schema": {"mock": "schema"}, "packets": {}}}
     )
 
