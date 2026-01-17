@@ -155,9 +155,9 @@ async def test_update_device_relationships(mock_broker: RamsesBroker) -> None:
 
     # Define dummy class with required attributes for spec matching
     class DummyZone:
-        tcs = None
-        name = None
-        _SLUG = None
+        tcs: Any | None = None
+        name: str | None = None
+        _SLUG: str | None = None
 
         def _msg_value_code(self, code: Any) -> Any:
             pass
