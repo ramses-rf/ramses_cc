@@ -1703,10 +1703,7 @@ async def test_set_fan_param_value_error_clears_pending(hass: HomeAssistant) -> 
 async def test_get_all_fan_params_creates_task(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test that get_all_fan_params schedules _async_run_fan_param_sequence as a task.
-
-    Covers line 185 in services.py.
-    """
+    """Test that get_all_fan_params schedules _async_run_fan_param_sequence as a task."""
     call_data = {"device_id": "30:111111"}
 
     # We patch create_task because we want to verify it was called, not actually schedule a task.
