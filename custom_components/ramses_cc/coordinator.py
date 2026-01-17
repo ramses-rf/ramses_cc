@@ -95,11 +95,43 @@ class RamsesCoordinator:
         self.platforms: dict[str, Any] = {}
         self.learn_device_id: str | None = None
 
+    def _get_saved_packets(self, client_state: dict[str, Any]) -> dict[str, str]:
+        """Filter cached packets to remove expired or unwanted entries."""
+        msg_code_filter = ["313F"]
+        known_list = self.options.get(SZ_KNOWN_LIST, {})
+        enforce_known_list = self.options[CONF_RAMSES_RF].get(SZ_ENFORCE_KNOWN_LIST)
+
+        packets = {}
+        # Iterate over packets from storage
+        for dtm, pkt in client_state.get(SZ_PACKETS, {}).items():
+            try:
+                dt_obj = dt.fromisoformat(dtm)
+            except ValueError:
+                _LOGGER.warning(
+                    "Ignoring cached packet with invalid timestamp: %s", dtm
+                )
+                continue
+
+            # Check age (keep last 24 hours) and known list enforcement
+            if (
+                dt_obj > dt.now() - timedelta(days=1)
+                and pkt[41:45] not in msg_code_filter
+                and (
+                    not enforce_known_list
+                    or pkt[11:20] in known_list
+                    or pkt[21:30] in known_list
+                )
+            ):
+                packets[dtm] = pkt
+
+        return packets
+
     async def async_setup(self) -> None:
         """Set up the RAMSES client and load configuration."""
         storage = await self.store.async_load()
         _LOGGER.debug("Storage = %s", storage)
 
+        # 1. Load Remotes
         remote_commands = {
             k: v[CONF_COMMANDS]
             for k, v in self.options.get(SZ_KNOWN_LIST, {}).items()
@@ -109,6 +141,7 @@ class RamsesCoordinator:
 
         client_state: dict[str, Any] = storage.get(SZ_CLIENT_STATE, {})
 
+        # 2. Schema Handling
         config_schema = self.options.get(CONF_SCHEMA, {})
         _LOGGER.debug("CONFIG_SCHEMA: %s", config_schema)
         if not schema_is_minimal(config_schema):
@@ -117,6 +150,7 @@ class RamsesCoordinator:
         cached_schema = client_state.get(SZ_SCHEMA, {})
         _LOGGER.debug("CACHED_SCHEMA: %s", cached_schema)
 
+        # Try merging schemas
         if cached_schema and (
             merged_schema := merge_schemas(config_schema, cached_schema)
         ):
@@ -125,6 +159,7 @@ class RamsesCoordinator:
             except (LookupError, vol.MultipleInvalid) as err:
                 _LOGGER.warning("Failed to initialise with merged schema: %s", err)
 
+        # Fallback to config schema
         if not self.client:
             try:
                 self.client = self._create_client(config_schema)
@@ -135,36 +170,11 @@ class RamsesCoordinator:
                 )
                 raise ValueError(f"Failed to initialise RAMSES client: {err}") from err
 
-        def cached_packets() -> dict[str, str]:
-            msg_code_filter = ["313F"]
-            _known_list = self.options.get(SZ_KNOWN_LIST, {})
+        # 3. Packet Handling (Refactored)
+        cached_packets = self._get_saved_packets(client_state)
+        _LOGGER.info("Starting with %s cached packets", len(cached_packets))
 
-            packets = {}
-            for dtm, pkt in client_state.get(SZ_PACKETS, {}).items():
-                try:
-                    dt_obj = dt.fromisoformat(dtm)
-                except ValueError:
-                    _LOGGER.warning(
-                        "Ignoring cached packet with invalid timestamp: %s", dtm
-                    )
-                    continue
-
-                if (
-                    dt_obj > dt.now() - timedelta(days=1)
-                    and pkt[41:45] not in msg_code_filter
-                    and (
-                        not self.options[CONF_RAMSES_RF].get(SZ_ENFORCE_KNOWN_LIST)
-                        or pkt[11:20] in _known_list
-                        or pkt[21:30] in _known_list
-                    )
-                ):
-                    packets[dtm] = pkt
-
-            return packets
-
-        chpkt = cached_packets()
-        _LOGGER.info(chpkt)
-        await self.client.start(cached_packets=chpkt)
+        await self.client.start(cached_packets=cached_packets)
         self.entry.async_on_unload(self.client.stop)
 
     async def async_start(self) -> None:
