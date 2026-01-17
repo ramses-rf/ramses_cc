@@ -22,7 +22,7 @@ from ramses_rf.gateway import Gateway
 from ..virtual_rf import VirtualRf
 
 # patched constants
-_CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.broker.py
+_CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.services.py
 
 NUM_SVCS_AFTER = 35  # proxy for success, platform services included since 0.51.8
 
@@ -111,7 +111,7 @@ async def _test_common(hass: HomeAssistant, entry: ConfigEntry = None) -> None:
     assert len(hass.services.async_services_for_domain(DOMAIN)) == NUM_SVCS_AFTER
 
 
-@patch("custom_components.ramses_cc.broker._CALL_LATER_DELAY", _CALL_LATER_DELAY)
+@patch("custom_components.ramses_cc.services._CALL_LATER_DELAY", _CALL_LATER_DELAY)
 async def test_services_entry_(
     hass: HomeAssistant, rf: VirtualRf, config: dict[str, Any]
 ) -> None:
@@ -136,7 +136,7 @@ async def test_services_entry_(
         assert await hass.config_entries.async_remove(entry.entry_id)  # will unload
 
 
-@patch("custom_components.ramses_cc.broker._CALL_LATER_DELAY", _CALL_LATER_DELAY)
+@patch("custom_components.ramses_cc.services._CALL_LATER_DELAY", _CALL_LATER_DELAY)
 async def test_services_import(
     hass: HomeAssistant, rf: VirtualRf, config: dict[str, Any]
 ) -> None:

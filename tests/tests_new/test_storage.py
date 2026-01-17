@@ -52,9 +52,9 @@ def mock_broker(mock_hass: MagicMock, mock_entry: MagicMock) -> RamsesBroker:
     """Return a mock broker for storage tests."""
     broker = RamsesBroker(mock_hass, mock_entry)
     broker.client = MagicMock()
-    broker._store = MagicMock()
-    broker._store.async_load = AsyncMock()
-    broker._store.async_save = AsyncMock()
+    broker.store = MagicMock()
+    broker.store.async_load = AsyncMock()
+    broker.store.async_save = AsyncMock()
 
     # Mock hass.data
     mock_hass.data = {DOMAIN: {mock_entry.entry_id: broker}}
@@ -80,7 +80,7 @@ async def test_setup_with_corrupted_storage_dates(
         }
     }
 
-    broker._store.async_load = AsyncMock(return_value=mock_storage_data)
+    broker.store.async_load = AsyncMock(return_value=mock_storage_data)
 
     # Ensure _create_client returns the mock that we check later
     mock_client = MagicMock()
@@ -108,15 +108,16 @@ async def test_save_client_state_remotes(mock_broker: RamsesBroker) -> None:
     mock_broker._remotes = {REM_ID: {"boost": "packet_data"}}
 
     # Reset mocks to clear any setup calls
-    mock_broker._store.async_save.reset_mock()
+    mock_broker.store.async_save.reset_mock()
 
     await mock_broker.async_save_client_state()
 
     # Verify remotes were included in the save payload
-    assert mock_broker._store.async_save.called
-    save_data = mock_broker._store.async_save.call_args[0][0]
-    assert "remotes" in save_data
-    assert save_data["remotes"][REM_ID]["boost"] == "packet_data"
+    assert mock_broker.store.async_save.called
+    args = mock_broker.store.async_save.call_args[0]
+    saved_remotes = args[2]
+
+    assert saved_remotes == mock_broker._remotes
 
 
 async def test_setup_packet_filtering(
@@ -156,7 +157,7 @@ async def test_setup_packet_filtering(
             }
         }
     }
-    broker._store.async_load = AsyncMock(return_value=mock_storage_data)
+    broker.store.async_load = AsyncMock(return_value=mock_storage_data)
 
     await broker.async_setup()
 

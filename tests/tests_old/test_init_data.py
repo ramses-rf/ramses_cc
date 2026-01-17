@@ -24,7 +24,7 @@ from ..virtual_rf import VirtualRf
 from .helpers import TEST_DIR, cast_packets_to_rf
 
 # patched constants
-_CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.broker.py
+_CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.services.py
 
 # fmt: off
 EXPECTED_ENTITIES = [  # TODO: add OTB entities, adjust list when adding sensors etc
@@ -147,7 +147,7 @@ async def _test_names(hass: HomeAssistant, entry: ConfigEntry, rf: VirtualRf) ->
         assert entity.name
 
 
-@patch("custom_components.ramses_cc.broker._CALL_LATER_DELAY", _CALL_LATER_DELAY)
+@patch("custom_components.ramses_cc.services._CALL_LATER_DELAY", _CALL_LATER_DELAY)
 async def test_services_entry_(
     hass: HomeAssistant, rf: VirtualRf, config: dict[str, Any] = TEST_CONFIG
 ) -> None:
@@ -171,7 +171,7 @@ async def test_services_entry_(
         assert await hass.config_entries.async_unload(entry.entry_id)
 
 
-@patch("custom_components.ramses_cc.broker._CALL_LATER_DELAY", _CALL_LATER_DELAY)
+@patch("custom_components.ramses_cc.services._CALL_LATER_DELAY", _CALL_LATER_DELAY)
 async def test_services_import(
     hass: HomeAssistant, rf: VirtualRf, config: dict[str, Any] = TEST_CONFIG
 ) -> None:
@@ -194,7 +194,7 @@ async def test_services_import(
         assert await hass.config_entries.async_unload(entry.entry_id)
 
 
-@patch("custom_components.ramses_cc.broker._CALL_LATER_DELAY", 0)
+@patch("custom_components.ramses_cc.services._CALL_LATER_DELAY", 0)
 async def test_startup_with_unbound_fan(hass: HomeAssistant, rf: VirtualRf) -> None:
     """Test that the integration starts up correctly with an unbound fan.
 

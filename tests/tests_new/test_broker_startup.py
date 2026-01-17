@@ -64,7 +64,7 @@ async def test_setup_with_corrupted_storage_dates(
         }
     }
 
-    broker._store.async_load = AsyncMock(return_value=mock_storage_data)
+    broker.store.async_load = AsyncMock(return_value=mock_storage_data)
     broker._create_client = MagicMock()
     broker.client = MagicMock()
     broker.client.start = AsyncMock()
@@ -93,7 +93,7 @@ async def test_setup_fails_gracefully_on_bad_config(
     :param mock_entry: Mock ConfigEntry.
     """
     broker = RamsesBroker(mock_hass, mock_entry)
-    broker._store.async_load = AsyncMock(return_value={})
+    broker.store.async_load = AsyncMock(return_value={})
 
     # Force _create_client to raise vol.Invalid (simulation of bad schema)
     broker._create_client = MagicMock(side_effect=vol.Invalid("Invalid config"))

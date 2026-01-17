@@ -204,11 +204,11 @@ async def test_number_entity_set_value(
 async def test_broker_fan_setup(
     mock_broker: RamsesBroker, mock_fan_device: MagicMock
 ) -> None:
-    """Test _async_setup_fan_device logic."""
+    """Test fan_handler.async_setup_fan_device logic."""
     mock_fan_device.set_initialized_callback = MagicMock()
     mock_fan_device.set_param_update_callback = MagicMock()
 
-    await mock_broker._async_setup_fan_device(mock_fan_device)
+    await mock_broker.fan_handler.async_setup_fan_device(mock_fan_device)
 
     assert mock_fan_device.set_initialized_callback.called
     assert mock_fan_device.set_param_update_callback.called
@@ -234,11 +234,12 @@ async def test_update_fan_params_sequence(
     tiny_schema = ["11", "22"]
 
     with (
-        patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", tiny_schema),
+        patch("custom_components.ramses_cc.services._2411_PARAMS_SCHEMA", tiny_schema),
         patch("asyncio.sleep", new_callable=AsyncMock),
     ):
         call_data = {"device_id": FAN_ID}
-        await mock_broker._async_run_fan_param_sequence(call_data)
+        # UPDATED: Call method on service_handler, not broker
+        await mock_broker.service_handler._async_run_fan_param_sequence(call_data)
 
     assert mock_gateway.async_send_cmd.call_count == 2
 
@@ -268,7 +269,7 @@ async def test_setup_fan_bound_invalid_type(
     }
 
     # Trigger the warning and return early
-    await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     # Verify no binding occurred
     mock_fan_device.add_bound_device.assert_not_called()
@@ -286,7 +287,7 @@ async def test_setup_fan_bound_not_rem(
 
     mock_broker.options[SZ_KNOWN_LIST] = {FAN_ID: {"bound_to": bound_dev.id}}
 
-    await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     mock_fan_device.add_bound_device.assert_not_called()
 
@@ -298,7 +299,7 @@ async def test_fan_setup_callbacks_execution(
     mock_fan_device.set_initialized_callback = MagicMock()
 
     # Call setup
-    await mock_broker._async_setup_fan_device(mock_fan_device)
+    await mock_broker.fan_handler.async_setup_fan_device(mock_fan_device)
 
     # Get the lambda passed to callback
     init_lambda = mock_fan_device.set_initialized_callback.call_args[0][0]
@@ -320,7 +321,7 @@ async def test_fan_setup_callbacks_execution(
 async def test_fan_setup_already_initialized(
     mock_broker: RamsesBroker, mock_fan_device: MagicMock
 ) -> None:
-    """Test _async_setup_fan_device when device is already initialized."""
+    """Test fan_handler.async_setup_fan_device when device is already initialized."""
     mock_fan_device._initialized = True
     mock_fan_device.supports_2411 = True
 
@@ -329,7 +330,7 @@ async def test_fan_setup_already_initialized(
         "custom_components.ramses_cc.number.create_parameter_entities"
     ) as mock_create:
         mock_create.return_value = [MagicMock()]
-        await mock_broker._async_setup_fan_device(mock_fan_device)
+        await mock_broker.fan_handler.async_setup_fan_device(mock_fan_device)
 
         assert mock_create.called
         # Should also request params
@@ -368,11 +369,13 @@ async def test_run_fan_param_sequence_bad_data(
 
     bad_data_obj = NotADict()
 
+    # UPDATED: Patch on services.RamsesServiceHandler, not broker
     with patch(
-        "custom_components.ramses_cc.broker.RamsesBroker._normalize_service_call",
+        "custom_components.ramses_cc.services.RamsesServiceHandler._normalize_service_call",
         return_value=bad_data_obj,
     ):
-        await mock_broker._async_run_fan_param_sequence({})
+        # UPDATED: Call via service_handler
+        await mock_broker.service_handler._async_run_fan_param_sequence({})
     pass
 
     bad_data_mock = MagicMock(spec=dict)
@@ -380,10 +383,11 @@ async def test_run_fan_param_sequence_bad_data(
     bad_data_mock.get.return_value = "0A"
 
     with patch(
-        "custom_components.ramses_cc.broker.RamsesBroker._normalize_service_call",
+        "custom_components.ramses_cc.services.RamsesServiceHandler._normalize_service_call",
         return_value=bad_data_mock,
     ):
-        await mock_broker._async_run_fan_param_sequence({})
+        # UPDATED: Call via service_handler
+        await mock_broker.service_handler._async_run_fan_param_sequence({})
 
     assert mock_gateway.async_send_cmd.call_count >= 0
 
@@ -415,14 +419,18 @@ async def test_setup_fan_bound_success_rem(
 
     # Patch the classes in the broker module so isinstance checks pass
     with (
-        patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator),
-        patch("custom_components.ramses_cc.broker.HvacRemoteBase", MockHvacRemoteBase),
+        patch(
+            "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+        ),
+        patch(
+            "custom_components.ramses_cc.fan_handler.HvacRemoteBase", MockHvacRemoteBase
+        ),
     ):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     # Verify binding was added with correct type
     mock_fan_device.add_bound_device.assert_called_once_with(bound_id, DevType.REM)
-    assert mock_broker._fan_bound_to_remote[bound_id] == FAN_ID
+    assert mock_broker.fan_handler._fan_bound_to_remote[bound_id] == FAN_ID
 
 
 async def test_setup_fan_bound_success_dis(
@@ -445,11 +453,13 @@ async def test_setup_fan_bound_success_dis(
 
     # Patch HvacVentilator to pass the first guard clause
     # Do NOT patch HvacRemoteBase, so isinstance(bound_device, HvacRemoteBase) will fail (correct for DIS)
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     mock_fan_device.add_bound_device.assert_called_once_with(bound_id, DevType.DIS)
-    assert mock_broker._fan_bound_to_remote[bound_id] == FAN_ID
+    assert mock_broker.fan_handler._fan_bound_to_remote[bound_id] == FAN_ID
 
 
 async def test_setup_fan_bound_device_not_found(
@@ -468,12 +478,14 @@ async def test_setup_fan_bound_device_not_found(
 
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     # Should log warning and not add binding
     mock_fan_device.add_bound_device.assert_not_called()
-    assert bound_id not in mock_broker._fan_bound_to_remote
+    assert bound_id not in mock_broker.fan_handler._fan_bound_to_remote
 
 
 async def test_setup_fan_bound_no_config(
@@ -487,8 +499,10 @@ async def test_setup_fan_bound_no_config(
 
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     mock_fan_device.add_bound_device.assert_not_called()
 
@@ -512,8 +526,10 @@ async def test_setup_fan_bound_bad_device_type(
 
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     mock_fan_device.add_bound_device.assert_not_called()
 
@@ -531,8 +547,10 @@ async def test_setup_fan_bound_invalid_id_type(
     # Satisfy the isinstance(device, HvacVentilator) check
     mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
 
-    with patch("custom_components.ramses_cc.broker.HvacVentilator", MockHvacVentilator):
-        await mock_broker._setup_fan_bound_devices(mock_fan_device)
+    with patch(
+        "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+    ):
+        await mock_broker.fan_handler.setup_fan_bound_devices(mock_fan_device)
 
     # Verify no binding occurred and code returned early
     mock_fan_device.add_bound_device.assert_not_called()
@@ -548,8 +566,8 @@ async def test_target_to_device_id_single_string(
     # Target dict with a single string device_id (triggers line 1010)
     target = {"device_id": ha_device_id}
 
-    # Patch the device registry getter used in broker.py
-    with patch("custom_components.ramses_cc.broker.dr.async_get") as mock_dr_get:
+    # Patch the device registry getter used in services.py
+    with patch("custom_components.ramses_cc.services.dr.async_get") as mock_dr_get:
         mock_reg = mock_dr_get.return_value
 
         # Create a mock device entry that links HA ID to Ramses ID
@@ -561,28 +579,24 @@ async def test_target_to_device_id_single_string(
             lambda x: mock_entry if x == ha_device_id else None
         )
 
-        # Execute the method
-        result = mock_broker._target_to_device_id(target)
+        # Execute the method on service_handler
+        result = mock_broker.service_handler._target_to_device_id(target)
 
-    # Verify the resolution worked (meaning the string was successfully converted to a list and processed)
+    # Verify the resolution worked
     assert result == ramses_dev_id
 
 
 async def test_target_to_device_id_single_area_string(
     mock_broker: RamsesBroker,
 ) -> None:
-    """Test _target_to_device_id when area_id is a single string.
-
-    This covers the case where a single area_id string is provided in the target,
-    triggering the list conversion logic (lines 1017-1018).
-    """
+    """Test _target_to_device_id when area_id is a single string."""
     area_id = "living_room"
     ramses_dev_id = "10:654321"
 
     target = {"area_id": area_id}
 
     # Patch device registry
-    with patch("custom_components.ramses_cc.broker.dr.async_get") as mock_dr_get:
+    with patch("custom_components.ramses_cc.services.dr.async_get") as mock_dr_get:
         mock_reg = mock_dr_get.return_value
 
         # Create a mock device entry in the correct area with a RAMSES ID
@@ -593,16 +607,16 @@ async def test_target_to_device_id_single_area_string(
         # dev_reg.devices.values() is iterated
         mock_reg.devices.values.return_value = [mock_entry]
 
-        # Execute
-        result = mock_broker._target_to_device_id(target)
+        # Execute on service_handler
+        result = mock_broker.service_handler._target_to_device_id(target)
 
     assert result == ramses_dev_id
 
 
 async def test_target_empty(mock_broker: RamsesBroker) -> None:
     """Test _target_to_device_id with empty or None input."""
-    assert mock_broker._target_to_device_id({}) is None
-    assert mock_broker._target_to_device_id(None) is None
+    assert mock_broker.service_handler._target_to_device_id({}) is None
+    assert mock_broker.service_handler._target_to_device_id(None) is None
 
 
 async def test_target_entity_id_resolution(mock_broker: RamsesBroker) -> None:
@@ -614,8 +628,8 @@ async def test_target_entity_id_resolution(mock_broker: RamsesBroker) -> None:
     ha_dev_id = "ha_dev_1"
 
     with (
-        patch("custom_components.ramses_cc.broker.er.async_get") as mock_er_get,
-        patch("custom_components.ramses_cc.broker.dr.async_get") as mock_dr_get,
+        patch("custom_components.ramses_cc.services.er.async_get") as mock_er_get,
+        patch("custom_components.ramses_cc.services.dr.async_get") as mock_dr_get,
     ):
         # Setup Entity Registry Mock
         mock_ent_reg = mock_er_get.return_value  # This is the registry
@@ -630,10 +644,14 @@ async def test_target_entity_id_resolution(mock_broker: RamsesBroker) -> None:
         mock_dev_reg.async_get.return_value = mock_dev_entry  # Registry returns entry
 
         # Test Single String
-        assert mock_broker._target_to_device_id(target_single) == ramses_id
+        assert (
+            mock_broker.service_handler._target_to_device_id(target_single) == ramses_id
+        )
 
         # Test List
-        assert mock_broker._target_to_device_id(target_list) == ramses_id
+        assert (
+            mock_broker.service_handler._target_to_device_id(target_list) == ramses_id
+        )
 
 
 async def test_target_device_id_resolution(mock_broker: RamsesBroker) -> None:
@@ -643,7 +661,7 @@ async def test_target_device_id_resolution(mock_broker: RamsesBroker) -> None:
 
     ramses_id = "02:222222"
 
-    with patch("custom_components.ramses_cc.broker.dr.async_get") as mock_dr_get:
+    with patch("custom_components.ramses_cc.services.dr.async_get") as mock_dr_get:
         # Setup Device Registry Mock
         mock_dev_reg = mock_dr_get.return_value
         mock_dev_entry = MagicMock()
@@ -651,10 +669,14 @@ async def test_target_device_id_resolution(mock_broker: RamsesBroker) -> None:
         mock_dev_reg.async_get.return_value = mock_dev_entry
 
         # Test Single String
-        assert mock_broker._target_to_device_id(target_single) == ramses_id
+        assert (
+            mock_broker.service_handler._target_to_device_id(target_single) == ramses_id
+        )
 
         # Test List
-        assert mock_broker._target_to_device_id(target_list) == ramses_id
+        assert (
+            mock_broker.service_handler._target_to_device_id(target_list) == ramses_id
+        )
 
 
 async def test_target_priority_order(mock_broker: RamsesBroker) -> None:
@@ -668,8 +690,8 @@ async def test_target_priority_order(mock_broker: RamsesBroker) -> None:
     id_from_entity = "01:000001"
 
     with (
-        patch("custom_components.ramses_cc.broker.er.async_get") as mock_er_get,
-        patch("custom_components.ramses_cc.broker.dr.async_get") as mock_dr_get,
+        patch("custom_components.ramses_cc.services.er.async_get") as mock_er_get,
+        patch("custom_components.ramses_cc.services.dr.async_get") as mock_dr_get,
     ):
         # 1. Setup successful Entity Lookup
         mock_ent_reg = mock_er_get.return_value
@@ -690,14 +712,16 @@ async def test_target_priority_order(mock_broker: RamsesBroker) -> None:
         mock_dev_reg.async_get.side_effect = side_effect
 
         # Should return the one found via entity_id, ignoring device_id/area_id logic
-        assert mock_broker._target_to_device_id(target) == id_from_entity
+        assert (
+            mock_broker.service_handler._target_to_device_id(target) == id_from_entity
+        )
 
 
 async def test_target_resolution_failures(mock_broker: RamsesBroker) -> None:
     """Test that it returns None when lookups fail or entries lack correct domain."""
     target = {"device_id": "ha_dev_bad"}
 
-    with patch("custom_components.ramses_cc.broker.dr.async_get") as mock_dr_get:
+    with patch("custom_components.ramses_cc.services.dr.async_get") as mock_dr_get:
         mock_dev_reg = mock_dr_get.return_value
 
         # Case 1: Device entry found, but no RAMSES domain identifier
@@ -705,18 +729,23 @@ async def test_target_resolution_failures(mock_broker: RamsesBroker) -> None:
         mock_entry.identifiers = {("other_domain", "some_id")}
         mock_dev_reg.async_get.return_value = mock_entry
 
-        assert mock_broker._target_to_device_id(target) is None
+        assert mock_broker.service_handler._target_to_device_id(target) is None
 
         # Case 2: Device entry is None (device not found in registry)
         mock_dev_reg.async_get.return_value = None
-        assert mock_broker._target_to_device_id(target) is None
+        assert mock_broker.service_handler._target_to_device_id(target) is None
 
     # Case 3: Entity found, but has no device_id
-    with patch("custom_components.ramses_cc.broker.er.async_get") as mock_er_get:
+    with patch("custom_components.ramses_cc.services.er.async_get") as mock_er_get:
         mock_ent_reg = mock_er_get.return_value
         mock_ent_reg.async_get.return_value = MagicMock(device_id=None)
 
-        assert mock_broker._target_to_device_id({"entity_id": "sensor.orphan"}) is None
+        assert (
+            mock_broker.service_handler._target_to_device_id(
+                {"entity_id": "sensor.orphan"}
+            )
+            is None
+        )
 
 
 async def test_get_fan_param_fallback_hgi(
