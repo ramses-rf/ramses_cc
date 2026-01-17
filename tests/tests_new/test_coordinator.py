@@ -91,7 +91,7 @@ async def test_setup_fails_gracefully_on_bad_config(
 ) -> None:
     """Test that startup catches client creation errors and logs them."""
     broker = RamsesBroker(mock_hass, mock_entry)
-    broker._store.async_load = AsyncMock(return_value={})
+    broker.store.async_load = AsyncMock(return_value={})
 
     # Force _create_client to raise vol.Invalid (simulation of bad schema)
     broker._create_client = MagicMock(side_effect=vol.Invalid("Invalid config"))
@@ -128,7 +128,7 @@ async def test_setup_schema_merge_failure(
     broker = RamsesBroker(mock_hass, mock_entry)
 
     # Provide a non-empty schema so the code enters the "merge" block
-    broker._store.async_load = AsyncMock(
+    broker.store.async_load = AsyncMock(
         return_value={SZ_CLIENT_STATE: {SZ_SCHEMA: {"existing": "data"}}}
     )
 
@@ -155,9 +155,9 @@ async def test_update_device_relationships(mock_broker: RamsesBroker) -> None:
 
     # Define dummy class with required attributes for spec matching
     class DummyZone:
-        tcs = None
-        name = None
-        _SLUG = None
+        tcs: Any | None = None
+        name: str | None = None
+        _SLUG: str | None = None
 
         def _msg_value_code(self, code: Any) -> Any:
             pass
@@ -330,7 +330,7 @@ async def test_setup_ignores_invalid_cached_packet_timestamps(
     valid_dtm = dt.now().isoformat()
     invalid_dtm = "invalid-iso-format"
 
-    broker._store.async_load = AsyncMock(
+    broker.store.async_load = AsyncMock(
         return_value={
             SZ_CLIENT_STATE: {
                 SZ_PACKETS: {
@@ -436,7 +436,7 @@ async def test_setup_uses_merged_schema_on_success(
 
     # 1. Setup storage to provide a cached schema so we enter the conditional block
     cached_schema = {"cached_key": "cached_val"}
-    broker._store.async_load = AsyncMock(
+    broker.store.async_load = AsyncMock(
         return_value={SZ_CLIENT_STATE: {SZ_SCHEMA: cached_schema}}
     )
 
@@ -483,7 +483,7 @@ async def test_setup_logs_warning_on_non_minimal_schema(
 ) -> None:
     """Test that a warning is logged when the schema is not minimal (Line 155)."""
     broker = RamsesBroker(mock_hass, mock_entry)
-    broker._store.async_load = AsyncMock(return_value={})
+    broker.store.async_load = AsyncMock(return_value={})
 
     # Mock success path for client creation so setup completes
     mock_client = MagicMock()
@@ -522,8 +522,8 @@ async def test_fan_setup_logs_warning_on_parameter_request_failure(
         side_effect=RuntimeError("Connection lost")
     )
 
-    # 3. Call _async_setup_fan_device to register the callback
-    await mock_broker._async_setup_fan_device(mock_device)
+    # 3. Call fan_handler.async_setup_fan_device to register the callback
+    await mock_broker.fan_handler.async_setup_fan_device(mock_device)
 
     # 4. Extract the lambda passed to set_initialized_callback
     # device.set_initialized_callback(lambda: self.hass.async_create_task(on_fan_first_message()))
@@ -536,7 +536,7 @@ async def test_fan_setup_logs_warning_on_parameter_request_failure(
     coroutine = mock_broker.hass.async_create_task.call_args[0][0]
 
     # 7. Await the coroutine to execute the logic inside the try/except block
-    with patch("custom_components.ramses_cc.broker._LOGGER") as mock_logger:
+    with patch("custom_components.ramses_cc.fan_handler._LOGGER") as mock_logger:
         await coroutine
 
         # 8. Verify the warning was logged correctly

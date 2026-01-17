@@ -218,7 +218,7 @@ async def test_number_entity_set_value(
 async def test_broker_fan_setup(
     mock_broker: RamsesBroker, mock_fan_device: MagicMock
 ) -> None:
-    """Test _async_setup_fan_device logic in broker.py.
+    """Test fan_handler.async_setup_fan_device logic in fan_handler.py.
 
     :param mock_broker: The mock broker fixture.
     :param mock_fan_device: The mock fan device fixture.
@@ -227,7 +227,7 @@ async def test_broker_fan_setup(
     mock_fan_device.set_initialized_callback = MagicMock()
     mock_fan_device.set_param_update_callback = MagicMock()
 
-    await mock_broker._async_setup_fan_device(mock_fan_device)
+    await mock_broker.fan_handler.async_setup_fan_device(mock_fan_device)
 
     # Verify callbacks were registered
     assert mock_fan_device.set_initialized_callback.called
