@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from custom_components.ramses_cc.broker import RamsesBroker
+from custom_components.ramses_cc.services import RamsesServiceHandler
 from ramses_tx.exceptions import PacketAddrSetInvalid
 
 # Constants
@@ -15,6 +15,8 @@ def test_adjust_sentinel_packet_swaps_on_invalid() -> None:
     # Setup
     # Use generic MagicMock because 'client' is an instance attribute
     broker = MagicMock()
+    # Logic Update: The handler expects self._broker.client..., so we self-reference
+    broker._broker = broker
     broker.client.hgi.id = HGI_ID
 
     # Mock Command
@@ -26,11 +28,11 @@ def test_adjust_sentinel_packet_swaps_on_invalid() -> None:
     cmd._addrs = ["addr0", "addr1", "addr2"]
 
     # Patch pkt_addrs to raise PacketAddrSetInvalid
-    with patch("custom_components.ramses_cc.broker.pkt_addrs") as mock_validate:
+    with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_validate:
         mock_validate.side_effect = PacketAddrSetInvalid("Invalid structure")
 
         # Execute using the unbound method call, passing our mock as 'self'
-        RamsesBroker._adjust_sentinel_packet(broker, cmd)
+        RamsesServiceHandler._adjust_sentinel_packet(broker, cmd)
 
         # Verify swap occurred
         assert cmd._addrs[1] == "addr2"
@@ -42,6 +44,7 @@ def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
     """Test that addresses are NOT swapped when validation passes."""
     # Setup
     broker = MagicMock()
+    broker._broker = broker
     broker.client.hgi.id = HGI_ID
 
     cmd = MagicMock()
@@ -50,10 +53,10 @@ def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
     cmd._frame = "X" * 40
     cmd._addrs = ["addr0", "addr1", "addr2"]
 
-    with patch("custom_components.ramses_cc.broker.pkt_addrs") as mock_validate:
+    with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_validate:
         mock_validate.return_value = True  # Validation passes
 
-        RamsesBroker._adjust_sentinel_packet(broker, cmd)
+        RamsesServiceHandler._adjust_sentinel_packet(broker, cmd)
 
         # Verify NO swap
         assert cmd._addrs[1] == "addr1"
@@ -63,6 +66,7 @@ def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
 def test_adjust_sentinel_packet_ignores_other_devices() -> None:
     """Test that logic is skipped for non-sentinel devices."""
     broker = MagicMock()
+    broker._broker = broker
     broker.client.hgi.id = HGI_ID
 
     cmd = MagicMock()
@@ -71,7 +75,7 @@ def test_adjust_sentinel_packet_ignores_other_devices() -> None:
     cmd._addrs = ["addr0", "addr1", "addr2"]
 
     # Execute
-    RamsesBroker._adjust_sentinel_packet(broker, cmd)
+    RamsesServiceHandler._adjust_sentinel_packet(broker, cmd)
 
     # Verify no swap and repr is untouched
     assert cmd._addrs == ["addr0", "addr1", "addr2"]

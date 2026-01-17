@@ -76,7 +76,9 @@ class TestFanParameterGet:
         self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
 
         # Patch Command.get_fan_param to control command creation
-        self.patcher = patch("custom_components.ramses_cc.broker.Command.get_fan_param")
+        self.patcher = patch(
+            "custom_components.ramses_cc.services.Command.get_fan_param"
+        )
         self.mock_get_fan_param = self.patcher.start()
 
         # Create a test command that will be returned by the patched method
@@ -266,7 +268,9 @@ class TestFanParameterSet:
         self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
 
         # Patch Command.set_fan_param to control command creation
-        self.patcher = patch("custom_components.ramses_cc.broker.Command.set_fan_param")
+        self.patcher = patch(
+            "custom_components.ramses_cc.services.Command.set_fan_param"
+        )
         self.mock_set_fan_param = self.patcher.start()
 
         # Create a test command that will be returned by the patched method
@@ -421,7 +425,9 @@ class TestFanParameterUpdate:
         self.broker.client.device_by_id = {TEST_DEVICE_ID: self.mock_device}
 
         # Patch Command.get_fan_param to control command creation
-        self.patcher = patch("custom_components.ramses_cc.broker.Command.get_fan_param")
+        self.patcher = patch(
+            "custom_components.ramses_cc.services.Command.get_fan_param"
+        )
         self.mock_get_fan_param = self.patcher.start()
 
         # Create a test command that will be returned by the patched method
@@ -460,7 +466,7 @@ class TestFanParameterUpdate:
         call = ServiceCall(hass, "ramses_cc", "update_fan_params", service_data)
 
         # Act - Call the method under test
-        await self.broker._async_run_fan_param_sequence(call)
+        await self.broker.service_handler._async_run_fan_param_sequence(call)
 
         # Verify all parameters in the schema were requested
         # Note: We can't easily test the exact number without importing the schema,

@@ -113,7 +113,8 @@ async def test_broker_device_lookup_fail(mock_broker: RamsesBroker) -> None:
     call_data = {"device_id": "99:999999", "param_id": "01"}
 
     # We expect a warning in the log but no crash
-    with patch("custom_components.ramses_cc.broker._LOGGER.warning") as mock_warn:
+    # UPDATED: Log is now generated in services.py, not broker.py
+    with patch("custom_components.ramses_cc.services._LOGGER.warning") as mock_warn:
         await mock_broker.async_get_fan_param(call_data)
         assert mock_warn.called
         assert "No valid source device available" in mock_warn.call_args[0][0]
@@ -122,20 +123,21 @@ async def test_broker_device_lookup_fail(mock_broker: RamsesBroker) -> None:
 def test_get_param_id_validation(mock_broker: RamsesBroker) -> None:
     """Test validation of parameter IDs in service calls.
 
-    This targets _get_param_id in broker.py.
+    This targets _get_param_id in services.py (via broker delegate).
 
     :param mock_broker: The mock broker fixture.
     """
     # 1. Valid hex
-    assert mock_broker._get_param_id({"param_id": "0a"}) == "0A"
+    # UPDATED: Access via 'service_handler', not 'services'
+    assert mock_broker.service_handler._get_param_id({"param_id": "0a"}) == "0A"
 
     # 2. Invalid: too long
     with pytest.raises(ValueError, match="Invalid parameter ID"):
-        mock_broker._get_param_id({"param_id": "001"})
+        mock_broker.service_handler._get_param_id({"param_id": "001"})
 
     # 3. Invalid: non-hex
     with pytest.raises(ValueError, match="Invalid parameter ID"):
-        mock_broker._get_param_id({"param_id": "ZZ"})
+        mock_broker.service_handler._get_param_id({"param_id": "ZZ"})
 
 
 async def test_save_client_state_remotes(mock_broker: RamsesBroker) -> None:

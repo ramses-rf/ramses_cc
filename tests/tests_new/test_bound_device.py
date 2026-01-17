@@ -67,13 +67,13 @@ class TestBoundDeviceFunctionality:
 
         # Patch Command.set_fan_param to control command creation
         self.set_patcher = patch(
-            "custom_components.ramses_cc.broker.Command.set_fan_param"
+            "custom_components.ramses_cc.services.Command.set_fan_param"
         )
         self.mock_set_fan_param = self.set_patcher.start()
 
         # Patch Command.get_fan_param to control command creation
         self.get_patcher = patch(
-            "custom_components.ramses_cc.broker.Command.get_fan_param"
+            "custom_components.ramses_cc.services.Command.get_fan_param"
         )
         self.mock_get_fan_param = self.get_patcher.start()
 

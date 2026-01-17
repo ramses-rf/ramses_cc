@@ -29,6 +29,7 @@ from custom_components.ramses_cc.helpers import (
     ha_device_id_to_ramses_device_id,
     ramses_device_id_to_ha_device_id,
 )
+from custom_components.ramses_cc.services import RamsesServiceHandler
 from ramses_rf.device import Device
 from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.entity_base import Child
@@ -102,12 +103,9 @@ async def test_set_fan_param_raises_ha_error_invalid_value(
         # "value": missing -> triggers ValueError
         "from_id": "32:111111",
     }
-    # Patch _get_device_and_from_id because otherwise the broker checks for
-    # the device existence first and raises "No valid source device" before
-    # checking the value.
     with (
         patch.object(
-            mock_broker,
+            mock_broker.service_handler,
             "_get_device_and_from_id",
             return_value=("30:111222", "30_111222", "32:111111"),
         ),
@@ -135,15 +133,17 @@ def test_adjust_sentinel_packet_swaps_on_invalid() -> None:
     broker = MagicMock()
     broker.client.hgi.id = HGI_ID
 
+    handler = RamsesServiceHandler(broker)
+
     cmd = MagicMock()
     cmd.src.id = SENTINEL_ID
     cmd.dst.id = HGI_ID
     cmd._frame = "X" * 40
     cmd._addrs = ["addr0", "addr1", "addr2"]
 
-    with patch("custom_components.ramses_cc.broker.pkt_addrs") as mock_validate:
+    with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_validate:
         mock_validate.side_effect = PacketAddrSetInvalid("Invalid structure")
-        RamsesBroker._adjust_sentinel_packet(broker, cmd)
+        handler._adjust_sentinel_packet(cmd)
 
         assert cmd._addrs[1] == "addr2"
         assert cmd._addrs[2] == "addr1"
@@ -155,14 +155,16 @@ def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
     broker = MagicMock()
     broker.client.hgi.id = HGI_ID
 
+    handler = RamsesServiceHandler(broker)
+
     cmd = MagicMock()
     cmd.src.id = SENTINEL_ID
     cmd.dst.id = HGI_ID
     cmd._addrs = ["addr0", "addr1", "addr2"]
 
-    with patch("custom_components.ramses_cc.broker.pkt_addrs") as mock_validate:
+    with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_validate:
         mock_validate.return_value = True
-        RamsesBroker._adjust_sentinel_packet(broker, cmd)
+        handler._adjust_sentinel_packet(cmd)
         assert cmd._addrs[1] == "addr1"
 
 
@@ -170,29 +172,31 @@ def test_adjust_sentinel_packet_ignores_other_devices() -> None:
     """Test that logic is skipped for non-sentinel devices."""
     broker = MagicMock()
     broker.client.hgi.id = HGI_ID
+    handler = RamsesServiceHandler(broker)
+
     cmd = MagicMock()
     cmd.src.id = "01:123456"  # Not sentinel
     cmd._addrs = ["addr0", "addr1", "addr2"]
 
-    RamsesBroker._adjust_sentinel_packet(broker, cmd)
+    handler._adjust_sentinel_packet(cmd)
     assert cmd._addrs == ["addr0", "addr1", "addr2"]
 
 
 def test_get_param_id_validation(mock_broker: RamsesBroker) -> None:
     """Test validation of parameter IDs in service calls."""
-    assert mock_broker._get_param_id({"param_id": "0a"}) == "0A"
+    assert mock_broker.service_handler._get_param_id({"param_id": "0a"}) == "0A"
 
     with pytest.raises(ValueError, match="Invalid parameter ID"):
-        mock_broker._get_param_id({"param_id": "001"})
+        mock_broker.service_handler._get_param_id({"param_id": "001"})
 
     with pytest.raises(ValueError, match="Invalid parameter ID"):
-        mock_broker._get_param_id({"param_id": "ZZ"})
+        mock_broker.service_handler._get_param_id({"param_id": "ZZ"})
 
 
 async def test_broker_device_lookup_fail(mock_broker: RamsesBroker) -> None:
     """Test broker handling when a device lookup fails."""
     call_data = {"device_id": "99:999999", "param_id": "01"}
-    with patch("custom_components.ramses_cc.broker._LOGGER.warning") as mock_warn:
+    with patch("custom_components.ramses_cc.services._LOGGER.warning") as mock_warn:
         await mock_broker.async_get_fan_param(call_data)
         assert mock_warn.called
         assert "No valid source device available" in mock_warn.call_args[0][0]
@@ -305,33 +309,37 @@ async def test_send_packet_hgi_alias(mock_broker: RamsesBroker) -> None:
 
 def test_resolve_device_ids_complex(mock_broker: RamsesBroker) -> None:
     """Test _resolve_device_id with lists and area_ids."""
-    # 1. Test List handling (lines 807-813)
+    # 1. Test List handling
     data: dict[str, Any] = {"device_id": ["01:111111", "01:222222"]}
-    with patch("custom_components.ramses_cc.broker._LOGGER.warning") as mock_warn:
-        resolved = mock_broker._resolve_device_id(data)
+    with patch("custom_components.ramses_cc.services._LOGGER.warning") as mock_warn:
+        resolved = mock_broker.service_handler._resolve_device_id(data)
         assert resolved == "01:111111"
         assert data["device_id"] == "01:111111"  # Should update input dict
         assert mock_warn.called
 
-    # 2. Test explicit None return (line 827)
-    assert mock_broker._resolve_device_id({}) is None
+    # 2. Test explicit None return
+    assert mock_broker.service_handler._resolve_device_id({}) is None
 
     # 3. Test empty list
     data_empty: dict[str, Any] = {"device_id": []}
-    assert mock_broker._resolve_device_id(data_empty) is None
+    assert mock_broker.service_handler._resolve_device_id(data_empty) is None
 
     # 4. Test list with empty values
     data_missing: dict[str, Any] = {"device": []}
-    assert mock_broker._resolve_device_id(data_missing) is None
+    assert mock_broker.service_handler._resolve_device_id(data_missing) is None
 
     # 5. Test HA Device list (multiple devices)
     data_ha_list: dict[str, Any] = {"device": ["ha_id_1", "ha_id_2"]}
-    # Mock _target_to_device_id to avoid needing full registry setup
+    # Mock _target_to_device_id on service_handler
     with (
-        patch.object(mock_broker, "_target_to_device_id", return_value="01:555555"),
-        patch("custom_components.ramses_cc.broker._LOGGER.warning") as mock_warn_2,
+        patch.object(
+            mock_broker.service_handler,
+            "_target_to_device_id",
+            return_value="01:555555",
+        ),
+        patch("custom_components.ramses_cc.services._LOGGER.warning") as mock_warn_2,
     ):
-        resolved_ha = mock_broker._resolve_device_id(data_ha_list)
+        resolved_ha = mock_broker.service_handler._resolve_device_id(data_ha_list)
         assert resolved_ha == "01:555555"
         assert mock_warn_2.called
         assert data_ha_list["device"] == "ha_id_1"
@@ -340,7 +348,7 @@ def test_resolve_device_ids_complex(mock_broker: RamsesBroker) -> None:
 async def test_resolve_device_id_area_string(
     hass: HomeAssistant, mock_broker: RamsesBroker
 ) -> None:
-    """Test resolving device ID from an Area ID passed as a string (not list)."""
+    """Test resolving device ID from a Area ID passed as a string (not list)."""
     # Create a device in an area
     dev_reg = dr.async_get(hass)
     config_entry = MockConfigEntry(domain=DOMAIN, entry_id="test_config")
@@ -354,7 +362,7 @@ async def test_resolve_device_id_area_string(
 
     # Pass area_id as string, not list, to hit line: area_ids = [area_ids]
     data = {"target": {"area_id": "test_area"}}
-    resolved = mock_broker._resolve_device_id(data)
+    resolved = mock_broker.service_handler._resolve_device_id(data)
 
     assert resolved == "01:555555"
 
@@ -371,7 +379,7 @@ async def test_find_param_entity_registry_only(
         "30_111222_param_0a",
         original_icon="mdi:fan",
     )
-    # Ensure entity ID matches what broker expects (HA might add ramses_cc prefix)
+    # Ensure entity ID matches what broker expects
     if entry.entity_id != "number.30_111222_param_0a":
         ent_reg.async_update_entity(
             entry.entity_id, new_entity_id="number.30_111222_param_0a"
@@ -399,7 +407,7 @@ async def test_async_set_fan_param_success_clear_pending(
         patch.object(
             mock_broker.fan_handler, "find_param_entity", return_value=mock_entity
         ),
-        patch("custom_components.ramses_cc.broker.Command") as mock_cmd_cls,
+        patch("custom_components.ramses_cc.services.Command") as mock_cmd_cls,
     ):
         mock_cmd = MagicMock()
         mock_cmd_cls.set_fan_param.return_value = mock_cmd
@@ -463,14 +471,15 @@ async def test_get_device_and_from_id_bound_logic(mock_broker: RamsesBroker) -> 
 
     # Case 1: Bound device exists and returns valid ID
     mock_dev.get_bound_rem.return_value = "30:999999"
-    orig, norm, from_id = mock_broker._get_device_and_from_id(call)
+    orig, norm, from_id = mock_broker.service_handler._get_device_and_from_id(call)
     assert orig == "30:111111"
     assert from_id == "30:999999"
 
     # Case 2: Bound device exists but returns None (not bound)
-    # This hits lines 922-927
     mock_dev.get_bound_rem.return_value = None
-    orig_2, norm_2, from_id_2 = mock_broker._get_device_and_from_id(call)
+    orig_2, norm_2, from_id_2 = mock_broker.service_handler._get_device_and_from_id(
+        call
+    )
 
     # Correct logic: It should still return the device ID, but empty from_id
     assert from_id_2 == ""
@@ -482,35 +491,29 @@ async def test_run_fan_param_sequence_exception(mock_broker: RamsesBroker) -> No
     # Force an exception inside the sequence loop
     # Patch the schema to a single item to make the test deterministic and fast
     with (
-        patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", ["0A"]),
+        patch("custom_components.ramses_cc.services._2411_PARAMS_SCHEMA", ["0A"]),
         patch.object(
-            mock_broker, "async_get_fan_param", side_effect=Exception("Sequence Error")
+            mock_broker.service_handler,
+            "async_get_fan_param",
+            side_effect=Exception("Sequence Error"),
         ),
-        patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_err,
+        patch("custom_components.ramses_cc.services._LOGGER.error") as mock_err,
     ):
-        await mock_broker._async_run_fan_param_sequence({"device_id": "30:111111"})
+        await mock_broker.service_handler._async_run_fan_param_sequence(
+            {"device_id": "30:111111"}
+        )
 
         # Should catch exception and log error, not raise
         assert mock_err.called
 
-        # Verify the log message format matches the code in broker.py
-        # args[0] is the message format string
-        # args[1] is the param_id
+        # Verify the log message format matches the code
         args = mock_err.call_args[0]
         assert args[0] == "Failed to get fan parameter %s for device: %s"
         assert args[1] == "0A"
 
 
 async def test_set_fan_param_generic_exception(mock_broker: RamsesBroker) -> None:
-    """Test the generic exception handler coverage in async_set_fan_param.
-
-    This test verifies that when the transport layer raises a generic Exception,
-    the broker correctly catches it, raises a HomeAssistantError, and
-    executes the necessary entity cleanup.
-
-    :param mock_broker: The mocked Ramses broker fixture.
-    :type mock_broker: RamsesBroker
-    """
+    """Test the generic exception handler coverage in async_set_fan_param."""
     # 1. Setup the transport failure
     mock_broker.client.async_send_cmd.side_effect = Exception("Transport Failure")
 
@@ -529,11 +532,11 @@ async def test_set_fan_param_generic_exception(mock_broker: RamsesBroker) -> Non
     # 3. Patch necessary internal methods and the Command builder
     with (
         patch.object(
-            mock_broker,
+            mock_broker.service_handler,
             "_get_device_and_from_id",
             return_value=("30:111111", "30_111111", "18:000000"),
         ),
-        patch("custom_components.ramses_cc.broker.Command") as mock_cmd,
+        patch("custom_components.ramses_cc.services.Command") as mock_cmd,
     ):
         mock_cmd.set_fan_param.return_value = MagicMock()
 
@@ -541,14 +544,14 @@ async def test_set_fan_param_generic_exception(mock_broker: RamsesBroker) -> Non
         with pytest.raises(HomeAssistantError, match="Failed to set fan parameter"):
             await mock_broker.async_set_fan_param(call_data)
 
-        # 5. Verify the cleanup mechanism was triggered (from the first test file)
+        # 5. Verify the cleanup mechanism was triggered
         mock_entity._clear_pending_after_timeout.assert_called_with(0)
 
 
 async def test_resolve_device_id_single_item_list(mock_broker: RamsesBroker) -> None:
     """Test resolving device ID from a list with exactly one item."""
     data: dict[str, Any] = {"device_id": ["30:111111"]}
-    resolved = mock_broker._resolve_device_id(data)
+    resolved = mock_broker.service_handler._resolve_device_id(data)
     assert resolved == "30:111111"
     assert data["device_id"] == "30:111111"
 
@@ -557,10 +560,10 @@ async def test_resolve_device_ha_id_string(mock_broker: RamsesBroker) -> None:
     """Test resolving device from 'device' field as string."""
     # Mock _target_to_device_id to return a RAMSES ID
     with patch.object(
-        mock_broker, "_target_to_device_id", return_value="30:111111"
+        mock_broker.service_handler, "_target_to_device_id", return_value="30:111111"
     ) as mock_target:
         data: dict[str, Any] = {"device": "ha_device_id_123"}
-        resolved = mock_broker._resolve_device_id(data)
+        resolved = mock_broker.service_handler._resolve_device_id(data)
         assert resolved == "30:111111"
         assert data["device_id"] == "30:111111"
         # Verify it called _target_to_device_id with the string wrapped in list
@@ -585,7 +588,7 @@ async def test_target_to_device_id_entity_string(
     )
 
     target = {"entity_id": entity.entity_id}  # String, not list
-    resolved = mock_broker._target_to_device_id(target)
+    resolved = mock_broker.service_handler._target_to_device_id(target)
     assert resolved == "30:123456"
 
 
@@ -602,7 +605,7 @@ async def test_target_to_device_id_device_string(
     )
 
     target = {"device_id": device.id}  # String (HA Device ID)
-    resolved = mock_broker._target_to_device_id(target)
+    resolved = mock_broker.service_handler._target_to_device_id(target)
     assert resolved == "30:654321"
 
 
@@ -619,10 +622,10 @@ async def test_set_fan_param_exception_handling(
         patch.object(
             mock_broker.fan_handler, "find_param_entity", return_value=mock_entity
         ),
-        patch("custom_components.ramses_cc.broker.Command") as mock_cmd,
+        patch("custom_components.ramses_cc.services.Command") as mock_cmd,
         # Patch device lookup to ensure we reach the logic
         patch.object(
-            mock_broker,
+            mock_broker.service_handler,
             "_get_device_and_from_id",
             return_value=("30:111111", "30_111111", "18:000000"),
         ),
@@ -649,25 +652,29 @@ async def test_run_fan_param_sequence_dict_fail(mock_broker: RamsesBroker) -> No
 
     # Mock data so dict(data) raises ValueError
     # Mock _normalize_service_call
-    class BadDict:
+    class BadData:
         def __init__(self) -> None:
             self.items = lambda: [("device_id", "30:111111")]
 
         def __iter__(self) -> Any:
             raise ValueError("Cannot iterate")
 
-    bad_data = BadDict()
+    bad_data = BadData()
 
-    with patch.object(mock_broker, "_normalize_service_call", return_value=bad_data):
+    with patch.object(
+        mock_broker.service_handler,
+        "_normalize_service_call",
+        return_value=bad_data,
+    ):
         # mocking async_get_fan_param to avoid actual calls
-        mock_broker.async_get_fan_param = AsyncMock()
+        mock_broker.service_handler.async_get_fan_param = AsyncMock()
 
-        await mock_broker._async_run_fan_param_sequence({})
+        await mock_broker.service_handler._async_run_fan_param_sequence({})
 
         # If it reached here without raising, and called async_get_fan_param, it worked
-        assert mock_broker.async_get_fan_param.called
+        assert mock_broker.service_handler.async_get_fan_param.called
         # Check arguments - should be a dict
-        args = mock_broker.async_get_fan_param.call_args[0][0]
+        args = mock_broker.service_handler.async_get_fan_param.call_args[0][0]
         assert isinstance(args, dict)
         assert args["device_id"] == "30:111111"
 
@@ -682,9 +689,9 @@ async def test_get_fan_param_value_error(mock_broker: RamsesBroker) -> None:
     }
     # Patch device lookup to succeed so we reach param ID check
     with (
-        patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_err,
+        patch("custom_components.ramses_cc.services._LOGGER.error") as mock_err,
         patch.object(
-            mock_broker,
+            mock_broker.service_handler,
             "_get_device_and_from_id",
             return_value=("30:111111", "30_111111", "18:000000"),
         ),
@@ -706,10 +713,10 @@ async def test_set_fan_param_exception_clears_pending(
         patch.object(
             mock_broker.fan_handler, "find_param_entity", return_value=mock_entity
         ),
-        patch("custom_components.ramses_cc.broker.Command") as mock_cmd_cls,
+        patch("custom_components.ramses_cc.services.Command") as mock_cmd_cls,
         # Patch device lookup so we don't fail early with 'No valid source'
         patch.object(
-            mock_broker,
+            mock_broker.service_handler,
             "_get_device_and_from_id",
             return_value=("30:111111", "30_111111", "18:000000"),
         ),
@@ -749,13 +756,12 @@ async def test_get_device_and_from_id_propagates_exceptions(
 ) -> None:
     """Test that exceptions during device lookup are propagated (not swallowed)."""
     # Mock _resolve_device_id to raise an arbitrary exception
-    # (Simulating a serious failure in lookup logic)
-    mock_broker._resolve_device_id = MagicMock(
+    mock_broker.service_handler._resolve_device_id = MagicMock(
         side_effect=ValueError("Critical Lookup Failure")
     )
 
     with pytest.raises(ValueError, match="Critical Lookup Failure"):
-        mock_broker._get_device_and_from_id({"device_id": "30:111111"})
+        mock_broker.service_handler._get_device_and_from_id({"device_id": "30:111111"})
 
 
 async def test_update_device_via_device_logic(
@@ -799,13 +805,15 @@ async def test_update_device_via_device_logic(
 
 async def test_adjust_sentinel_packet_early_return(mock_broker: RamsesBroker) -> None:
     """Test _adjust_sentinel_packet returns early if src/dst don't match."""
+    handler = RamsesServiceHandler(mock_broker)
+
     mock_broker.client.hgi.id = "18:006402"
     cmd = MagicMock()
     cmd.src.id = "18:999999"  # Not sentinel
     cmd.dst.id = "01:000000"  # Not HGI
 
-    with patch("custom_components.ramses_cc.broker.pkt_addrs") as mock_pkt_addrs:
-        mock_broker._adjust_sentinel_packet(cmd)
+    with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_pkt_addrs:
+        handler._adjust_sentinel_packet(cmd)
         mock_pkt_addrs.assert_not_called()
 
 
@@ -832,8 +840,10 @@ async def test_find_param_entity_missing_in_platform(
 
 async def test_resolve_device_id_list_warning(mock_broker: RamsesBroker) -> None:
     """Test that passing a list to device_id logs a warning."""
-    with patch("custom_components.ramses_cc.broker._LOGGER.warning") as mock_warn:
-        mock_broker._resolve_device_id({"device_id": ["30:111111", "30:222222"]})
+    with patch("custom_components.ramses_cc.services._LOGGER.warning") as mock_warn:
+        mock_broker.service_handler._resolve_device_id(
+            {"device_id": ["30:111111", "30:222222"]}
+        )
 
         assert mock_warn.called
         # Verify the call was made with the format string and specific arguments
@@ -886,15 +896,15 @@ async def test_get_fan_param_generic_exception(mock_broker: RamsesBroker) -> Non
 
     with (
         patch.object(
-            mock_broker,
+            mock_broker.service_handler,
             "_get_device_and_from_id",
             return_value=("30:111111", "30_111111", "18:000000"),
         ),
         patch.object(
             mock_broker.fan_handler, "find_param_entity", return_value=mock_entity
         ),
-        patch("custom_components.ramses_cc.broker.Command") as mock_cmd_cls,
-        patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_err,
+        patch("custom_components.ramses_cc.services.Command") as mock_cmd_cls,
+        patch("custom_components.ramses_cc.services._LOGGER.error") as mock_err,
     ):
         # Configure the side effect on the method, not the class constructor
         mock_cmd_cls.get_fan_param.side_effect = Exception("Unexpected Error")
@@ -912,7 +922,7 @@ async def test_get_fan_param_generic_exception(mock_broker: RamsesBroker) -> Non
 
 
 async def test_set_fan_param_value_error_in_command(mock_broker: RamsesBroker) -> None:
-    """Test ValueError raised during command creation in set_fan_param (line 1373)."""
+    """Test ValueError raised during command creation in set_fan_param."""
     call_data = {
         "device_id": "30:111111",
         "param_id": "0A",
@@ -922,11 +932,11 @@ async def test_set_fan_param_value_error_in_command(mock_broker: RamsesBroker) -
 
     with (
         patch.object(
-            mock_broker,
+            mock_broker.service_handler,
             "_get_device_and_from_id",
             return_value=("30:111111", "30_111111", "18:000000"),
         ),
-        patch("custom_components.ramses_cc.broker.Command") as mock_cmd,
+        patch("custom_components.ramses_cc.services.Command") as mock_cmd,
     ):
         mock_cmd.set_fan_param.side_effect = ValueError("Value out of range")
 
@@ -1019,11 +1029,11 @@ async def test_target_to_device_id_lists(
 
     # Test entity_id list
     target_ent = {"entity_id": [ent2.entity_id]}
-    assert mock_broker._target_to_device_id(target_ent) == "02:222222"
+    assert mock_broker.service_handler._target_to_device_id(target_ent) == "02:222222"
 
     # Test area_id list
     target_area = {"area_id": ["area1"]}
-    assert mock_broker._target_to_device_id(target_area) == "01:111111"
+    assert mock_broker.service_handler._target_to_device_id(target_area) == "01:111111"
 
 
 async def test_fan_bound_device_bad_config(mock_broker: RamsesBroker) -> None:
@@ -1098,22 +1108,23 @@ async def test_update_device_simple_device(mock_broker: RamsesBroker) -> None:
 async def test_run_fan_param_sequence_errors(mock_broker: RamsesBroker) -> None:
     """Test exception handlers in _async_run_fan_param_sequence loop."""
     # Patch the schema so the loop runs exactly twice
-    # We patch the import in the BROKER module, not the test module
     with (
-        patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", ["0A", "0B"]),
-        patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_err,
+        patch("custom_components.ramses_cc.services._2411_PARAMS_SCHEMA", ["0A", "0B"]),
+        patch("custom_components.ramses_cc.services._LOGGER.error") as mock_err,
     ):
         # Mock async_get_fan_param to raise errors
         # First call: HomeAssistantError
         # Second call: Generic Exception
-        mock_broker.async_get_fan_param = AsyncMock(
+        mock_broker.service_handler.async_get_fan_param = AsyncMock(
             side_effect=[
                 HomeAssistantError("Known error"),
                 Exception("Unknown error"),
             ]
         )
 
-        await mock_broker._async_run_fan_param_sequence({"device_id": "30:111111"})
+        await mock_broker.service_handler._async_run_fan_param_sequence(
+            {"device_id": "30:111111"}
+        )
 
         # Check that BOTH errors were logged (meaning the loop continued)
         assert mock_err.call_count == 2
@@ -1290,34 +1301,37 @@ def test_resolve_device_id_edge_cases(hass: HomeAssistant) -> None:
 
     # Test 1: device_id is an empty list
     data: dict[str, Any] = {"device_id": []}
-    assert broker._resolve_device_id(data) is None
+    assert broker.service_handler._resolve_device_id(data) is None
 
     # Test 2: device (HA ID) is an empty list
     data = {"device": []}
-    assert broker._resolve_device_id(data) is None
+    assert broker.service_handler._resolve_device_id(data) is None
 
     # Test 3: device (HA ID) is a list with multiple items (Logs warning)
     # Mock _target_to_device_id to return something valid
-    with patch.object(broker, "_target_to_device_id", return_value="18:123456"):
-        # Explicitly annotate data as dict[str, Any] to avoid Mypy overlap error
-        # when comparing data["device"] (initially list) with a string.
+    with patch.object(
+        broker.service_handler, "_target_to_device_id", return_value="18:123456"
+    ):
+        # Explicitly annotate data
         data = {"device": ["ha_id_1", "ha_id_2"]}
-        result = broker._resolve_device_id(data)
+        result = broker.service_handler._resolve_device_id(data)
         assert result == "18:123456"
         assert data["device"] == "ha_id_1"  # Should be flattened
 
     # Test 4: Simple string ID (Line 1052)
     data_str = {"device_id": "01:123456"}
-    assert broker._resolve_device_id(data_str) == "01:123456"
+    assert broker.service_handler._resolve_device_id(data_str) == "01:123456"
 
     # Test 5: Target dictionary (Lines 1075-1081)
-    with patch.object(broker, "_target_to_device_id", return_value="02:222222"):
+    with patch.object(
+        broker.service_handler, "_target_to_device_id", return_value="02:222222"
+    ):
         data_target: dict[str, Any] = {"target": {"entity_id": "climate.test"}}
-        assert broker._resolve_device_id(data_target) == "02:222222"
+        assert broker.service_handler._resolve_device_id(data_target) == "02:222222"
         assert data_target["device_id"] == "02:222222"
 
     # Test 6: No matching data (Line 1081)
-    assert broker._resolve_device_id({}) is None
+    assert broker.service_handler._resolve_device_id({}) is None
 
 
 async def test_get_fan_param_no_source(hass: HomeAssistant) -> None:
@@ -1350,7 +1364,7 @@ async def test_get_fan_param_sets_pending(hass: HomeAssistant) -> None:
     broker.client.async_send_cmd = AsyncMock()
 
     # Setup happy path for IDs using valid RAMSES ID format (XX:YYYYYY)
-    broker._get_device_and_from_id = MagicMock(
+    broker.service_handler._get_device_and_from_id = MagicMock(
         return_value=("32:111111", "32_111111", "18:000000")
     )
 
@@ -1380,9 +1394,9 @@ async def test_run_fan_param_sequence_dict_failure(hass: HomeAssistant) -> None:
             raise ValueError("Boom")
 
     # Mock normalize to return bad data
-    broker._normalize_service_call = MagicMock(return_value=BadData())
+    broker.service_handler._normalize_service_call = MagicMock(return_value=BadData())
 
-    await broker._async_run_fan_param_sequence({})
+    await broker.service_handler._async_run_fan_param_sequence({})
 
     # If it didn't raise, the exception was caught.
     # We can assume success if we reached here without crash.
@@ -1407,7 +1421,7 @@ async def test_set_fan_param_errors(hass: HomeAssistant) -> None:
 
     # 2. Generic Exception during send
     # Setup valid IDs
-    broker._get_device_and_from_id = MagicMock(
+    broker.service_handler._get_device_and_from_id = MagicMock(
         return_value=("32:111111", "32_111111", "18:000000")
     )
     # Mock Send to raise generic Exception
@@ -1418,10 +1432,9 @@ async def test_set_fan_param_errors(hass: HomeAssistant) -> None:
     broker.fan_handler.find_param_entity = MagicMock(return_value=mock_entity)
 
     # Patch Command.set_fan_param to skip validation for this test
-    # This prevents 'value out of range' errors before we reach the send_cmd call
     with (
         patch(
-            "custom_components.ramses_cc.broker.Command.set_fan_param",
+            "custom_components.ramses_cc.services.Command.set_fan_param",
             return_value="MOCK_CMD",
         ),
         pytest.raises(HomeAssistantError, match="Failed to set fan parameter"),
@@ -1475,7 +1488,7 @@ def test_get_param_id_missing_param(hass: HomeAssistant) -> None:
     with pytest.raises(
         ValueError, match=r"required key not provided @ data\['param_id'\]"
     ):
-        broker._get_param_id({})
+        broker.service_handler._get_param_id({})
 
 
 def test_resolve_device_id_from_ha_registry_id(hass: HomeAssistant) -> None:
@@ -1484,13 +1497,13 @@ def test_resolve_device_id_from_ha_registry_id(hass: HomeAssistant) -> None:
     broker = RamsesBroker(hass, entry)
 
     # Input data with an HA Device Registry ID (no colons/underscores)
-    # Using hyphens instead of underscores to ensure we bypass the RAMSES ID check
     data = {"device_id": "ha-registry-uuid-123"}
 
     # Mock successful resolution
-    # The code calls _target_to_device_id({"device_id": [device_id]})
-    with patch.object(broker, "_target_to_device_id", return_value="18:999999"):
-        result = broker._resolve_device_id(data)
+    with patch.object(
+        broker.service_handler, "_target_to_device_id", return_value="18:999999"
+    ):
+        result = broker.service_handler._resolve_device_id(data)
 
         # Verify return value is the resolved RAMSES ID
         assert result == "18:999999"
@@ -1504,9 +1517,9 @@ def test_get_device_and_from_id_resolve_failure(hass: HomeAssistant) -> None:
     entry = MagicMock()
     broker = RamsesBroker(hass, entry)
 
-    # Mock _resolve_device_id to return None, forcing the code to hit 'return "", "", ""'
-    with patch.object(broker, "_resolve_device_id", return_value=None):
-        result = broker._get_device_and_from_id({})
+    # Mock _resolve_device_id to return None
+    with patch.object(broker.service_handler, "_resolve_device_id", return_value=None):
+        result = broker.service_handler._get_device_and_from_id({})
 
         # Verify the "magic" empty tuple is returned
         assert result == ("", "", "")
@@ -1521,12 +1534,12 @@ def test_normalize_service_call_variants(hass: HomeAssistant) -> None:
     class MockCall:
         data = {"key": "value_from_attr"}
 
-    result_attr = broker._normalize_service_call(MockCall())
+    result_attr = broker.service_handler._normalize_service_call(MockCall())
     assert result_attr == {"key": "value_from_attr"}
 
     # 2. Test iterable/list of tuples (Hits 'else: data = dict(call)')
     call_iterable = [("key", "value_from_iter")]
-    result_iter = broker._normalize_service_call(call_iterable)
+    result_iter = broker.service_handler._normalize_service_call(call_iterable)
     assert result_iter == {"key": "value_from_iter"}
 
     # 3. Test object with target having .as_dict() (Hits 'if hasattr(target, "as_dict")')
@@ -1538,7 +1551,9 @@ def test_normalize_service_call_variants(hass: HomeAssistant) -> None:
         data = {"key": "val"}
         target = MockTarget()
 
-    result_target_method = broker._normalize_service_call(MockCallWithTarget())
+    result_target_method = broker.service_handler._normalize_service_call(
+        MockCallWithTarget()
+    )
     assert result_target_method["key"] == "val"
     assert result_target_method["target"] == {"entity_id": "climate.test"}
 
@@ -1547,7 +1562,9 @@ def test_normalize_service_call_variants(hass: HomeAssistant) -> None:
         data = {"key": "val"}
         target = {"area_id": "living_room"}
 
-    result_target_dict = broker._normalize_service_call(MockCallWithDictTarget())
+    result_target_dict = broker.service_handler._normalize_service_call(
+        MockCallWithDictTarget()
+    )
     assert result_target_dict["key"] == "val"
     assert result_target_dict["target"] == {"area_id": "living_room"}
 
@@ -1559,7 +1576,7 @@ async def test_get_fan_param_value_error_clears_pending(hass: HomeAssistant) -> 
     broker.client = MagicMock()
 
     # 1. Setup valid IDs to ensure we get past initial checks
-    broker._get_device_and_from_id = MagicMock(
+    broker.service_handler._get_device_and_from_id = MagicMock(
         return_value=("32:111111", "32_111111", "18:000000")
     )
 
@@ -1572,7 +1589,7 @@ async def test_get_fan_param_value_error_clears_pending(hass: HomeAssistant) -> 
     # 3. Patch Command.get_fan_param to raise ValueError
     # This ensures 'entity' is already assigned before the exception is raised
     with patch(
-        "custom_components.ramses_cc.broker.Command.get_fan_param",
+        "custom_components.ramses_cc.services.Command.get_fan_param",
         side_effect=ValueError("Simulated Error"),
     ):
         call = {"device_id": "32:111111", "param_id": "01"}
@@ -1591,13 +1608,13 @@ async def test_run_fan_param_sequence_normalization_error(hass: HomeAssistant) -
     # Patch _normalize_service_call to raise an exception immediately
     with (
         patch.object(
-            broker,
+            broker.service_handler,
             "_normalize_service_call",
             side_effect=ValueError("Normalization failed"),
         ),
-        patch("custom_components.ramses_cc.broker._LOGGER.error") as mock_error,
+        patch("custom_components.ramses_cc.services._LOGGER.error") as mock_error,
     ):
-        await broker._async_run_fan_param_sequence({})
+        await broker.service_handler._async_run_fan_param_sequence({})
 
         # Verify the error was logged
         assert mock_error.called
@@ -1613,7 +1630,7 @@ async def test_set_fan_param_value_error_clears_pending(hass: HomeAssistant) -> 
     broker.client = MagicMock()
 
     # 1. Setup valid IDs so execution proceeds past initial checks
-    broker._get_device_and_from_id = MagicMock(
+    broker.service_handler._get_device_and_from_id = MagicMock(
         return_value=("32:111111", "32_111111", "18:000000")
     )
 
@@ -1623,9 +1640,8 @@ async def test_set_fan_param_value_error_clears_pending(hass: HomeAssistant) -> 
     broker.fan_handler.find_param_entity = MagicMock(return_value=mock_entity)
 
     # 3. Patch Command.set_fan_param to raise ValueError
-    # This ensures 'entity' is already assigned before the exception is raised
     with patch(
-        "custom_components.ramses_cc.broker.Command.set_fan_param",
+        "custom_components.ramses_cc.services.Command.set_fan_param",
         side_effect=ValueError("Simulated Validation Error"),
     ):
         call = {"device_id": "32:111111", "param_id": "01", "value": 10}

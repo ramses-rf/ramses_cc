@@ -31,7 +31,10 @@ def mock_broker(hass: HomeAssistant) -> MagicMock:
     """Return a mock broker with required internal structures."""
     broker = MagicMock()
     broker._remotes = {REMOTE_ID: {"boost": VALID_PKT}}
-    broker._fan_bound_to_remote = {REMOTE_ID: "18:654321"}
+
+    # Updated: Mock fan_handler to support new architecture
+    broker.fan_handler = MagicMock()
+    broker.fan_handler._fan_bound_to_remote = {REMOTE_ID: "18:654321"}
 
     # Mock semaphore to support sync 'with' block as used in remote.py
     mock_sem = MagicMock()
@@ -44,9 +47,15 @@ def mock_broker(hass: HomeAssistant) -> MagicMock:
     broker.async_update = AsyncMock()
 
     # Async methods for fan params
+    # NOTE: Even though these now delegate to service_handler in the real broker,
+    # mocking them here on the broker instance is correct because RamsesRemote
+    # calls them on the broker instance.
     broker.async_get_fan_param = AsyncMock()
     broker.async_set_fan_param = AsyncMock()
     broker.get_all_fan_params = MagicMock()
+
+    # Proactive: Mock service_handler just in case logic traverses it
+    broker.service_handler = MagicMock()
 
     return broker
 
@@ -161,7 +170,6 @@ async def test_remote_send_command_exceptions(remote_entity: RamsesRemote) -> No
 async def test_remote_add_command(remote_entity: RamsesRemote) -> None:
     """Test async_add_command logic."""
     # Invalid packet string raises ValueError
-    # Fix SIM117: Combined nested with statements
     with (
         patch(
             "custom_components.ramses_cc.remote.Command",
@@ -536,6 +544,7 @@ async def test_fan_param_methods(
 
     # 1. Setup Mock Broker first
     mock_broker = MagicMock()
+    mock_broker.fan_handler = MagicMock()
     mock_broker.fan_handler._fan_bound_to_remote = {device_id: fan_id}
 
     mock_broker.async_get_fan_param = AsyncMock()
