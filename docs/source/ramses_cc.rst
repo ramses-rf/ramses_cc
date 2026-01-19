@@ -12,14 +12,6 @@ ramses\_cc.binary\_sensor module
    :show-inheritance:
    :undoc-members:
 
-ramses\_cc.broker module
-------------------------
-
-.. automodule:: ramses_cc.broker
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 ramses\_cc.climate module
 -------------------------
 
@@ -44,6 +36,38 @@ ramses\_cc.const module
    :show-inheritance:
    :undoc-members:
 
+ramses\_cc.coordinator module
+-----------------------------
+
+.. automodule:: ramses_cc.coordinator
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_cc.entity module
+------------------------
+
+.. automodule:: ramses_cc.entity
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_cc.fan\_handler module
+------------------------------
+
+.. automodule:: ramses_cc.fan_handler
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_cc.helpers module
+-------------------------
+
+.. automodule:: ramses_cc.helpers
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_cc.number module
 ------------------------
 
@@ -51,7 +75,6 @@ ramses\_cc.number module
    :members:
    :show-inheritance:
    :undoc-members:
-   :exclude-members:
 
 ramses\_cc.remote module
 ------------------------
@@ -77,6 +100,22 @@ ramses\_cc.sensor module
    :show-inheritance:
    :undoc-members:
 
+ramses\_cc.services module
+--------------------------
+
+.. automodule:: ramses_cc.services
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_cc.store module
+-----------------------
+
+.. automodule:: ramses_cc.store
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_cc.water\_heater module
 -------------------------------
 
@@ -84,7 +123,6 @@ ramses\_cc.water\_heater module
    :members:
    :show-inheritance:
    :undoc-members:
-   :exclude-members:
 
 Module contents
 ---------------
