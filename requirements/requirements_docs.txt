@@ -1,17 +1,15 @@
 # Requirements to build the code documentation from the source code
-# - last checked/updated: 2026-01-11 (c.f. HA 2026.1.0)
+# - last checked/updated: 2026-01-19 (c.f. HA 2026.1.2)
 
 # libraries required to build with sphinx
 # - pip list | grep -E 'sphinx|myst|furo'
 
 # used for generating docs
-# (Note: markdown-it-py==3.x for myst-parser 4.0.1)
-# (Note: sphinx <10 for furo 2025.12.19)
-# (Note: sphinx <9 for myst-parser 4.0.1)
+# (Note: sphinx <10 for furo 2025.12.19 and sphinx_design 0.7.0)
     furo==2025.12.19
-    markdown-it-py==3.0.0
-    myst-parser==4.0.1
-    Sphinx==8.2.3
-    sphinxcontrib-mermaid==1.2.3
+    markdown-it-py==4.0.0
+    myst-parser==5.0.0
+    Sphinx==9.1.0
+    sphinxcontrib-mermaid==2.0.0
     sphinx-basic-ng==1.0.0b2
-    sphinx_design==0.6.1
+    sphinx_design==0.7.0
