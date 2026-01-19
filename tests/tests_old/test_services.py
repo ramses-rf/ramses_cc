@@ -303,7 +303,7 @@ async def entry(hass: HomeAssistant) -> AsyncGenerator[ConfigEntry]:
     rf.set_gateway(rf.ports[0], "18:006402")
 
     with patch(
-        "custom_components.ramses_cc.broker._CALL_LATER_DELAY", _CALL_LATER_DELAY
+        "custom_components.ramses_cc.services._CALL_LATER_DELAY", _CALL_LATER_DELAY
     ):
         entry: ConfigEntry = None
         try:

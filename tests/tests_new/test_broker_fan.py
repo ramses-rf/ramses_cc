@@ -264,33 +264,39 @@ async def test_param_validation_logic(mock_broker: RamsesBroker) -> None:
     """
     # 1. Invalid Parameter ID - Not Hex
     try:
-        mock_broker._get_param_id({"param_id": "ZZ"})
+        mock_broker.service_handler._get_param_id({"param_id": "ZZ"})
         pytest.fail("Should have raised ValueError for non-hex param_id")
     except ValueError:
         pass
 
     # 2. Invalid Parameter ID - Too Long
     try:
-        mock_broker._get_param_id({"param_id": "123"})
+        mock_broker.service_handler._get_param_id({"param_id": "123"})
         pytest.fail("Should have raised ValueError for long param_id")
     except ValueError:
         pass
 
     # 3. Valid Parameter ID
-    assert mock_broker._get_param_id({"param_id": "75"}) == "75"
+    assert mock_broker.service_handler._get_param_id({"param_id": "75"}) == "75"
     assert (
-        mock_broker._get_param_id({"param_id": 75}) == "75"
+        mock_broker.service_handler._get_param_id({"param_id": 75}) == "75"
     )  # Hex 4B is Int 75 (if passed as int/string mix up)
 
     # 4. Device Resolution (Target to ID)
-    assert mock_broker._resolve_device_id({"device_id": FAN_ID}) == FAN_ID
-    assert mock_broker._resolve_device_id({"device_id": [FAN_ID]}) == FAN_ID
+    # The broker.service_handler handles this now, access via handler
+    assert (
+        mock_broker.service_handler._resolve_device_id({"device_id": FAN_ID}) == FAN_ID
+    )
+    assert (
+        mock_broker.service_handler._resolve_device_id({"device_id": [FAN_ID]})
+        == FAN_ID
+    )
 
 
 async def test_update_fan_params_sequence(
     mock_broker: RamsesBroker,
     mock_gateway: MagicMock,
-    mock_fan_device: MagicMock,  # <--- Added fixture here
+    mock_fan_device: MagicMock,
 ) -> None:
     """Test the sequential update of fan parameters with mocked schema.
 
@@ -312,11 +318,12 @@ async def test_update_fan_params_sequence(
 
     # Patch the schema AND asyncio.sleep in a single with-statement (SIM117)
     with (
-        patch("custom_components.ramses_cc.broker._2411_PARAMS_SCHEMA", tiny_schema),
+        patch("custom_components.ramses_cc.services._2411_PARAMS_SCHEMA", tiny_schema),
         patch("asyncio.sleep", new_callable=AsyncMock),
     ):
         call_data = {"device_id": FAN_ID}
-        await mock_broker._async_run_fan_param_sequence(call_data)
+        # Call the method on service_handler, NOT directly on broker
+        await mock_broker.service_handler._async_run_fan_param_sequence(call_data)
 
     # Verify that exactly 2 commands were sent (one for each param in tiny_schema)
     assert mock_gateway.async_send_cmd.call_count == 2
