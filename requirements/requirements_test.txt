@@ -14,4 +14,4 @@
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest
   # coverage >= 7.10.6 included in next item
-  pytest_homeassistant_custom_component >= 0.13.305
+  pytest_homeassistant_custom_component >= 0.13.307
