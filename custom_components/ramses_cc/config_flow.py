@@ -70,6 +70,7 @@ _LOGGER = logging.getLogger(__name__)
 CONF_MANUAL_PATH: Final = "Enter Manually..."  # TODO i18n this string
 CONF_MQTT_PATH: Final = "MQTT Broker..."
 CONF_HA_MQTT_PATH: Final = "Use Home Assistant MQTT - In development!"
+CONF_ZIGBEE_DEVICE: Final = "Choose Zigbee device"
 
 
 def get_usb_ports() -> dict[str, str]:
@@ -218,6 +219,8 @@ class BaseRamsesFlow(FlowHandler):
                     if self._initial_setup:
                         return await self.async_step_config()
                     return self._async_save()
+            elif port_name == CONF_ZIGBEE_DEVICE:
+                return await self.async_step_zigbee_device()
             elif port_name == CONF_MANUAL_PATH:
                 self._manual_serial_port = True
             else:
@@ -247,6 +250,7 @@ class BaseRamsesFlow(FlowHandler):
         # Always add options
         ports[CONF_HA_MQTT_PATH] = mqtt_label
         ports[CONF_MQTT_PATH] = CONF_MQTT_PATH
+        ports[CONF_ZIGBEE_DEVICE] = CONF_ZIGBEE_DEVICE
         ports[CONF_MANUAL_PATH] = CONF_MANUAL_PATH
 
         port_name = self.options[SZ_SERIAL_PORT].get(SZ_PORT_NAME)
@@ -365,6 +369,57 @@ class BaseRamsesFlow(FlowHandler):
             errors={},
             last_step=False,
         )
+
+    async def async_step_zigbee_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Allow user to select a Zigbee device."""
+        
+        _LOGGER.info("=== Entered async_step_zigbee_device ===")
+        _LOGGER.info(f"user_input: {user_input}")
+        
+        try:
+            if user_input is not None:
+                # Construct Zigbee URL from user input
+                ieee = user_input.get("ieee")
+                cluster = user_input.get("cluster", "0xfc00")
+                attr = user_input.get("attr", "0x0000")
+                endpoint = int(user_input.get("endpoint", 10))
+                write_cluster = user_input.get("write_cluster", "0xfc01")
+                write_attr = user_input.get("write_attr", "0x0000")
+                write_endpoint = int(user_input.get("write_endpoint", 10))
+
+                zigbee_url = f"zigbee://{ieee}/{cluster}/{attr}/{endpoint}/{write_cluster}/{write_attr}/{write_endpoint}"
+                _LOGGER.info(f"Constructed Zigbee URL: {zigbee_url}")
+                self.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = zigbee_url
+                return await self.async_step_configure_serial_port()
+
+            # Define the form schema for Zigbee device configuration
+            _LOGGER.info("Creating form schema...")
+            data_schema = {
+                vol.Required("ieee"): selector.TextSelector(),
+                vol.Optional("cluster", default="0xfc00"): selector.TextSelector(),
+                vol.Optional("attr", default="0x0000"): selector.TextSelector(),
+                vol.Optional("endpoint", default=10): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=1, max=255, mode=selector.NumberSelectorMode.BOX)
+                ),
+                vol.Optional("write_cluster", default="0xfc01"): selector.TextSelector(),
+                vol.Optional("write_attr", default="0x0000"): selector.TextSelector(),
+                vol.Optional("write_endpoint", default=10): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=1, max=255, mode=selector.NumberSelectorMode.BOX)
+                ),
+            }
+            
+            _LOGGER.info("Showing form...")
+            return self.async_show_form(
+                step_id="zigbee_device",
+                data_schema=vol.Schema(data_schema),
+                errors={},
+                last_step=False,
+            )
+        except Exception as err:
+            _LOGGER.error(f"EXCEPTION in async_step_zigbee_device: {err}", exc_info=True)
+            raise
 
     async def async_step_configure_serial_port(
         self, user_input: dict[str, Any] | None = None

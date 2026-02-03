@@ -163,6 +163,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         hass.data[DOMAIN].pop(entry.entry_id, None)  # Clean up if setup fails
         raise ConfigEntryNotReady(msg) from err
+    except Exception as err:
+        _LOGGER.error(
+            "Unexpected error during setup of entry %s: %s", entry.entry_id, err, exc_info=True
+        )
+        hass.data[DOMAIN].pop(entry.entry_id, None)  # Clean up if setup fails
+        raise ConfigEntryNotReady(f"Setup failed: {err}") from err
 
     # Start the coordinator after successful setup
     await coordinator.async_start()
