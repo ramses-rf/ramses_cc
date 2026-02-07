@@ -6,7 +6,7 @@
 
   aiousbwatcher         >= 1.1.1                 # as per: manifest.json latest: 1.1.1
   pyserial-asyncio-fast >= 0.16                  # as per: manifest.json latest: 0.16
-  ramses-rf             == 0.54.0                # as per: manifest.json latest:
+  ramses-rf             == 0.54.1                # as per: manifest.json latest:
   pycares               == 4.9.0                 # pinned for compatibility of ha_cc
                                                  # (ha_cc aiodns 3.5.0 not yet compatible with pycares 5.x)
 
@@ -14,7 +14,7 @@
 # - pip list | grep -E 'prek|ruff|mypy|types-|voluptuous'
 
 # used for development (linting)
-    prek==0.3.1                                  # same as HA core 2026.1.2
+    prek == 0.3.1                                # same as HA core 2026.1.2
     ruff >= 0.13.0                               # latest: 0.15.0 See also: pre-commit-config.yaml
 
 # used for development (typing)
