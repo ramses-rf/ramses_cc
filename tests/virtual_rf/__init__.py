@@ -82,7 +82,7 @@ async def rf_factory(
         # Port already created by VirtualRf.__init__, just attach gateway info
         rf.set_gateway(rf.ports[idx], hgi_id, fw_type=HgiFwTypes.__members__[fw_type])
 
-        with patch("ramses_tx.transport.comports", rf.comports):
+        with patch("serial.tools.list_ports.comports", rf.comports):
             gwy = Gateway(rf.ports[idx], **schema)
         gwys.append(gwy)
 

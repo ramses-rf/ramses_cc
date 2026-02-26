@@ -29,7 +29,7 @@ from homeassistant.util import dt as dt_util
 from ramses_rf.device import Device
 from ramses_rf.device.hvac import HvacRemoteBase, HvacVentilator
 from ramses_rf.entity_base import Child, Entity as RamsesRFEntity
-from ramses_rf.gateway import Gateway
+from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.system import Evohome, System, Zone
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.schemas import extract_serial_port
@@ -280,11 +280,44 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
     def _create_client(self, schema: dict[str, Any]) -> Gateway:
         """Create and configure a new RAMSES client instance."""
+
+        # 1. Get the raw dict config from HA options
+        raw_config = self.options.get(CONF_RAMSES_RF, {}).copy()
+
+        # 2. Identify which keys belong to the new GatewayConfig dataclass
+        valid_config_keys = set(inspect.signature(GatewayConfig).parameters.keys())
+
+        # 3. Identify which keys belong directly to Gateway.__init__
+        valid_gateway_keys = set(inspect.signature(Gateway.__init__).parameters.keys())
+
+        # 4. Split the dict: GatewayConfig args vs Gateway __init__ args
+        gwy_config_args = {
+            k: v for k, v in raw_config.items() if k in valid_config_keys
+        }
+
+        # Drop any deprecated keys that don't belong to either!
+        handled_keys = {
+            "self",
+            "kwargs",
+            "config",
+            "schema",
+            "packet_log",
+            "known_list",
+            "port_name",
+            "loop",
+        }
+        gateway_kwargs = {
+            k: v
+            for k, v in raw_config.items()
+            if k in valid_gateway_keys and k not in handled_keys
+        }
+
         kwargs = {
             "packet_log": self.options.get(SZ_PACKET_LOG, {}),
             "known_list": self.options.get(SZ_KNOWN_LIST, {}),
-            "config": self.options.get(CONF_RAMSES_RF, {}),
-            **schema,
+            "config": GatewayConfig(**gwy_config_args),
+            "schema": schema,
+            **gateway_kwargs,
         }
 
         # Check for HA MQTT Strategy

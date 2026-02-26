@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import patch
@@ -30,17 +31,21 @@ def snapshot(snapshot: SnapshotAssertion) -> SnapshotAssertion:
 
 @pytest.fixture(autouse=True)
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
-    # try:
-    monkeypatch.setattr("ramses_tx.protocol._DBG_DISABLE_IMPERSONATION_ALERTS", True)
-    # nkeypatch.setattr("ramses_tx.protocol._DBG_DISABLE_QOS", True)
-    # nkeypatch.setattr("ramses_tx.protocol._DBG_FORCE_LOG_PACKETS", True)
-    monkeypatch.setattr("ramses_tx.transport._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
-    monkeypatch.setattr("ramses_tx.transport._DBG_DISABLE_REGEX_WARNINGS", True)
-    # nkeypatch.setattr("ramses_tx.transport._DBG_FORCE_FRAME_LOGGING", True)
-    monkeypatch.setattr("ramses_tx.transport.MIN_INTER_WRITE_GAP", 0)
+    """Apply necessary monkeypatches before running tests."""
 
-    # except AttributeError:
-    #     monkeypatch.setattr("ramses_tx.protocol._GAP_BETWEEN_WRITES", 0)
+    with contextlib.suppress(AttributeError):
+        monkeypatch.setattr(
+            "ramses_tx.protocol._DBG_DISABLE_IMPERSONATION_ALERTS",
+            True,
+        )
+        monkeypatch.setattr("ramses_tx.transport._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
+        monkeypatch.setattr("ramses_tx.transport._DBG_DISABLE_REGEX_WARNINGS", True)
+        monkeypatch.setattr("ramses_tx.transport.MIN_INTER_WRITE_GAP", 0)
+
+    # monkeypatch.setattr("ramses_tx.protocol._DBG_DISABLE_QOS", True)
+    # monkeypatch.setattr("ramses_tx.protocol._DBG_FORCE_LOG_PACKETS", True)
+    # monkeypatch.setattr("ramses_tx.transport._DBG_FORCE_FRAME_LOGGING", True)
+    # monkeypatch.setattr("ramses_tx.protocol._GAP_BETWEEN_WRITES", 0)
 
 
 @pytest.fixture()  # add hass fixture to ensure hass/rf use same event loop
@@ -50,7 +55,7 @@ async def rf(hass: HomeAssistant) -> AsyncGenerator[Any]:
     rf = VirtualRf(2)
     rf.set_gateway(rf.ports[0], "18:006402")
 
-    with patch("ramses_tx.transport.comports", rf.comports):
+    with patch("serial.tools.list_ports.comports", rf.comports):
         try:
             yield rf
         finally:
