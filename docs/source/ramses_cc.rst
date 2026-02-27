@@ -68,6 +68,14 @@ ramses\_cc.helpers module
    :show-inheritance:
    :undoc-members:
 
+ramses\_cc.mqtt\_bridge module
+------------------------------
+
+.. automodule:: ramses_cc.mqtt_bridge
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_cc.number module
 ------------------------
 
