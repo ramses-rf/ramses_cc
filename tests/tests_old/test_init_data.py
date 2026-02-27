@@ -71,7 +71,7 @@ async def rf(hass: HomeAssistant) -> AsyncGenerator[Any]:
     rf = VirtualRf(2)
     rf.set_gateway(rf.ports[0], "18:006402")
 
-    with patch("ramses_tx.transport.comports", rf.comports):
+    with patch("serial.tools.list_ports.comports", rf.comports):
         try:
             yield rf
         finally:

@@ -32,7 +32,7 @@ from custom_components.ramses_cc.coordinator import RamsesCoordinator
 from custom_components.ramses_cc.helpers import as_iso
 from custom_components.ramses_cc.sensor import SENSOR_DESCRIPTIONS
 from custom_components.ramses_cc.water_heater import WATER_HEATER_DESCRIPTIONS
-from ramses_rf.gateway import Gateway
+from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.system import Evohome
 
 from .helpers import TEST_DIR
@@ -54,12 +54,17 @@ async def instantiate_entities(
     list[BinarySensorEntity],
     list[SensorEntity],
 ]:
-    with open(f"{TEST_DIR}/{INPUT_FILE}") as f:
-        gwy: Gateway = Gateway(
-            port_name=None, input_file=f, config={"disable_discovery": True}
-        )
-        await gwy.start()
-        await gwy.stop()  # have to stop MessageIndex thread, aka: gwy.msg_db.stop()
+    # 1. Provide the string path instead of an open file object
+    log_path = f"{TEST_DIR}/{INPUT_FILE}"
+
+    gwy: Gateway = Gateway(
+        port_name=None,
+        input_file=log_path,
+        config=GatewayConfig(disable_discovery=True),
+        disable_qos=True,  # 2. Bypass QoS to process the log instantly
+    )
+    await gwy.start()
+    await gwy.stop()  # have to stop MessageIndex thread, aka: gwy.msg_db.stop()
 
     coordinator: RamsesCoordinator = MockRamsesCoordinator(hass)
 

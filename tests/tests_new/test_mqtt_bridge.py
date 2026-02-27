@@ -158,8 +158,8 @@ async def test_bridge_flow(
         mock_transport.receive_frame.assert_called_with(expected_frame)
 
         # 10. Test OUTBOUND (Transport Writer -> MQTT)
-        call_kwargs = mock_transport_cls.call_args[1]
-        io_writer = call_kwargs["io_writer"]
+        call_args = mock_transport_cls.call_args[0]
+        io_writer = call_args[1]
 
         # A. Test TX Packet
         tx_frame = "RP --- 01:000000 18:123456 --:------ 0005 002 0000"
@@ -349,8 +349,8 @@ async def test_bridge_writer_errors(
     )
     with patch(transport_cls) as mock_transport_cls:
         await bridge.async_transport_factory(mock_protocol)
-        call_kwargs = mock_transport_cls.call_args[1]
-        io_writer = call_kwargs["io_writer"]
+        call_args = mock_transport_cls.call_args[0]
+        io_writer = call_args[1]
 
         # Test TypeError during JSON encoding
         # We patch json.dumps specifically in the mqtt_bridge module

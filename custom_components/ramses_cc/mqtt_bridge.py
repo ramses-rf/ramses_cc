@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 
-from ramses_tx.transport import CallbackTransport
+from ramses_tx.transport import CallbackTransport, TransportConfig
 
 if TYPE_CHECKING:
     from homeassistant.components.mqtt import PublishPayloadType
@@ -88,16 +88,22 @@ class RamsesMqttBridge:
 
         # 3. Instantiate CallbackTransport (Step B in API Guide)
 
-        # FIX: ramses_tx passes 'autostart' in kwargs, which conflicts with our explicit arg.
-        # We pop it here to prevent the "multiple values for keyword argument" error.
+        # Extract config from kwargs if provided (e.g. by ramses_rf.Gateway),
+        # otherwise create a default one (e.g. during standalone tests).
+        config = kwargs.pop("config", None)
+        if config is None:
+            config = TransportConfig(
+                disable_sending=disable_sending,
+            )
+
+        # Remove old kwargs that CallbackTransport.__init__ no longer accepts
         kwargs.pop("autostart", None)
 
         self._transport = CallbackTransport(
             protocol,
-            io_writer=mqtt_packet_sender,
-            disable_sending=disable_sending,
+            mqtt_packet_sender,  # <-- Passed as POSITIONAL argument
+            config=config,  # <-- Passed via the new config object
             extra=extra,
-            autostart=True,
             **kwargs,
         )
 
