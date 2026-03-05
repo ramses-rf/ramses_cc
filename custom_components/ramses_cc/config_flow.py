@@ -20,7 +20,11 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowHandler, FlowResult
-from homeassistant.helpers import config_validation as cv, selector
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    selector,
+)
 from homeassistant.helpers.storage import Store
 from serial.tools import list_ports  # type: ignore[import-untyped]
 
@@ -250,7 +254,28 @@ class BaseRamsesFlow(FlowHandler):
         # Always add options
         ports[CONF_HA_MQTT_PATH] = mqtt_label
         ports[CONF_MQTT_PATH] = CONF_MQTT_PATH
-        ports[CONF_ZIGBEE_DEVICE] = CONF_ZIGBEE_DEVICE
+
+        # If exactly one ramses_esp32c6 Zigbee device is present, show its
+        # friendly name in the selector label. Otherwise show a generic label.
+        try:
+            dev_reg = dr.async_get(self.hass)
+            matches = [
+                dev
+                for dev in getattr(dev_reg, "devices", {}).values()
+                if "ramses_esp32c6" in (dev.model or "").lower()
+            ]
+            if len(matches) == 1:
+                raw_name = matches[0].name or matches[0].name_by_user or matches[0].id
+                display_name = (
+                    raw_name.split(" ", 1)[1].strip() if " " in raw_name else raw_name
+                )
+                zigbee_label = f"Zigbee device: {display_name}"
+            else:
+                zigbee_label = "Zigbee device"
+        except Exception:
+            zigbee_label = "Zigbee device"
+
+        ports[CONF_ZIGBEE_DEVICE] = zigbee_label
         ports[CONF_MANUAL_PATH] = CONF_MANUAL_PATH
 
         port_name = self.options[SZ_SERIAL_PORT].get(SZ_PORT_NAME)
@@ -374,51 +399,126 @@ class BaseRamsesFlow(FlowHandler):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Allow user to select a Zigbee device."""
-        
-        _LOGGER.info("=== Entered async_step_zigbee_device ===")
-        _LOGGER.info(f"user_input: {user_input}")
-        
-        try:
-            if user_input is not None:
-                # Construct Zigbee URL from user input
-                ieee = user_input.get("ieee")
-                cluster = user_input.get("cluster", "0xfc00")
-                attr = user_input.get("attr", "0x0000")
-                endpoint = int(user_input.get("endpoint", 10))
-                write_cluster = user_input.get("write_cluster", "0xfc01")
-                write_attr = user_input.get("write_attr", "0x0000")
-                write_endpoint = int(user_input.get("write_endpoint", 10))
+        _LOGGER.debug("Entered async_step_zigbee_device; showing device selector")
 
-                zigbee_url = f"zigbee://{ieee}/{cluster}/{attr}/{endpoint}/{write_cluster}/{write_attr}/{write_endpoint}"
-                _LOGGER.info(f"Constructed Zigbee URL: {zigbee_url}")
+        try:
+            dev_reg = dr.async_get(self.hass)
+
+            # If the user submitted a device (from a multi-device selector), handle it.
+            if user_input is not None and "device" in user_input:
+                device_id = user_input.get("device")
+                device_entry = dev_reg.async_get(device_id)
+                if not device_entry:
+                    return self.async_show_form(
+                        step_id="zigbee_device",
+                        data_schema=vol.Schema(
+                            {vol.Required("device"): selector.DeviceSelector()}
+                        ),
+                        errors={"device": "device_not_found"},
+                        last_step=False,
+                    )
+
+                ieee = None
+                for _domain, ident in device_entry.identifiers:
+                    s = str(ident)
+                    if re.fullmatch(r"[0-9A-Fa-f:]{8,}", s):
+                        ieee = s
+                        break
+
+                if not ieee:
+                    return self.async_show_form(
+                        step_id="zigbee_device",
+                        data_schema=vol.Schema(
+                            {vol.Required("device"): selector.DeviceSelector()}
+                        ),
+                        errors={"device": "no_ieee_identifier"},
+                        last_step=False,
+                    )
+
+                zigbee_url = f"zigbee://{ieee}/0xfc00/0x0000/10/0xfc01/0x0000/10"
+                _LOGGER.info(
+                    "Constructed Zigbee URL from device %s: %s", device_id, zigbee_url
+                )
                 self.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = zigbee_url
                 return await self.async_step_configure_serial_port()
 
-            # Define the form schema for Zigbee device configuration
-            _LOGGER.info("Creating form schema...")
-            data_schema = {
-                vol.Required("ieee"): selector.TextSelector(),
-                vol.Optional("cluster", default="0xfc00"): selector.TextSelector(),
-                vol.Optional("attr", default="0x0000"): selector.TextSelector(),
-                vol.Optional("endpoint", default=10): selector.NumberSelector(
-                    selector.NumberSelectorConfig(min=1, max=255, mode=selector.NumberSelectorMode.BOX)
-                ),
-                vol.Optional("write_cluster", default="0xfc01"): selector.TextSelector(),
-                vol.Optional("write_attr", default="0x0000"): selector.TextSelector(),
-                vol.Optional("write_endpoint", default=10): selector.NumberSelector(
-                    selector.NumberSelectorConfig(min=1, max=255, mode=selector.NumberSelectorMode.BOX)
-                ),
-            }
-            
-            _LOGGER.info("Showing form...")
+            # No submission yet — find matching devices.
+            matches = [
+                dev
+                for dev in getattr(dev_reg, "devices", {}).values()
+                if "ramses_esp32c6" in (dev.model or "").lower()
+            ]
+
+            if len(matches) == 0:
+                return self.async_show_form(
+                    step_id="zigbee_device",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(
+                                "retry", default=False
+                            ): selector.BooleanSelector()
+                        }
+                    ),
+                    errors={"base": "no_ramses_device_found"},
+                    last_step=False,
+                )
+
+            if len(matches) == 1:
+                candidate = matches[0]
+                ieee = None
+                for _domain, ident in candidate.identifiers:
+                    s = str(ident)
+                    if re.fullmatch(r"[0-9A-Fa-f:]{8,}", s):
+                        ieee = s
+                        break
+
+                if not ieee:
+                    return self.async_show_form(
+                        step_id="zigbee_device",
+                        data_schema=vol.Schema(
+                            {
+                                vol.Required(
+                                    "retry", default=False
+                                ): selector.BooleanSelector()
+                            }
+                        ),
+                        errors={"base": "no_ieee_identifier"},
+                        last_step=False,
+                    )
+
+                zigbee_url = f"zigbee://{ieee}/0xfc00/0x0000/10/0xfc01/0x0000/10"
+                _LOGGER.info(
+                    "Auto-constructed Zigbee URL from device %s: %s",
+                    candidate.id,
+                    zigbee_url,
+                )
+                self.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = zigbee_url
+                return await self.async_step_configure_serial_port()
+
+            # Multiple matches: present a selector for the user to choose.
+            options = [
+                selector.SelectOptionDict(
+                    value=dev.id,
+                    label=dev.name or dev.name_by_user or dev.id,
+                )
+                for dev in matches
+            ]
             return self.async_show_form(
                 step_id="zigbee_device",
-                data_schema=vol.Schema(data_schema),
+                data_schema=vol.Schema(
+                    {
+                        vol.Required("device"): selector.SelectSelector(
+                            selector.SelectSelectorConfig(options=options)
+                        )
+                    }
+                ),
                 errors={},
                 last_step=False,
             )
         except Exception as err:
-            _LOGGER.error(f"EXCEPTION in async_step_zigbee_device: {err}", exc_info=True)
+            _LOGGER.error(
+                "EXCEPTION in async_step_zigbee_device: %s", err, exc_info=True
+            )
             raise
 
     async def async_step_configure_serial_port(

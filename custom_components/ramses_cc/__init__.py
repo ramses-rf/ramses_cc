@@ -165,7 +165,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(msg) from err
     except Exception as err:
         _LOGGER.error(
-            "Unexpected error during setup of entry %s: %s", entry.entry_id, err, exc_info=True
+            "Unexpected error during setup of entry %s: %s",
+            entry.entry_id,
+            err,
+            exc_info=True,
         )
         hass.data[DOMAIN].pop(entry.entry_id, None)  # Clean up if setup fails
         raise ConfigEntryNotReady(f"Setup failed: {err}") from err
@@ -200,8 +203,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not await coordinator.async_unload_platforms():
         return False
 
-    for svc in hass.services.async_services_for_domain(DOMAIN):
-        hass.services.async_remove(DOMAIN, svc)
+    # Only remove domain-level services registered in async_register_domain_services.
+    # Entity platform services (registered once in async_setup) must NOT be removed
+    # here because async_setup is not called again on reload, which would cause
+    # "Action ramses_cc.<service> not found" errors after every reload.
+    _domain_services = {
+        SVC_BIND_DEVICE,
+        SVC_FORCE_UPDATE,
+        SVC_SEND_PACKET,
+        SVC_SET_FAN_PARAM,
+        SVC_GET_FAN_PARAM,
+        SVC_UPDATE_FAN_PARAMS,
+    }
+    for svc in _domain_services:
+        if hass.services.has_service(DOMAIN, svc):
+            hass.services.async_remove(DOMAIN, svc)
 
     hass.data[DOMAIN].pop(entry.entry_id)
 

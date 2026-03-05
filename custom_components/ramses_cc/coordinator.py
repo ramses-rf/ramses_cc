@@ -289,9 +289,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # Detect the transport type from port_name / flags.
         _serial_port_opts = self.options.get(SZ_SERIAL_PORT, {})
         _port_name_raw = _serial_port_opts.get(SZ_PORT_NAME, "")
-        _is_zigbee = (
-            isinstance(_port_name_raw, str)
-            and _port_name_raw.startswith("zigbee://")
+        _is_zigbee = isinstance(_port_name_raw, str) and _port_name_raw.startswith(
+            "zigbee://"
         )
         _is_mqtt = self.options.get(CONF_MQTT_USE_HA) or (
             isinstance(_port_name_raw, str) and _port_name_raw.startswith("mqtt")
@@ -306,10 +305,12 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 loop=self.hass.loop,
                 **kwargs,
             )
-            client._extra.update({
-                "_hass": self.hass,
-                SZ_IS_EVOFW3: True,
-            })
+            client._extra.update(
+                {
+                    "_hass": self.hass,
+                    SZ_IS_EVOFW3: True,
+                }
+            )
             return client
 
         elif _is_mqtt:
@@ -354,10 +355,12 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # NOTE: SZ_IS_EVOFW3=True enables address patching in ramses_tx protocol.
             # Required because the MQTT transport masquerades like evofw3,
             # not a strict HGI80 (which enforces 18:000730).
-            client._extra.update({
-                SZ_ACTIVE_HGI: hgi_id,
-                SZ_IS_EVOFW3: True,
-            })
+            client._extra.update(
+                {
+                    SZ_ACTIVE_HGI: hgi_id,
+                    SZ_IS_EVOFW3: True,
+                }
+            )
 
             return client
 
