@@ -1207,8 +1207,12 @@ async def test_zigbee_multiple_devices_shows_selector(hass: HomeAssistant) -> No
 
 async def test_zigbee_user_selects_device_from_selector(hass: HomeAssistant) -> None:
     """Test user picks a device from the multi-device SelectSelector."""
-    dev1 = _make_zigbee_device("dev1", name="Device One", ieee="00:11:22:33:44:55:66:77")
-    dev2 = _make_zigbee_device("dev2", name="Device Two", ieee="aa:bb:cc:dd:ee:ff:00:11")
+    dev1 = _make_zigbee_device(
+        "dev1", name="Device One", ieee="00:11:22:33:44:55:66:77"
+    )
+    dev2 = _make_zigbee_device(
+        "dev2", name="Device Two", ieee="aa:bb:cc:dd:ee:ff:00:11"
+    )
     mock_registry = MagicMock()
     mock_registry.devices = {"dev1": dev1, "dev2": dev2}
     # async_get("dev1") will return dev1 when the user submits their selection

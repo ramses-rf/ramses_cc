@@ -36,7 +36,9 @@ def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
     if sys.platform == "win32":
         from homeassistant import runner  # noqa: PLC0415
 
-        def _win_new_event_loop(self: runner.HassEventLoopPolicy) -> asyncio.AbstractEventLoop:  # noqa: ANN001
+        def _win_new_event_loop(
+            self: runner.HassEventLoopPolicy,
+        ) -> asyncio.AbstractEventLoop:  # noqa: ANN001
             return asyncio.SelectorEventLoop()
 
         runner.HassEventLoopPolicy.new_event_loop = _win_new_event_loop  # type: ignore[method-assign]

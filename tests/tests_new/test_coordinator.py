@@ -714,9 +714,7 @@ async def test_create_client_mqtt_success(mock_coordinator: RamsesCoordinator) -
     mock_coordinator.hass.config_entries.async_entries.return_value = ["mqtt_entry"]
 
     with (
-        patch(
-            "custom_components.ramses_cc.coordinator.Gateway"
-        ) as mock_gateway_cls,
+        patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gateway_cls,
         patch(
             "custom_components.ramses_cc.coordinator.RamsesMqttBridge"
         ) as mock_bridge_cls,
@@ -763,14 +761,10 @@ async def test_create_client_zigbee_path(
 
     Covers the _is_zigbee branch of coordinator._create_client.
     """
-    zigbee_url = (
-        "zigbee://00:11:22:33:44:55:66:77/0xfc00/0x0000/10/0xfc01/0x0000/10"
-    )
+    zigbee_url = "zigbee://00:11:22:33:44:55:66:77/0xfc00/0x0000/10/0xfc01/0x0000/10"
     mock_coordinator.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = zigbee_url
 
-    with patch(
-        "custom_components.ramses_cc.coordinator.Gateway"
-    ) as mock_gateway_cls:
+    with patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gateway_cls:
         # Provide a real dict so coordinator can call .update() on _extra
         mock_client = mock_gateway_cls.return_value
         mock_client._extra = {}
