@@ -23,6 +23,7 @@ from custom_components.ramses_cc.config_flow import (
     CONF_HA_MQTT_PATH,
     CONF_MANUAL_PATH,
     CONF_MQTT_PATH,
+    CONF_ZIGBEE_DEVICE,
     RamsesConfigFlow,
     get_usb_ports,
 )
@@ -1060,3 +1061,268 @@ async def test_ha_mqtt_not_loaded_error(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "choose_serial_port"
     assert result["errors"]["base"] == "mqtt_missing"
+
+
+# ---------------------------------------------------------------------------
+# Zigbee device selection tests
+# ---------------------------------------------------------------------------
+
+
+def _make_zigbee_device(
+    device_id: str,
+    name: str = "RAMSES ESP32-C6",
+    ieee: str | None = "00:11:22:33:44:55:66:77",
+) -> MagicMock:
+    """Return a MagicMock that looks like a ZHA DeviceEntry for ramses_esp32c6."""
+    dev = MagicMock()
+    dev.model = "ramses_esp32c6"
+    dev.id = device_id
+    dev.name = name
+    dev.name_by_user = None
+    if ieee:
+        dev.identifiers = {("zha", ieee)}
+    else:
+        dev.identifiers = {("zha", "not_an_ieee_address")}
+    return dev
+
+
+async def test_zigbee_no_devices_found(hass: HomeAssistant) -> None:
+    """Test zigbee_device step shows error when no ramses_esp32c6 devices exist."""
+    mock_registry = MagicMock()
+    mock_registry.devices = {}  # empty → no matches
+
+    with (
+        patch(
+            "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+            return_value={},
+        ),
+        patch(
+            "custom_components.ramses_cc.config_flow.dr.async_get",
+            return_value=mock_registry,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: CONF_ZIGBEE_DEVICE},
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "zigbee_device"
+    assert result["errors"]["base"] == "no_ramses_device_found"
+
+
+async def test_zigbee_single_device_auto_configure(hass: HomeAssistant) -> None:
+    """Test zigbee_device auto-configures when exactly one device with IEEE is found."""
+    device = _make_zigbee_device("dev1", ieee="00:11:22:33:44:55:66:77")
+    mock_registry = MagicMock()
+    mock_registry.devices = {"dev1": device}
+
+    with (
+        patch(
+            "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+            return_value={},
+        ),
+        patch(
+            "custom_components.ramses_cc.config_flow.dr.async_get",
+            return_value=mock_registry,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: CONF_ZIGBEE_DEVICE},
+        )
+
+    # Single device with IEEE → auto-configured, advances to configure_serial_port
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "configure_serial_port"
+
+
+async def test_zigbee_single_device_no_ieee(hass: HomeAssistant) -> None:
+    """Test zigbee_device step shows error when single device has no IEEE address."""
+    device = _make_zigbee_device("dev1", ieee=None)
+    mock_registry = MagicMock()
+    mock_registry.devices = {"dev1": device}
+
+    with (
+        patch(
+            "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+            return_value={},
+        ),
+        patch(
+            "custom_components.ramses_cc.config_flow.dr.async_get",
+            return_value=mock_registry,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: CONF_ZIGBEE_DEVICE},
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "zigbee_device"
+    assert result["errors"]["base"] == "no_ieee_identifier"
+
+
+async def test_zigbee_multiple_devices_shows_selector(hass: HomeAssistant) -> None:
+    """Test zigbee_device step shows SelectSelector when multiple devices are present."""
+    devices = {
+        "dev1": _make_zigbee_device("dev1", name="Device One"),
+        "dev2": _make_zigbee_device("dev2", name="Device Two"),
+    }
+    mock_registry = MagicMock()
+    mock_registry.devices = devices
+
+    with (
+        patch(
+            "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+            return_value={},
+        ),
+        patch(
+            "custom_components.ramses_cc.config_flow.dr.async_get",
+            return_value=mock_registry,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: CONF_ZIGBEE_DEVICE},
+        )
+
+    # Multiple devices → show selector form with no errors
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "zigbee_device"
+    assert result["errors"] == {}
+
+
+async def test_zigbee_user_selects_device_from_selector(hass: HomeAssistant) -> None:
+    """Test user picks a device from the multi-device SelectSelector."""
+    dev1 = _make_zigbee_device("dev1", name="Device One", ieee="00:11:22:33:44:55:66:77")
+    dev2 = _make_zigbee_device("dev2", name="Device Two", ieee="aa:bb:cc:dd:ee:ff:00:11")
+    mock_registry = MagicMock()
+    mock_registry.devices = {"dev1": dev1, "dev2": dev2}
+    # async_get("dev1") will return dev1 when the user submits their selection
+    mock_registry.async_get.return_value = dev1
+
+    with (
+        patch(
+            "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+            return_value={},
+        ),
+        patch(
+            "custom_components.ramses_cc.config_flow.dr.async_get",
+            return_value=mock_registry,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        # Step 1: navigate to zigbee_device (multiple devices → shows selector)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: CONF_ZIGBEE_DEVICE},
+        )
+        assert result["step_id"] == "zigbee_device"
+
+        # Step 2: user selects dev1 from the selector
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={"device": "dev1"},
+        )
+
+    # After selection with valid IEEE → advance to configure_serial_port
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "configure_serial_port"
+
+
+async def test_zigbee_port_picker_shows_zigbee_option(hass: HomeAssistant) -> None:
+    """Test that CONF_ZIGBEE_DEVICE is a valid port choice in the picker.
+
+    Verifies that the choose_serial_port form accepts CONF_ZIGBEE_DEVICE as a
+    valid submission value (i.e. it is registered in the SelectSelector options).
+    If it were not, voluptuous would reject the submission before our handler runs.
+    """
+    mock_registry = MagicMock()
+    mock_registry.devices = {}  # no devices → generic label
+
+    with (
+        patch(
+            "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+            return_value={},
+        ),
+        patch(
+            "custom_components.ramses_cc.config_flow.dr.async_get",
+            return_value=mock_registry,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "choose_serial_port"
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={SZ_PORT_NAME: CONF_ZIGBEE_DEVICE},
+        )
+
+    # If CONF_ZIGBEE_DEVICE were not in the selector options, the form
+    # would return an "invalid_select_option" error here instead.
+    assert result["step_id"] == "zigbee_device"
+
+
+async def test_zigbee_single_device_label_in_port_picker(hass: HomeAssistant) -> None:
+    """Test port picker shows device-specific label when one matching device is found.
+
+    The choose_serial_port step builds a custom label "Zigbee device: <name>"
+    when exactly one ramses_esp32c6 device is present in the device registry.
+    """
+    device = _make_zigbee_device("dev1", name="RAMSES esp32c6 My Sensor")
+    mock_registry = MagicMock()
+    mock_registry.devices = {"dev1": device}
+
+    with (
+        patch(
+            "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+            return_value={},
+        ),
+        patch(
+            "custom_components.ramses_cc.config_flow.dr.async_get",
+            return_value=mock_registry,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "choose_serial_port"
+
+    # Extract the options list from the SelectSelector for SZ_PORT_NAME.
+    # vol.Required("key").schema == "key", and SelectSelector.config is TypedDict.
+    schema = result["data_schema"].schema
+    port_name_key = next(
+        (k for k in schema if getattr(k, "schema", None) == SZ_PORT_NAME), None
+    )
+    assert port_name_key is not None, "SZ_PORT_NAME key not found in schema"
+
+    selector_obj = schema[port_name_key]
+    # SelectSelectorConfig is a TypedDict (plain dict at runtime)
+    config = getattr(selector_obj, "config", {})
+    options: list[dict] = config.get("options", []) if isinstance(config, dict) else []
+    opts_by_value = {opt.get("value"): opt.get("label", "") for opt in options}
+
+    zigbee_label = opts_by_value.get(CONF_ZIGBEE_DEVICE, "")
+    assert "Zigbee device:" in zigbee_label, (
+        f"Expected 'Zigbee device:' in label but got: {zigbee_label!r}"
+    )
