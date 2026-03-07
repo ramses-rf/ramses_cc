@@ -37,7 +37,6 @@ from custom_components.ramses_cc.coordinator import (
     SZ_CLIENT_STATE,
     SZ_PACKETS,
     SZ_SCHEMA,
-    MqttGateway,
     RamsesCoordinator,
 )
 from custom_components.ramses_cc.schemas import (
@@ -47,6 +46,7 @@ from custom_components.ramses_cc.schemas import (
 )
 from ramses_rf import Gateway
 from ramses_rf.system import Evohome
+from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3
 from ramses_tx.schemas import SZ_KNOWN_LIST, SZ_PORT_NAME, SZ_SERIAL_PORT
 
 # Constants
@@ -714,9 +714,7 @@ async def test_create_client_mqtt_success(mock_coordinator: RamsesCoordinator) -
     mock_coordinator.hass.config_entries.async_entries.return_value = ["mqtt_entry"]
 
     with (
-        patch(
-            "custom_components.ramses_cc.coordinator.MqttGateway"
-        ) as mock_mqtt_gateway_cls,
+        patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gateway_cls,
         patch(
             "custom_components.ramses_cc.coordinator.RamsesMqttBridge"
         ) as mock_bridge_cls,
@@ -724,6 +722,8 @@ async def test_create_client_mqtt_success(mock_coordinator: RamsesCoordinator) -
         # Setup the mock bridge instance
         mock_bridge_instance = mock_bridge_cls.return_value
         mock_bridge_instance.async_transport_factory = MagicMock()
+        # Ensure _extra is a real dict so coordinator can call .update() on it
+        mock_gateway_cls.return_value._extra = {}
 
         # Call the method under test
         mock_coordinator._create_client({})
@@ -735,9 +735,9 @@ async def test_create_client_mqtt_success(mock_coordinator: RamsesCoordinator) -
         )
         assert mock_coordinator.mqtt_bridge is mock_bridge_instance
 
-        # 2. Verify MqttGateway Initialization arguments
-        assert mock_mqtt_gateway_cls.called
-        _, kwargs = mock_mqtt_gateway_cls.call_args
+        # 2. Verify Gateway was initialised with MQTT-transport arguments
+        assert mock_gateway_cls.called
+        _, kwargs = mock_gateway_cls.call_args
 
         # Check specific MQTT-related arguments were passed to Gateway
         assert (
@@ -746,6 +746,44 @@ async def test_create_client_mqtt_success(mock_coordinator: RamsesCoordinator) -
         )
         assert kwargs.get("port_name") == "/dev/ttyUSB0"
         assert "hgi_id" in kwargs
+
+        # 3. Verify _extra was populated with HGI and evofw3 flag
+        client_extra = mock_gateway_cls.return_value._extra
+        assert SZ_ACTIVE_HGI in client_extra
+        assert client_extra.get(SZ_IS_EVOFW3) is True
+
+
+@pytest.mark.asyncio
+async def test_create_client_zigbee_path(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _create_client creates a Gateway with _hass injected for zigbee:// URLs.
+
+    Covers the _is_zigbee branch of coordinator._create_client.
+    """
+    zigbee_url = "zigbee://00:11:22:33:44:55:66:77/0xfc00/0x0000/10/0xfc01/0x0000/10"
+    mock_coordinator.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = zigbee_url
+
+    with patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gateway_cls:
+        # Provide a real dict so coordinator can call .update() on _extra
+        mock_client = mock_gateway_cls.return_value
+        mock_client._extra = {}
+
+        result = mock_coordinator._create_client({})
+
+        # Gateway should be constructed exactly once with the zigbee URL
+        mock_gateway_cls.assert_called_once()
+        _, kwargs = mock_gateway_cls.call_args
+        assert kwargs.get("port_name") == zigbee_url
+
+        # _hass must be injected so ZigbeeTransport can find the ZHA gateway
+        assert mock_client._extra["_hass"] is mock_coordinator.hass
+
+        # evofw3 flag must be set so ramses_tx applies address patching
+        assert mock_client._extra[SZ_IS_EVOFW3] is True
+
+        # The method should return the Gateway instance
+        assert result is mock_client
 
 
 @pytest.mark.asyncio
@@ -929,50 +967,6 @@ async def test_save_client_state_remotes(mock_coordinator: RamsesCoordinator) ->
     saved_remotes = args[2]
 
     assert saved_remotes[REM_ID]["boost"] == "packet_data"
-
-
-async def test_mqtt_gateway_logic() -> None:
-    """Test MqttGateway extracts and reinjects arguments.
-
-    Covers lines 84-88, 94-104.
-    """
-    custom_factory = MagicMock()
-    custom_extra = {"test": "extra"}
-
-    # Mock the parent class behavior
-    with (
-        patch(
-            "custom_components.ramses_cc.coordinator.Gateway.__init__",
-            return_value=None,
-        ) as mock_super_init,
-        patch(
-            "custom_components.ramses_cc.coordinator.Gateway.start",
-            new_callable=AsyncMock,
-        ) as mock_super_start,
-    ):
-        # 1. Initialize MqttGateway
-        # This calls __init__, which should pop our custom args
-        gw = MqttGateway(
-            transport_constructor=custom_factory, extra=custom_extra, other_arg="value"
-        )
-
-        # Simulate what parent Gateway does (store kwargs) because we mocked __init__
-        gw._kwargs = {"other_arg": "value"}
-
-        # Check that parent __init__ was called without the custom args
-        mock_super_init.assert_called_once_with(other_arg="value")
-        assert gw._custom_factory == custom_factory
-        assert gw._custom_extra == custom_extra
-
-        # 2. Start MqttGateway
-        await gw.start()
-
-        # Check that arguments were re-injected into _kwargs
-        assert gw._kwargs["transport_constructor"] == custom_factory
-        assert gw._kwargs["extra"] == custom_extra
-
-        # Check that parent start was called
-        mock_super_start.assert_awaited_once()
 
 
 async def test_setup_handles_naive_timestamps(

@@ -14,7 +14,10 @@ from pytest_homeassistant_custom_component.syrupy import (  # type: ignore[impor
 )
 from syrupy.assertion import SnapshotAssertion
 
-from ..virtual_rf import VirtualRf
+try:
+    from ..virtual_rf import VirtualRf
+except (ImportError, ModuleNotFoundError):
+    VirtualRf = None  # type: ignore[assignment,misc]  # Windows: pty/termios unavailable
 
 
 @pytest.fixture(autouse=True)
@@ -51,6 +54,9 @@ def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture()  # add hass fixture to ensure hass/rf use same event loop
 async def rf(hass: HomeAssistant) -> AsyncGenerator[Any]:
     """Utilize a virtual evofw3-compatible gateway."""
+
+    if VirtualRf is None:
+        pytest.skip("VirtualRf not available on this platform (requires pty/termios)")
 
     rf = VirtualRf(2)
     rf.set_gateway(rf.ports[0], "18:006402")
