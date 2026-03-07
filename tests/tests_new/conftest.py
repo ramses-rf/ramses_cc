@@ -10,7 +10,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.syrupy import (  # type: ignore[import-untyped]
     HomeAssistantSnapshotExtension,
