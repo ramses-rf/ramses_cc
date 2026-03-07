@@ -93,7 +93,7 @@ async def test_bridge_flow(
     # 3. Mock classes
     with (
         patch(
-            "custom_components.ramses_cc.coordinator.MqttGateway"
+            "custom_components.ramses_cc.coordinator.Gateway"
         ) as mock_gateway_cls,
         patch(
             "custom_components.ramses_cc.mqtt_bridge.CallbackTransport"
