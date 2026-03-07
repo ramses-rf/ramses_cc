@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
-import sys
 from collections.abc import AsyncGenerator
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -20,52 +18,6 @@ try:
     from ..virtual_rf import VirtualRf
 except (ImportError, ModuleNotFoundError):
     VirtualRf = None  # type: ignore[assignment,misc]  # Windows: pty/termios unavailable
-
-
-def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
-    """Use SelectorEventLoop on Windows to avoid ProactorEventLoop socket issues.
-
-    pytest-homeassistant-custom-component sets HassEventLoopPolicy at import
-    time and then patches asyncio.set_event_loop_policy to a no-op so the
-    policy cannot be replaced.  On Windows, HassEventLoopPolicy inherits from
-    WindowsProactorEventLoopPolicy whose new_event_loop() creates a
-    ProactorEventLoop that calls socket.socketpair() in __init__ — blocked by
-    pytest-socket.  We monkey-patch new_event_loop on the class to return a
-    SelectorEventLoop instead.
-    """
-    if sys.platform == "win32":
-        from homeassistant import runner  # noqa: PLC0415
-
-        def _win_new_event_loop(
-            self: runner.HassEventLoopPolicy,
-        ) -> asyncio.AbstractEventLoop:  # noqa: ANN001
-            return asyncio.SelectorEventLoop()
-
-        runner.HassEventLoopPolicy.new_event_loop = _win_new_event_loop  # type: ignore[method-assign]
-
-
-@pytest.fixture(autouse=True, scope="session")  # type: ignore[override]
-def mock_zeroconf_resolver():  # type: ignore[override]
-    """Override the async session-scoped zeroconf resolver fixture with a sync one.
-
-    The upstream fixture in plugins.py is an async session-scoped fixture that
-    instantiates AsyncResolver() (from aiodns), which opens a real UDP socket.
-    On Windows this socket creation is blocked by pytest-socket.  Additionally,
-    being async+session forces pytest-asyncio to create a session-scoped event
-    loop runner whose ProactorEventLoop.__init__ also calls socket.socketpair()
-    — also blocked by pytest-socket.
-
-    Overriding with a plain sync fixture avoids both problems.
-    """
-    mock_resolver = MagicMock()
-    mock_resolver.close = AsyncMock()
-    mock_resolver.real_close = AsyncMock()
-
-    with patch(
-        "homeassistant.helpers.aiohttp_client._async_make_resolver",
-        return_value=mock_resolver,
-    ) as patcher:
-        yield patcher
 
 
 @pytest.fixture(autouse=True)
