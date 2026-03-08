@@ -1,8 +1,25 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2026-03-03
+# last checked/updated: 2026-03-08
 #
+[project]
+  name = "ramses_cc"
+  description = "Home Assistant custom integration for s stateful RAMSES-II protocol decoder & analyser."
+  readme = "README.md"
+  authors = [
+    {name = "Egbert Broerse", email = "dcc2@ebroerse.nl"}  # and many others
+  ]
+  maintainers = [
+    {name = "Egbert Broerse", email = "dcc2@ebroerse.nl"}
+  ]
+  license = "MIT"
+  license-files = ["LICENSE*"]
 
+  classifiers = [
+    "Topic :: Home Automation",
+    "Programming Language :: Python :: 3.14",
+  ]
+  requires-python = ">=3.14.2"        # HA core >=3.14.2
 #
 ### pytest ###########################################################################
 
@@ -110,7 +127,7 @@ directory = "coverage_html"
 [tool.ruff]
   # exclude = ["tests/deprecated/*.py"]
   src = ["custom_components"]
-  target-version = "py313"
+  target-version = "py314"
 
 
 [tool.ruff.lint]
