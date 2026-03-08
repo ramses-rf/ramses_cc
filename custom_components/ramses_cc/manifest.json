@@ -13,8 +13,8 @@
     "requirements": [
       "aiousbwatcher>=1.1.1",
       "pyserial-asyncio-fast>=0.16",
-      "ramses-rf==0.55.3"
+      "ramses-rf==0.55.4"
     ],
     "single_config_entry": true,
-    "version": "0.55.3"
+    "version": "0.55.4"
   }
