@@ -15,8 +15,8 @@
 
 # used for development (linting)
     prek == 0.3.4                                # HA core 2026.2.3 uses 0.2.28
-    ruff >= 0.13.0                               # latest: 0.15.0 See also: pre-commit-config.yaml
+    ruff >= 0.15.5                               # latest: 0.15.5 See also: pre-commit-config.yaml
 
 # used for development (typing)
-    mypy >= 1.18.0                               # latest: 1.18.2
-    voluptuous >= 0.15.2                         # latest: 0.15.2 = HA
+    mypy >= 1.18.0                               # latest: 1.19.1
+    voluptuous >= 0.15.2                         # latest: 0.16.0 = HA

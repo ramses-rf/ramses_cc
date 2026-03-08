@@ -3,13 +3,13 @@
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.0
+    rev: v0.15.5
     hooks:
       - id: ruff         # linter
       - id: ruff-format  # formatter
 
   - repo: https://github.com/cdce8p/python-typing-update
-    rev: v0.7.0
+    rev: v0.8.1
     hooks:
       # Run `python-typing-update` hook manually from time to time
       # to update python typing syntax.
@@ -18,13 +18,13 @@ repos:
       - id: python-typing-update
         stages: [manual]
         args:
-          - --py311-plus
+          - --py314-plus
           - --force
           - --keep-updates
         files: ^(custom_components|tests|docs)/.+\.py$
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.2
     hooks:
       - id: codespell
         args:
