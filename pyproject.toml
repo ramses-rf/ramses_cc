@@ -127,7 +127,7 @@ directory = "coverage_html"
 [tool.ruff]
   # exclude = ["tests/deprecated/*.py"]
   src = ["custom_components"]
-  target-version = "py314"
+  target-version = "py313"
 
 
 [tool.ruff.lint]
