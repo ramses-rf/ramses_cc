@@ -259,7 +259,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # 4. Split the dict: GatewayConfig args vs Gateway __init__ args
         # Exclude app_context: it is injected explicitly below, not from HA options.
         gwy_config_args = {
-            k: v for k, v in raw_config.items() if k in valid_config_keys and k != "app_context"
+            k: v
+            for k, v in raw_config.items()
+            if k in valid_config_keys and k != "app_context"
         }
 
         # Drop any deprecated keys that don't belong to either!
