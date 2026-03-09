@@ -281,12 +281,16 @@ class RamsesCoordinator(DataUpdateCoordinator):
             if k in valid_gateway_keys and k not in handled_keys
         }
 
+        # Inject app_context only when GatewayConfig supports it (ramses_rf PR #505+).
+        # Older installs (≤0.55.2) do not have this parameter.
+        _config_kwargs = dict(gwy_config_args)
+        if "app_context" in valid_config_keys:
+            _config_kwargs["app_context"] = self.hass
+
         kwargs = {
             "packet_log": self.options.get(SZ_PACKET_LOG, {}),
             "known_list": self.options.get(SZ_KNOWN_LIST, {}),
-            # app_context passes hass explicitly to transports (e.g. ZigbeeTransport)
-            # per the new typed GatewayConfig API (ramses_rf PR #505).
-            "config": GatewayConfig(**gwy_config_args, app_context=self.hass),
+            "config": GatewayConfig(**_config_kwargs),
             "schema": schema,
             **gateway_kwargs,
         }

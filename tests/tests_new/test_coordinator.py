@@ -46,7 +46,6 @@ from custom_components.ramses_cc.schemas import (
 )
 from ramses_rf import Gateway
 from ramses_rf.system import Evohome
-from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3
 from ramses_tx.schemas import SZ_KNOWN_LIST, SZ_PORT_NAME, SZ_SERIAL_PORT
 
 # Constants
@@ -747,10 +746,8 @@ async def test_create_client_mqtt_success(mock_coordinator: RamsesCoordinator) -
         assert kwargs.get("port_name") == "/dev/ttyUSB0"
         assert "hgi_id" in kwargs
 
-        # 3. Verify _extra was populated with HGI and evofw3 flag
-        client_extra = mock_gateway_cls.return_value._extra
-        assert SZ_ACTIVE_HGI in client_extra
-        assert client_extra.get(SZ_IS_EVOFW3) is True
+        # _extra is no longer populated by coordinator (PR #505: handled internally
+        # by each transport)
 
 
 @pytest.mark.asyncio
@@ -765,9 +762,7 @@ async def test_create_client_zigbee_path(
     mock_coordinator.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = zigbee_url
 
     with patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gateway_cls:
-        # Provide a real dict so coordinator can call .update() on _extra
         mock_client = mock_gateway_cls.return_value
-        mock_client._extra = {}
 
         result = mock_coordinator._create_client({})
 
@@ -776,11 +771,12 @@ async def test_create_client_zigbee_path(
         _, kwargs = mock_gateway_cls.call_args
         assert kwargs.get("port_name") == zigbee_url
 
-        # _hass must be injected so ZigbeeTransport can find the ZHA gateway
-        assert mock_client._extra["_hass"] is mock_coordinator.hass
-
-        # evofw3 flag must be set so ramses_tx applies address patching
-        assert mock_client._extra[SZ_IS_EVOFW3] is True
+        # PR #505: hass is injected via GatewayConfig.app_context, not _extra.
+        # Only check when the installed ramses_rf supports app_context.
+        config = kwargs.get("config")
+        assert config is not None
+        if hasattr(config, "app_context"):
+            assert config.app_context is mock_coordinator.hass
 
         # The method should return the Gateway instance
         assert result is mock_client
