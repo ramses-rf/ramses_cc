@@ -5,7 +5,7 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.5
     hooks:
-      - id: ruff         # linter
+      - id: ruff-check   # linter
       - id: ruff-format  # formatter
 
   - repo: https://github.com/cdce8p/python-typing-update
