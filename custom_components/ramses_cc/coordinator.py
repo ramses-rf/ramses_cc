@@ -31,7 +31,7 @@ from ramses_rf.device.hvac import HvacRemoteBase, HvacVentilator
 from ramses_rf.entity_base import Child, Entity as RamsesRFEntity
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.system import Evohome, System, Zone
-from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
+from ramses_tx.const import Code
 from ramses_tx.schemas import extract_serial_port
 
 from .const import (
@@ -257,8 +257,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         valid_gateway_keys = set(inspect.signature(Gateway.__init__).parameters.keys())
 
         # 4. Split the dict: GatewayConfig args vs Gateway __init__ args
+        # Exclude app_context: it is injected explicitly below, not from HA options.
         gwy_config_args = {
-            k: v for k, v in raw_config.items() if k in valid_config_keys
+            k: v for k, v in raw_config.items() if k in valid_config_keys and k != "app_context"
         }
 
         # Drop any deprecated keys that don't belong to either!
@@ -281,7 +282,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         kwargs = {
             "packet_log": self.options.get(SZ_PACKET_LOG, {}),
             "known_list": self.options.get(SZ_KNOWN_LIST, {}),
-            "config": GatewayConfig(**gwy_config_args),
+            # app_context passes hass explicitly to transports (e.g. ZigbeeTransport)
+            # per the new typed GatewayConfig API (ramses_rf PR #505).
+            "config": GatewayConfig(**gwy_config_args, app_context=self.hass),
             "schema": schema,
             **gateway_kwargs,
         }
@@ -299,19 +302,12 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if _is_zigbee:
             # ZigbeeTransport — handled natively by transport_factory in ramses_tx.
             # No MQTT broker is required; no RamsesMqttBridge is created.
-            # We inject _hass so ZigbeeTransport can find the ZHA gateway.
-            client = Gateway(
+            # hass reaches ZigbeeTransport via GatewayConfig.app_context (PR #505).
+            return Gateway(
                 port_name=_port_name_raw,
                 loop=self.hass.loop,
                 **kwargs,
             )
-            client._extra.update(
-                {
-                    "_hass": self.hass,
-                    SZ_IS_EVOFW3: True,
-                }
-            )
-            return client
 
         elif _is_mqtt:
             # RamsesMqttBridge path — uses HA MQTT or an external broker.
@@ -350,16 +346,6 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 port_name=port_name,
                 loop=self.hass.loop,
                 **kwargs,
-            )
-
-            # NOTE: SZ_IS_EVOFW3=True enables address patching in ramses_tx protocol.
-            # Required because the MQTT transport masquerades like evofw3,
-            # not a strict HGI80 (which enforces 18:000730).
-            client._extra.update(
-                {
-                    SZ_ACTIVE_HGI: hgi_id,
-                    SZ_IS_EVOFW3: True,
-                }
             )
 
             return client
