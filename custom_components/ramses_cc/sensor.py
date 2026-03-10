@@ -144,9 +144,9 @@ class RamsesSensor(RamsesEntity, SensorEntity):
         ) or self.state is not None  # TODO: but what if None _is_ its state?
 
     @property
-    def native_value(self) -> Any | None:
+    async def native_value(self) -> Any | None:
         """Return the native value of the sensor."""
-        val = getattr(self._device, self.entity_description.ramses_rf_attr)
+        val = getattr(self._device, await self.entity_description.ramses_rf_attr)
         if self.native_unit_of_measurement == PERCENTAGE:
             return None if val is None else val * 100
         return val
@@ -239,7 +239,7 @@ class RamsesSensor(RamsesEntity, SensorEntity):
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesSensorEntityDescription(RamsesEntityDescription, SensorEntityDescription):
-    """Class describing Ramses binary sensor entities."""
+    """Class describing Ramses sensor entities."""
 
     entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
     state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT

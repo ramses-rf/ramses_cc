@@ -178,13 +178,13 @@ async def test_logbook_binary_sensor_availability(mock_coordinator: MagicMock) -
 
     # Case A: No message -> Not available
     mock_device._msgs = {}
-    assert sensor.available is False
+    assert await sensor.available is False
 
     # Case B: Old message -> Not available
     msg_old = MagicMock()
     msg_old.dtm = dt_util.now() - timedelta(seconds=1300)
     mock_device._msgs = {"0418": msg_old}
-    assert sensor.available is False
+    assert await sensor.available is False
 
     # Case C: Recent message -> Available
     msg_new = MagicMock()
@@ -323,7 +323,7 @@ async def test_gateway_binary_sensor_attributes(mock_coordinator: MagicMock) -> 
     sensor: Any = RamsesGatewayBinarySensor(mock_coordinator, mock_device, description)
 
     # 1. Extra State Attributes
-    attrs: dict[str, Any] = sensor.extra_state_attributes
+    attrs: dict[str, Any] = await sensor.extra_state_attributes
     assert attrs["schema"] == {"01:111": {"zon": "val"}}
     assert attrs["config"]["enforce_known_list"] is True
     assert attrs[SZ_IS_EVOFW3] is True

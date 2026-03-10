@@ -66,7 +66,7 @@ class RamsesEntity(CoordinatorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the integration-specific state attributes.
+        """Get the integration-specific state attributes.
 
         :return: A dictionary of attributes derived from the device and description.
         """
