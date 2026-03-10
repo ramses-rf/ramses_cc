@@ -120,12 +120,12 @@ class RamsesBatteryBinarySensor(RamsesBinarySensor):
     """Representation of a generic binary sensor."""
 
     @property
-    async def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return the integration-specific state attributes."""
         if self._device.battery_state is None:
             level = None
         else:
-            level = await self._device.battery_state[ATTR_BATTERY_LEVEL]
+            level = self._device.battery_state[ATTR_BATTERY_LEVEL]
 
         return super().extra_state_attributes | {ATTR_BATTERY_LEVEL: level}
 
@@ -136,9 +136,9 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
     _device: Logbook
 
     @property
-    async def available(self) -> bool:
+    def available(self) -> bool:
         """Return True if the device has been seen recently."""
-        msg = await self._device._msgs["0418"]
+        msg = self._device._msgs.get("0418")
         return bool(
             msg and dt_util.now() - dt_util.as_utc(msg.dtm) < timedelta(seconds=1200)
         )
@@ -155,9 +155,9 @@ class RamsesSystemBinarySensor(RamsesBinarySensor):
     _device: System
 
     @property
-    async def available(self) -> bool:
+    def available(self) -> bool:
         """Return True if the last system sync message is recent."""
-        msg = await self._device._msgs["1F09"]
+        msg = self._device._msgs.get("1F09")
         return bool(
             msg
             and dt_util.now() - dt_util.as_utc(msg.dtm)
@@ -178,7 +178,7 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
     _last_known_list_size: int = -1
 
     @property
-    async def extra_state_attributes(self) -> dict[str, Any]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return the integration-specific state attributes.
 
         Optimized to avoid re-generating known_list on every update.
@@ -207,7 +207,7 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
             }
             self._last_known_list_size = current_size
 
-        return await super().extra_state_attributes | self._cached_attrs
+        return super().extra_state_attributes | self._cached_attrs
 
     @property
     def is_on(self) -> bool:
