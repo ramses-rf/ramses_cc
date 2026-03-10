@@ -1,5 +1,5 @@
 # Requirements to dev the source code
-# - last checked/updated: 2026-03-08 (c.f. HA 2026.3.1)
+# - last checked/updated: 2026-03-10 (c.f. HA 2026.3.1)
 
 # requirements (dependencies) are in manifest.json
 # - pip list | grep -E 'ramses|serial'
