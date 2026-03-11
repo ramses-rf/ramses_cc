@@ -51,7 +51,6 @@ from typing import Any
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import (
     AddEntitiesCallback,
@@ -994,70 +993,22 @@ def create_parameter_entities(
     )
 
     param_descriptions = get_param_descriptions(device)
-    entities: list[RamsesNumberParam] = []
-
-    # Get entity registry for proper entity creation
-    ent_reg = er.async_get(coordinator.hass)
-
-    for description in param_descriptions:
-        if not description.ramses_rf_attr:
-            _LOGGER.debug(
-                "Skipping parameter %s - no ramses_rf_attr",
-                getattr(description, "key", "unknown"),
-            )
-            continue
-
-        param_id = getattr(description, "ramses_rf_attr", "unknown")
-        # Create a unique ID for this parameter entity
-        unique_id = f"{device_id}_param_{param_id.lower()}"
-
-        slug = getattr(device, "_SLUG", "")
-        slug_prefix = f"{slug.lower()}_" if slug else ""
-        suggested_object_id = f"{slug_prefix}{device_id}_param_{param_id.lower()}"
-
-        # The entity key is already set correctly in get_param_descriptions()
-        # No need to modify the frozen dataclass attribute
-
-        try:
-            # Check if entity already exists in registry to avoid duplicate registry entries
-            entity_id = ent_reg.async_get_entity_id("number", "ramses_cc", unique_id)
-            if entity_id is None:
-                # Entity doesn't exist in registry, create it
-                _LOGGER.debug("Creating new entity in registry: %s", unique_id)
-                ent_reg.async_get_or_create(
-                    "number",
-                    "ramses_cc",
-                    unique_id,
-                    suggested_object_id=suggested_object_id,
-                    config_entry=coordinator.entry,
-                )
-            else:
-                _LOGGER.debug(
-                    "Entity %s already exists in registry as %s, using existing",
-                    unique_id,
-                    entity_id,
-                )
-
-            # Always create the entity object for the platform
-            # Home Assistant will restore state from registry for existing entities
-            entity = description.ramses_cc_class(coordinator, device, description)
-            entities.append(entity)
-            _LOGGER.info(
-                "Created parameter entity: %s for %s (param_id=%s)",
-                entity.entity_id,
-                device_id,
-                param_id,
-            )
-        except Exception as e:
-            _LOGGER.error(
-                "Error creating parameter entity: %s",
-                str(e),
-                exc_info=True,
-            )
 
     _LOGGER.debug(
-        "Processed %d parameter entities for %s using async_get_or_create",
-        len(param_descriptions),
-        device_id,
+        "Creating %d parameter entities for %s", len(param_descriptions), device_id
     )
+
+    entities = [
+        description.ramses_cc_class(coordinator, device, description)
+        for description in param_descriptions
+        if description.ramses_rf_attr
+    ]
+
+    if entities:
+        _LOGGER.debug(
+            "Created %d parameter entities for %s",
+            len(entities),
+            device_id,
+        )
+
     return entities

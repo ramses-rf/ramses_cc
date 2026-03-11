@@ -588,40 +588,13 @@ async def test_icon_logic(number_entity: RamsesNumberParam) -> None:
         assert number_entity.icon == "mdi:counter"
 
 
-async def test_create_parameter_entities_registry(
-    mock_coordinator: MagicMock, mock_fan_device: MagicMock
-) -> None:
-    """Test registry interaction in create_parameter_entities."""
-    mock_reg = MagicMock()
-    # First call returns ID (exists), Second returns None (create new)
-    mock_reg.async_get_entity_id.side_effect = ["number.existing", None]
-
-    with (
-        patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_reg),
-        patch(
-            "custom_components.ramses_cc.number.get_param_descriptions"
-        ) as mock_get_desc,
-    ):
-        mock_get_desc.return_value = [
-            RamsesNumberEntityDescription(key="p1", ramses_rf_attr="01"),
-            RamsesNumberEntityDescription(key="p2", ramses_rf_attr="02"),
-        ]
-
-        entities = create_parameter_entities(mock_coordinator, mock_fan_device)
-        assert len(entities) == 2
-        assert mock_reg.async_get_or_create.call_count == 1
-
-
 async def test_create_parameter_entities_skip_empty_attr(
     mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
     """Test skipping parameters with no attribute ID."""
-    with (
-        patch("homeassistant.helpers.entity_registry.async_get"),
-        patch(
-            "custom_components.ramses_cc.number.get_param_descriptions"
-        ) as mock_get_desc,
-    ):
+    with patch(
+        "custom_components.ramses_cc.number.get_param_descriptions"
+    ) as mock_get_desc:
         mock_get_desc.return_value = [
             RamsesNumberEntityDescription(key="no_attr", ramses_rf_attr=""),
             RamsesNumberEntityDescription(key="ok_attr", ramses_rf_attr="01"),
@@ -640,22 +613,22 @@ async def test_create_parameter_entities_no_support(
     assert len(entities) == 0
 
 
-async def test_create_parameter_entities_error(
+async def test_create_parameter_entities_multiple(
     mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
-    """Test error handling in entity creation."""
-    mock_reg = MagicMock()
-    mock_reg.async_get_entity_id.side_effect = ValueError("Processing Error")
+    """Test creating multiple parameter entities."""
+    with patch(
+        "custom_components.ramses_cc.number.get_param_descriptions"
+    ) as mock_get_desc:
+        mock_get_desc.return_value = [
+            RamsesNumberEntityDescription(key="p1", ramses_rf_attr="01"),
+            RamsesNumberEntityDescription(key="p2", ramses_rf_attr="02"),
+        ]
 
-    with (
-        patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_reg),
-        patch(
-            "custom_components.ramses_cc.number.get_param_descriptions",
-            return_value=[RamsesNumberEntityDescription(key="p1", ramses_rf_attr="01")],
-        ),
-    ):
         entities = create_parameter_entities(mock_coordinator, mock_fan_device)
-        assert len(entities) == 0
+        assert len(entities) == 2
+        assert entities[0].entity_description.key == "p1"
+        assert entities[1].entity_description.key == "p2"
 
 
 async def test_create_parameter_entities_logic(
