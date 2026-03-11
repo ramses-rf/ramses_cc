@@ -149,10 +149,20 @@ async def test_fan_setup_already_initialized(
     mock_fan_device._initialized = True
     mock_fan_device.supports_2411 = True
 
+    class MockHvacVentilator:
+        pass
+
+    mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
+
     # Patch the function where it is DEFINED, which is used by the import in coordinator.py
-    with patch(
-        "custom_components.ramses_cc.number.create_parameter_entities"
-    ) as mock_create:
+    with (
+        patch(
+            "custom_components.ramses_cc.number.create_parameter_entities"
+        ) as mock_create,
+        patch(
+            "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+        ),
+    ):
         mock_create.return_value = [MagicMock()]
         await mock_coordinator.fan_handler.async_setup_fan_device(mock_fan_device)
 
@@ -367,7 +377,7 @@ async def test_find_param_entity_logic(
     with patch("homeassistant.helpers.entity_registry.async_get") as mock_er_get:
         mock_registry = MagicMock()
         mock_er_get.return_value = mock_registry
-        mock_registry.async_get.return_value = None
+        mock_registry.async_get_entity_id.return_value = None
 
         res = mock_coordinator.fan_handler.find_param_entity(FAN_ID, "10")
         assert res is None
@@ -376,7 +386,9 @@ async def test_find_param_entity_logic(
     with patch("homeassistant.helpers.entity_registry.async_get") as mock_er_get:
         mock_registry = MagicMock()
         mock_er_get.return_value = mock_registry
-        mock_registry.async_get.return_value = MagicMock()  # Found in registry
+        mock_registry.async_get_entity_id.return_value = (
+            "number.some_entity"  # Found in registry
+        )
 
         # Ensure platforms dict is empty or platform has no entities
         mock_coordinator.platforms = {}
@@ -388,13 +400,12 @@ async def test_find_param_entity_logic(
     with patch("homeassistant.helpers.entity_registry.async_get") as mock_er_get:
         mock_registry = MagicMock()
         mock_er_get.return_value = mock_registry
-        mock_registry.async_get.return_value = MagicMock()  # Found in registry
+        target_id = "number.fan_30_123456_param_10"
+        mock_registry.async_get_entity_id.return_value = target_id  # Found in registry
 
         # Setup fake platform
         mock_entity = MagicMock()
         mock_platform = MagicMock()
-        # Entity ID format from logic: number.{device_id}_{param_id}
-        target_id = f"number.{FAN_ID.replace(':', '_').lower()}_param_10"
         mock_platform.entities = {target_id: mock_entity}
 
         mock_coordinator.platforms = {Platform.NUMBER: [mock_platform]}
@@ -437,9 +448,17 @@ async def test_fan_setup_already_initialized_exception(
     mock_fan_device._initialized = True
     mock_fan_device.supports_2411 = True
 
+    class MockHvacVentilator:
+        pass
+
+    mock_fan_device.__class__ = MockHvacVentilator  # type: ignore[assignment]
+
     with (
         patch("custom_components.ramses_cc.number.create_parameter_entities"),
         patch.object(mock_coordinator, "get_all_fan_params") as mock_get_params,
+        patch(
+            "custom_components.ramses_cc.fan_handler.HvacVentilator", MockHvacVentilator
+        ),
     ):
         mock_get_params.side_effect = RuntimeError("Request Failed")
 

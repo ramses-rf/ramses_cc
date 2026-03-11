@@ -372,6 +372,27 @@ async def test_events_handling(number_entity: RamsesNumberParam) -> None:
     assert number_entity._param_native_value["01"] == 0.5
 
 
+async def test_events_handling_with_event_object(
+    number_entity: RamsesNumberParam,
+) -> None:
+    """Test event handling with actual Event object for isinstance branch coverage."""
+    from homeassistant.core import Event
+
+    await number_entity.async_added_to_hass()
+    callback = number_entity.hass.bus.async_listen.call_args[0][1]
+
+    event = Event(
+        "ramses_cc.fan_param_updated",
+        {
+            "device_id": number_entity._device.id,
+            "param_id": "01",
+            "value": 0.75,
+        },
+    )
+    callback(event)
+    assert number_entity._param_native_value["01"] == 0.75
+
+
 async def test_events_handling_no_param_id(number_entity: RamsesNumberParam) -> None:
     """Test event handling return when no param id."""
     # Remove attr from description

@@ -48,13 +48,9 @@ from dataclasses import dataclass
 from types import UnionType
 from typing import Any
 
-from homeassistant.components.number import (
-    ENTITY_ID_FORMAT,
-    NumberEntity,
-    NumberEntityDescription,
-)
+from homeassistant.components.number import NumberEntity, NumberEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import (
@@ -503,12 +499,9 @@ class RamsesNumberParam(RamsesNumberBase):
 
         # Create base ID with device ID and parameter ID
         base_id = f"{device_id}_param_{param_id}"
-        self.entity_id = ENTITY_ID_FORMAT.format(base_id)
         self._attr_unique_id = base_id
 
-        _LOGGER.debug(
-            "Found entity_id: %s, unique_id: %s", self.entity_id, self._attr_unique_id
-        )
+        _LOGGER.debug("Found unique_id: %s", self._attr_unique_id)
 
         param_id = getattr(entity_description, "ramses_rf_attr", "")
         if param_id:
@@ -607,7 +600,7 @@ class RamsesNumberParam(RamsesNumberBase):
         )
 
     @callback
-    def _async_param_updated(self, event: dict[str, Any]) -> None:
+    def _async_param_updated(self, event: Event | dict[str, Any]) -> None:
         """Handle parameter updates from the device.
 
         This callback is triggered when a fan parameter update event is received.
@@ -625,7 +618,12 @@ class RamsesNumberParam(RamsesNumberBase):
             return
 
         # Extract data from event
-        event_data = event.data if hasattr(event, "data") else event
+        if isinstance(event, dict):
+            event_data = event
+        elif isinstance(event, Event):
+            event_data = event.data
+        else:
+            event_data = getattr(event, "data", {})
 
         # Only process if this is our parameter
         if (
@@ -1013,6 +1011,10 @@ def create_parameter_entities(
         # Create a unique ID for this parameter entity
         unique_id = f"{device_id}_param_{param_id.lower()}"
 
+        slug = getattr(device, "_SLUG", "")
+        slug_prefix = f"{slug.lower()}_" if slug else ""
+        suggested_object_id = f"{slug_prefix}{device_id}_param_{param_id.lower()}"
+
         # The entity key is already set correctly in get_param_descriptions()
         # No need to modify the frozen dataclass attribute
 
@@ -1026,7 +1028,7 @@ def create_parameter_entities(
                     "number",
                     "ramses_cc",
                     unique_id,
-                    suggested_object_id=f"{device_id}_param_{param_id.lower()}",
+                    suggested_object_id=suggested_object_id,
                     config_entry=coordinator.entry,
                 )
             else:

@@ -1323,7 +1323,9 @@ async def test_zigbee_single_device_label_in_port_picker(hass: HomeAssistant) ->
     selector_obj = schema[port_name_key]
     # SelectSelectorConfig is a TypedDict (plain dict at runtime)
     config = getattr(selector_obj, "config", {})
-    options: list[dict] = config.get("options", []) if isinstance(config, dict) else []
+    options: list[dict[str, Any]] = (
+        config.get("options", []) if isinstance(config, dict) else []
+    )
     opts_by_value = {opt.get("value"): opt.get("label", "") for opt in options}
 
     zigbee_label = opts_by_value.get(CONF_ZIGBEE_DEVICE, "")

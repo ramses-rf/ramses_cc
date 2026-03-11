@@ -44,28 +44,26 @@ class RamsesFanHandler:
         :param param_id: The 2-character hex ID of the parameter.
         :return: The found entity or None if not found in the registry/platform.
         """
-        # Normalize device ID to use underscores and lowercase for entity ID
+        # Normalize device ID to use underscores and lowercase (matches number.py unique_id)
         safe_device_id = str(device_id).replace(":", "_").lower()
-        target_entity_id = f"number.{safe_device_id}_param_{param_id.lower()}"
+        unique_id = f"{safe_device_id}_param_{param_id.lower()}"
 
-        # First try to find the entity in the entity registry
+        # Look up the actual entity_id via the entity registry (do not assume naming)
         ent_reg = er.async_get(self.hass)
-        entity_entry = ent_reg.async_get(target_entity_id)
-        if entity_entry:
-            _LOGGER.debug("Found entity %s in entity registry", target_entity_id)
-            # Get the actual entity from the platform to make sure entity is fully loaded
-            platforms = self.coordinator.platforms.get(Platform.NUMBER, [])
-            for platform in platforms:
-                if (
-                    hasattr(platform, "entities")
-                    and target_entity_id in platform.entities
-                ):
-                    return platform.entities[target_entity_id]
-
-            # Entity exists in registry but not yet loaded in platform
+        entity_id = ent_reg.async_get_entity_id("number", DOMAIN, unique_id)
+        if entity_id is None:
+            _LOGGER.debug("Entity (unique_id=%s) not found in registry.", unique_id)
             return None
 
-        _LOGGER.debug("Entity %s not found in registry.", target_entity_id)
+        _LOGGER.debug("Found entity %s in entity registry", entity_id)
+
+        # Get the actual entity from the platform to make sure entity is fully loaded
+        platforms = self.coordinator.platforms.get(Platform.NUMBER, [])
+        for platform in platforms:
+            if hasattr(platform, "entities") and entity_id in platform.entities:
+                return platform.entities[entity_id]
+
+        # Entity exists in registry but not yet loaded in platform
         return None
 
     def create_parameter_entities(self, device: RamsesRFEntity) -> None:

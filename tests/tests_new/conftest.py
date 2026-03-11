@@ -17,7 +17,7 @@ from syrupy.assertion import SnapshotAssertion
 try:
     from ..virtual_rf import VirtualRf
 except (ImportError, ModuleNotFoundError):
-    VirtualRf = None  # type: ignore[assignment,misc]  # Windows: pty/termios unavailable
+    VirtualRf = None  # Windows: pty/termios unavailable
 
 
 @pytest.fixture(autouse=True)
