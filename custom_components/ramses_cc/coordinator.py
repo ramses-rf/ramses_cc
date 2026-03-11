@@ -461,7 +461,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Platform unload completed with result: %s", result)
         return result
 
-    def _update_device(self, device: RamsesRFEntity) -> None:
+    async def _update_device(self, device: RamsesRFEntity) -> None:
         """Update device information in the device registry."""
         if hasattr(device, "name") and device.name:
             name = device.name
@@ -472,7 +472,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         else:
             name = device.id
 
-        if info := device._msg_value_code(Code._10E0):
+        if info := await device._msg_value_code(Code._10E0):
             model = info.get("description")
         else:
             model = device._SLUG
@@ -582,7 +582,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         for device in new_systems + new_dhws + new_zones + new_devices:
             await self.fan_handler.async_setup_fan_device(device)
             # Register device in registry once upon discovery
-            self._update_device(device)
+            await self._update_device(device)
 
         new_entities = new_systems + new_dhws + new_zones + new_devices
 

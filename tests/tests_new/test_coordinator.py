@@ -163,12 +163,12 @@ async def test_device_registry_update_slugs(
     mock_device._SLUG = "FAN"
     # Ensure name is None so coordinator falls back to slug-based logic
     mock_device.name = None
-    mock_device._msg_value_code.return_value = None  # No 10E0 info
+    mock_device._msg_value_code = AsyncMock(return_value=None)  # No 10E0 info
 
     with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
         mock_reg = mock_dr_get.return_value
 
-        mock_coordinator._update_device(mock_device)
+        await mock_coordinator._update_device(mock_device)
 
         # Verify the name and model were derived from the SLUG
         call_kwargs = mock_reg.async_get_or_create.call_args[1]
@@ -224,12 +224,12 @@ async def test_update_device_relationships(mock_coordinator: RamsesCoordinator) 
         mock_zone.id = "04:123456"
         mock_zone.tcs = MagicMock()
         mock_zone.tcs.id = "01:999999"
-        mock_zone._msg_value_code.return_value = {"description": "Zone Name"}
+        mock_zone._msg_value_code = AsyncMock(return_value={"description": "Zone Name"})
         mock_zone.name = "Custom Zone"
 
         with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
             mock_reg = mock_dr_get.return_value
-            mock_coordinator._update_device(mock_zone)
+            await mock_coordinator._update_device(mock_zone)
 
             # Verify via_device was set to TCS ID
             call_kwargs = mock_reg.async_get_or_create.call_args[1]
@@ -245,13 +245,13 @@ async def test_update_device_child_parent(mock_coordinator: RamsesCoordinator) -
     mock_child.id = "13:123456"
     mock_child._parent = MagicMock()
     mock_child._parent.id = "04:123456"
-    mock_child._msg_value_code.return_value = None
+    mock_child._msg_value_code = AsyncMock(return_value=None)
     mock_child._SLUG = "BDR"
     mock_child.name = None
 
     with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
         mock_reg = mock_dr_get.return_value
-        mock_coordinator._update_device(mock_child)
+        await mock_coordinator._update_device(mock_child)
 
         call_kwargs = mock_reg.async_get_or_create.call_args[1]
         assert call_kwargs["via_device"] == (DOMAIN, "04:123456")
@@ -329,11 +329,32 @@ async def test_async_update_discovery(mock_coordinator: RamsesCoordinator) -> No
     # Setup mock entities in client
     mock_system = MagicMock(spec=Evohome)
     mock_system.id = "01:123456"
-    mock_system.dhw = MagicMock()  # Has DHW
-    mock_system.zones = [MagicMock()]  # Has Zone
+    mock_system._msg_value_code = AsyncMock(return_value=None)
+    mock_system._SLUG = "EVO"
+    mock_system.name = None
+
+    # Setup dhw with required async method
+    mock_dhw = MagicMock()
+    mock_dhw.id = "01:123456"
+    mock_dhw._msg_value_code = AsyncMock(return_value=None)
+    mock_dhw._SLUG = "DHW"
+    mock_dhw.name = None
+    mock_system.dhw = mock_dhw
+
+    # Setup zones with required async method
+    mock_zone = MagicMock()
+    mock_zone.id = "04:111111"
+    mock_zone._msg_value_code = AsyncMock(return_value=None)
+    mock_zone._SLUG = "ZON"
+    mock_zone.name = None
+    mock_zone.tcs = None
+    mock_system.zones = [mock_zone]
 
     mock_device = MagicMock()
     mock_device.id = "04:123456"  # Device
+    mock_device._msg_value_code = AsyncMock(return_value=None)
+    mock_device._SLUG = "DEV"
+    mock_device.name = None
 
     mock_coordinator.client.systems = [mock_system]
     mock_coordinator.client.devices = [mock_device]
@@ -437,12 +458,12 @@ async def test_update_device_system_naming(mock_coordinator: RamsesCoordinator) 
         mock_system._SLUG = None
 
         # Ensure the method returns None as expected
-        mock_system._msg_value_code.return_value = None
+        mock_system._msg_value_code = AsyncMock(return_value=None)
 
         with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
             mock_reg = mock_dr_get.return_value
 
-            mock_coordinator._update_device(mock_system)
+            await mock_coordinator._update_device(mock_system)
 
             # Verify the name format "Controller {id}"
             call_kwargs = mock_reg.async_get_or_create.call_args[1]
@@ -462,7 +483,7 @@ async def test_async_update_adds_systems_and_guards(
         name: str | None = None
         _SLUG: str = "EVO"
 
-        def _msg_value_code(self, *args: Any, **kwargs: Any) -> Any:
+        async def _msg_value_code(self, *args: Any, **kwargs: Any) -> Any:
             return None
 
     # Patch Evohome in the coordinator with our dummy CLASS (using new=...)
@@ -587,14 +608,14 @@ async def test_update_device_name_fallback_to_id(
     mock_device._SLUG = None  # Fails 'elif device._SLUG'
 
     # Stub helper method to return None (affects 'model' variable, not 'name')
-    mock_device._msg_value_code.return_value = None
+    mock_device._msg_value_code = AsyncMock(return_value=None)
 
     # 3. Patch the device registry to verify the result
     with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
         mock_reg = mock_dr_get.return_value
 
         # 4. Call the method under test
-        mock_coordinator._update_device(mock_device)
+        await mock_coordinator._update_device(mock_device)
 
         # 5. Verify device_registry was called with name == device.id
         call_kwargs = mock_reg.async_get_or_create.call_args[1]
@@ -1038,18 +1059,18 @@ async def test_update_device_skips_redundant_update(
     mock_device = MagicMock()
     mock_device.id = "01:000000"
     mock_device.name = "Test Device"
-    mock_device._msg_value_code.return_value = None
+    mock_device._msg_value_code = AsyncMock(return_value=None)
     mock_device._SLUG = "TST"
 
     with patch("homeassistant.helpers.device_registry.async_get") as mock_dr_get:
         mock_reg = mock_dr_get.return_value
 
         # First call: Should create
-        mock_coordinator._update_device(mock_device)
+        await mock_coordinator._update_device(mock_device)
         assert mock_reg.async_get_or_create.call_count == 1
 
         # Second call: Should return early
-        mock_coordinator._update_device(mock_device)
+        await mock_coordinator._update_device(mock_device)
         assert mock_reg.async_get_or_create.call_count == 1
 
 
