@@ -26,7 +26,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from ramses_rf.device.hvac import HvacRemote
 from ramses_tx.command import Command
 from ramses_tx.const import DEFAULT_GAP_DURATION, Priority
-from ramses_tx.exceptions import ProtocolError, ProtocolSendFailed
+from ramses_tx.exceptions import ProtocolError, ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import DeviceIdT
 
 from .const import ATTR_DEVICE_ID, DOMAIN
@@ -290,6 +290,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         except (
             TimeoutError,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             ProtocolError,
             AssertionError,
             Exception,

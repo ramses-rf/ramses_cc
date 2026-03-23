@@ -19,6 +19,7 @@ from ramses_tx.command import Command
 from ramses_tx.exceptions import (
     PacketAddrSetInvalid,
     ProtocolSendFailed,
+    ProtocolTimeoutError,
     TransportError,
 )
 
@@ -129,7 +130,12 @@ class RamsesServiceHandler:
 
         try:
             await self._coordinator.client.async_send_cmd(cmd)
-        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+        except (
+            ProtocolSendFailed,
+            ProtocolTimeoutError,
+            TimeoutError,
+            TransportError,
+        ) as err:
             raise HomeAssistantError(f"Failed to send packet: {err}") from err
 
         async_call_later(
@@ -242,7 +248,12 @@ class RamsesServiceHandler:
                 self.hass.async_create_task(entity._clear_pending_after_timeout(0))
             raise
 
-        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+        except (
+            ProtocolSendFailed,
+            ProtocolTimeoutError,
+            TimeoutError,
+            TransportError,
+        ) as err:
             # Raise friendly error for UI
             if entity and hasattr(entity, "_clear_pending_after_timeout"):
                 self.hass.async_create_task(entity._clear_pending_after_timeout(0))
@@ -379,7 +390,12 @@ class RamsesServiceHandler:
             if entity and hasattr(entity, "_clear_pending_after_timeout"):
                 self.hass.async_create_task(entity._clear_pending_after_timeout(30))
 
-        except (ProtocolSendFailed, TimeoutError, TransportError) as err:
+        except (
+            ProtocolSendFailed,
+            ProtocolTimeoutError,
+            TimeoutError,
+            TransportError,
+        ) as err:
             if entity and hasattr(entity, "_clear_pending_after_timeout"):
                 self.hass.async_create_task(entity._clear_pending_after_timeout(0))
             raise HomeAssistantError(f"Failed to set fan parameter: {err}") from err

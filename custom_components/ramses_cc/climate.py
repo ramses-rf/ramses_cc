@@ -41,7 +41,12 @@ from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.system.heat import Evohome
 from ramses_rf.system.zones import Zone
 from ramses_tx.const import SZ_MODE, SZ_SETPOINT, SZ_SYSTEM_MODE
-from ramses_tx.exceptions import ProtocolSendFailed, RamsesException, TransportError
+from ramses_tx.exceptions import (
+    ProtocolSendFailed,
+    ProtocolTimeoutError,
+    RamsesException,
+    TransportError,
+)
 
 from .const import (
     ATTR_DEVICE_ID,
@@ -344,6 +349,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -360,6 +366,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -414,6 +421,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -594,6 +602,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -691,6 +700,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -707,6 +717,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -724,6 +735,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -776,6 +788,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -792,6 +805,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -810,6 +824,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -958,6 +973,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
@@ -981,6 +997,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         except (
             RamsesException,
             ProtocolSendFailed,
+            ProtocolTimeoutError,
             TimeoutError,
             TransportError,
         ) as err:
