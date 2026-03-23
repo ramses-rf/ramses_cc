@@ -114,7 +114,7 @@ def _migrate_legacy_param_entity_ids(hass: HomeAssistant) -> None:
     if entries is None:
         entries = getattr(registry, "_entities", {})
 
-    values = entries.values() if hasattr(entries, "values") else ()
+    values = list(entries.values()) if hasattr(entries, "values") else []
     for entity in values:
         if getattr(entity, "domain", None) != "number":
             continue
