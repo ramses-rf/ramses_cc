@@ -106,6 +106,51 @@ def _has_existing_param_entities(entity_registry: Any, device_id: str) -> bool:
     return False
 
 
+def _migrate_legacy_param_entity_ids(hass: HomeAssistant) -> None:
+    registry = er.async_get(hass)
+    migrated_count = 0
+
+    entries = getattr(registry, "entities", None)
+    if entries is None:
+        entries = getattr(registry, "_entities", {})
+
+    values = list(entries.values()) if hasattr(entries, "values") else []
+    for entity in values:
+        if getattr(entity, "domain", None) != "number":
+            continue
+
+        if entity.platform != DOMAIN:
+            continue
+
+        entity_id = entity.entity_id
+        if not entity_id.startswith("number."):
+            continue
+
+        suffix = entity_id.removeprefix("number.")
+        if "_param_" not in suffix or not suffix.startswith("fan_"):
+            continue
+
+        new_entity_id = f"number.{suffix.removeprefix('fan_')}"
+        if registry.async_get(new_entity_id) is not None:
+            continue
+
+        try:
+            registry.async_update_entity(entity_id, new_entity_id=new_entity_id)
+            migrated_count += 1
+        except ValueError as err:
+            _LOGGER.warning(
+                "Failed to migrate param entity %s to %s: %s",
+                entity_id,
+                new_entity_id,
+                err,
+            )
+
+    if migrated_count:
+        _LOGGER.info(
+            "Migrated %d fan parameter entities to unprefixed IDs", migrated_count
+        )
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -123,6 +168,8 @@ async def async_setup_entry(
     :return: None
     :rtype: None
     """
+
+    _migrate_legacy_param_entity_ids(hass)
 
     coordinator: RamsesCoordinator = hass.data[DOMAIN][entry.entry_id]
     platform: EntityPlatform = async_get_current_platform()
@@ -1029,9 +1076,7 @@ def create_parameter_entities(
 
         param_id = getattr(description, "ramses_rf_attr", "unknown")
         unique_id = f"{device_id}_param_{param_id.lower()}"
-        slug = getattr(device, "_SLUG", "")
-        slug_prefix = f"{slug.lower()}_" if slug else ""
-        suggested_object_id = f"{slug_prefix}{device_id}_param_{param_id.lower()}"
+        suggested_object_id = f"{device_id}_param_{param_id.lower()}"
         desired_entity_id = f"number.{suggested_object_id}"
 
         # The entity key is already set correctly in get_param_descriptions()

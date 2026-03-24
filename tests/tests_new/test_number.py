@@ -9,12 +9,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant, ServiceRegistry
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.ramses_cc.const import DOMAIN
 from custom_components.ramses_cc.number import (
     RamsesNumberBase,
     RamsesNumberEntityDescription,
     RamsesNumberParam,
+    _migrate_legacy_param_entity_ids,
     async_setup_entry,
     create_parameter_entities,
     get_param_descriptions,
@@ -617,6 +619,86 @@ async def test_create_parameter_entities_no_support(
     mock_fan_device.supports_2411 = False
     entities = create_parameter_entities(mock_coordinator, mock_fan_device)
     assert len(entities) == 0
+
+
+def test_migrate_legacy_param_entity_ids(hass: HomeAssistant) -> None:
+    """Test migration of legacy fan-prefixed parameter entity IDs."""
+    ent_reg = er.async_get(hass)
+    legacy = ent_reg.async_get_or_create(
+        "number",
+        DOMAIN,
+        "30_999888_param_01",
+        suggested_object_id="fan_30_999888_param_01",
+    )
+
+    assert legacy.entity_id == "number.fan_30_999888_param_01"
+
+    _migrate_legacy_param_entity_ids(hass)
+
+    migrated = ent_reg.async_get_entity_id("number", DOMAIN, "30_999888_param_01")
+    assert migrated == "number.30_999888_param_01"
+    assert ent_reg.async_get("number.fan_30_999888_param_01") is None
+
+
+def test_migrate_legacy_param_entity_ids_skips_existing_target(
+    hass: HomeAssistant,
+) -> None:
+    """Test migration skip when the unprefixed target already exists."""
+    ent_reg = er.async_get(hass)
+    ent_reg.async_get_or_create(
+        "number",
+        DOMAIN,
+        "30_999888_param_01",
+        suggested_object_id="fan_30_999888_param_01",
+    )
+    ent_reg.async_get_or_create(
+        "number",
+        DOMAIN,
+        "30_999888_param_02",
+        suggested_object_id="30_999888_param_02",
+    )
+    legacy = ent_reg.async_get_or_create(
+        "number",
+        DOMAIN,
+        "30_999888_param_02_legacy",
+        suggested_object_id="fan_30_999888_param_02",
+    )
+
+    _migrate_legacy_param_entity_ids(hass)
+
+    assert legacy.entity_id == "number.fan_30_999888_param_02"
+    assert ent_reg.async_get("number.30_999888_param_02") is not None
+
+
+def test_migrate_legacy_param_entity_ids_ignores_unrelated_entries(
+    hass: HomeAssistant,
+) -> None:
+    """Test migration ignores unrelated entries."""
+    ent_reg = er.async_get(hass)
+    switch_entry = ent_reg.async_get_or_create(
+        "switch",
+        DOMAIN,
+        "30_999888_param_03_switch",
+        suggested_object_id="fan_30_999888_param_03",
+    )
+    other_platform = ent_reg.async_get_or_create(
+        "number",
+        "other_domain",
+        "30_999888_param_04_other",
+        suggested_object_id="fan_30_999888_param_04",
+    )
+    missing_prefix = ent_reg.async_get_or_create(
+        "number",
+        DOMAIN,
+        "30_999888_param_05",
+        suggested_object_id="30_999888_param_05",
+    )
+
+    _migrate_legacy_param_entity_ids(hass)
+
+    assert switch_entry.entity_id == "switch.fan_30_999888_param_03"
+    assert other_platform.entity_id == "number.fan_30_999888_param_04"
+    assert missing_prefix.entity_id == "number.30_999888_param_05"
 
 
 async def test_create_parameter_entities_error(
