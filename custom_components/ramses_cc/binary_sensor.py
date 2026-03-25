@@ -187,7 +187,13 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the integration-specific gateway state attributes."""
-        gwy: Gateway = self._device._gwy
+        _LOGGER.debug(
+            "Fetching extra_state_attributes for RamsesGatewayBinarySensor %s",
+            self._device,
+        )
+        gwy: Gateway = resolve_async_attr(
+            self, self._device, "_gwy"
+        )  # note: only class trying direct access to ._gwy
         engine = resolve_async_attr(self, gwy, "_engine", None)
         known_list = resolve_async_attr(self, gwy, "known_list", None)
         if not isinstance(known_list, dict):
@@ -240,11 +246,12 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
     @property
     def is_on(self) -> bool:
         """Return True if the gateway has received messages recently."""
-        gwy = self._device._gwy
-        msg = resolve_async_attr(self, gwy, "_this_msg", None)
-        if msg is None:
-            engine = resolve_async_attr(self, gwy, "_engine", None)
-            msg = resolve_async_attr(self, engine, "_this_msg", None)
+        _LOGGER.debug("Fetching state for RamsesGatewayBinarySensor %s", self._device)
+        gwy: Gateway = resolve_async_attr(
+            self, self._device, "_gwy"
+        )  # note: only class trying direct access to ._gwy
+        engine = resolve_async_attr(self, gwy, "_engine", None)
+        msg = resolve_async_attr(self, engine, "_this_msg", None)
         return not bool(
             msg and dt_util.now() - dt_util.as_utc(msg.dtm) < timedelta(seconds=300)
         )
