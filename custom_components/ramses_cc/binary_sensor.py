@@ -139,7 +139,7 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
         if hasattr(self._device, "state_store"):
             msg = self._device.state_store._msgs_.get(Code._0418)
         else:
-            msg = getattr(self._device, "_msgs", {}).get(Code._0418)
+            msg = resolve_async_attr(self, self._device, "_msgs", {}).get(Code._0418)
 
         return bool(
             msg and dt_util.now() - dt_util.as_utc(msg.dtm) < timedelta(seconds=1200)
@@ -163,7 +163,7 @@ class RamsesSystemBinarySensor(RamsesBinarySensor):
         if hasattr(self._device, "state_store"):
             msg = self._device.state_store._msgs_.get(Code._1F09)
         else:
-            msg = getattr(self._device, "_msgs", {}).get(Code._1F09)
+            msg = resolve_async_attr(self, self._device, "_msgs", {}).get(Code._1F09)
 
         return bool(
             msg
@@ -188,19 +188,25 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the integration-specific gateway state attributes."""
         gwy: Gateway = self._device._gwy
-        engine = getattr(gwy, "_engine", None)
-        known_list = getattr(gwy, "known_list", None)
+        engine = resolve_async_attr(self, gwy, "_engine", None)
+        known_list = resolve_async_attr(self, gwy, "known_list", None)
         if not isinstance(known_list, dict):
-            known_list = getattr(engine, "_include", getattr(gwy, "_include", {}))
-        block_list = getattr(engine, "_exclude", None)
+            known_list = resolve_async_attr(
+                self, engine, "_include", resolve_async_attr(self, gwy, "_include", {})
+            )
+        block_list = resolve_async_attr(self, engine, "_exclude", None)
         if not isinstance(block_list, dict):
-            block_list = getattr(gwy, "_exclude", {})
-        enforce_known_list = getattr(engine, "_enforce_known_list", None)
-        if not isinstance(enforce_known_list, bool):
-            enforce_known_list = getattr(gwy, "_enforce_known_list", None)
-        transport = getattr(engine, "_transport", None) or getattr(
-            gwy, "_transport", None
+            block_list = resolve_async_attr(self, gwy, "_exclude", {})
+        enforce_known_list = resolve_async_attr(
+            self, engine, "_enforce_known_list", None
         )
+        if not isinstance(enforce_known_list, bool):
+            enforce_known_list = resolve_async_attr(
+                self, gwy, "_enforce_known_list", None
+            )
+        transport = resolve_async_attr(
+            self, engine, "_transport", None
+        ) or resolve_async_attr(self, gwy, "_transport", None)
         current_size = len(known_list) if known_list else 0
 
         if self._cached_attrs is None or current_size != self._last_known_list_size:
@@ -235,10 +241,10 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
     def is_on(self) -> bool:
         """Return True if the gateway has received messages recently."""
         gwy = self._device._gwy
-        msg = getattr(gwy, "_this_msg", None)
+        msg = resolve_async_attr(self, gwy, "_this_msg", None)
         if msg is None:
-            engine = getattr(gwy, "_engine", None)
-            msg = getattr(engine, "_this_msg", None)
+            engine = resolve_async_attr(self, gwy, "_engine", None)
+            msg = resolve_async_attr(self, engine, "_this_msg", None)
         return not bool(
             msg and dt_util.now() - dt_util.as_utc(msg.dtm) < timedelta(seconds=300)
         )
