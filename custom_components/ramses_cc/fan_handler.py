@@ -17,6 +17,7 @@ from ramses_tx.const import DevType
 from ramses_tx.typing import DeviceIdT
 
 from .const import DOMAIN, SIGNAL_NEW_DEVICES, SZ_BOUND_TO, SZ_KNOWN_LIST
+from .helpers import resolve_async_attr
 
 if TYPE_CHECKING:
     from .coordinator import RamsesCoordinator
@@ -232,7 +233,7 @@ class RamsesFanHandler:
             if (
                 hasattr(device, "supports_2411")
                 and device.supports_2411
-                and getattr(device, "_initialized", False)
+                and resolve_async_attr(self, device, "_initialized", False)
             ):
                 _LOGGER.debug(
                     "Device %s already initialized, creating parameter entities",

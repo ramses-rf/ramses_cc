@@ -83,8 +83,15 @@ class RamsesEntity(CoordinatorEntity):
         if isinstance(self._device, Fakeable) and self._device.is_faked:
             return True
 
-        state_store = getattr(self._device, "state_store", self._device)
-        msgs = getattr(state_store, "_msgs_", getattr(self._device, "_msgs", {}))
+        state_store = resolve_async_attr(
+            self, self._device, "state_store", self._device
+        )
+        msgs = resolve_async_attr(
+            self,
+            state_store,
+            "_msgs_",
+            resolve_async_attr(self, self._device, "_msgs", {}),
+        )
 
         if not msgs:
             return False
