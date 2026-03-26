@@ -147,7 +147,7 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
     @property
     def is_on(self) -> bool:
         """Return the state of the binary sensor."""
-        faults = resolve_async_attr(self, self._device, "active_faults", False)
+        faults = resolve_async_attr(self, self._device, "active_faults")
         return bool(faults)
 
 
