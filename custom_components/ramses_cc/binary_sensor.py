@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime as dt, timedelta as td
 from types import UnionType
 from typing import Any
 
@@ -41,6 +41,7 @@ from ramses_rf.entity_base import Entity as RamsesRFEntity
 from ramses_rf.gateway import Gateway
 from ramses_rf.schemas import SZ_BLOCK_LIST, SZ_CONFIG, SZ_KNOWN_LIST, SZ_SCHEMA
 from ramses_rf.system.heat import Logbook, System
+from ramses_tx import Message
 from ramses_tx.const import SZ_BYPASS_POSITION, SZ_IS_EVOFW3, Code
 
 from .const import (
@@ -92,7 +93,7 @@ class RamsesBinarySensor(RamsesEntity, BinarySensorEntity):
         entity_description: RamsesEntityDescription,
     ) -> None:
         """Initialize the binary sensor."""
-        _LOGGER.info("Found %s: %s", device.id, entity_description.key)
+        _LOGGER.info("Initializing %s: %s", device.id, entity_description.key)
         super().__init__(coordinator, device, entity_description)
 
         self._attr_unique_id = f"{device.id}-{entity_description.key}"
@@ -140,15 +141,13 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
             msg = self._device.state_store._msgs_.get(Code._0418)
         else:
             msg = resolve_async_attr(self, self._device, "_msgs", {}).get(Code._0418)
-
-        return bool(
-            msg and dt_util.now() - dt_util.as_utc(msg.dtm) < timedelta(seconds=1200)
-        )
+        _dtm: dt = msg.dtm
+        return bool(msg and (dt_util.now() - dt_util.as_utc(_dtm) < td(seconds=1200)))
 
     @property
     def is_on(self) -> bool:
         """Return the state of the binary sensor."""
-        faults = resolve_async_attr(self, self._device, "active_faults")
+        faults = resolve_async_attr(self, self._device, "active_faults", False)
         return bool(faults)
 
 
@@ -164,11 +163,13 @@ class RamsesSystemBinarySensor(RamsesBinarySensor):
             msg = self._device.state_store._msgs_.get(Code._1F09)
         else:
             msg = resolve_async_attr(self, self._device, "_msgs", {}).get(Code._1F09)
-
+        _dtm: dt = msg.dtm
         return bool(
             msg
-            and dt_util.now() - dt_util.as_utc(msg.dtm)
-            < timedelta(seconds=msg.payload["remaining_seconds"] * 3)
+            and (
+                dt_util.now() - dt_util.as_utc(_dtm)
+                < td(seconds=msg.payload["remaining_seconds"] * 3)
+            )
         )
 
     @property
@@ -225,10 +226,13 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
                 }
 
             tcs_schema = {}
-            if gwy.tcs:
-                resolved_schema = resolve_async_attr(self, gwy.tcs, "_schema_min")
+            _tcs = resolve_async_attr(self, gwy, "tcs")
+            if _tcs is not None:
+                resolved_schema = resolve_async_attr(self, _tcs, "_schema_min")
                 if resolved_schema is not None:
-                    tcs_schema = {gwy.tcs.id: resolved_schema}
+                    tcs_schema = {
+                        resolve_async_attr(self, _tcs, "id:"): resolved_schema
+                    }
 
             self._cached_attrs = {
                 SZ_SCHEMA: tcs_schema,
@@ -251,9 +255,11 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
             self, self._device, "_gwy"
         )  # note: only class trying direct access to ._gwy
         engine = resolve_async_attr(self, gwy, "_engine", None)
-        msg = resolve_async_attr(self, engine, "_this_msg", None)
+        msg: Message = resolve_async_attr(self, engine, "_this_msg", None)
+        _dtm: dt = msg.dtm
         return not bool(
-            msg and dt_util.now() - dt_util.as_utc(msg.dtm) < timedelta(seconds=300)
+            msg and (dt_util.now() - dt_util.as_utc(_dtm) < td(seconds=300))
+            # TODO fix test error: can't < with MagickMock()
         )
 
 
