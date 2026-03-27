@@ -16,9 +16,10 @@ from homeassistant.util import dt as dt_util
 
 from ramses_rf.device import Fakeable
 from ramses_rf.entity_base import Entity as RamsesRFEntity
+from ramses_rf.state_store import StateStore
 
 from .const import DOMAIN, SIGNAL_UPDATE
-from .helpers import resolve_async_attr
+from .helpers import latest_dtm, resolve_async_attr
 
 if TYPE_CHECKING:
     from .coordinator import RamsesCoordinator
@@ -83,7 +84,7 @@ class RamsesEntity(CoordinatorEntity):
         if isinstance(self._device, Fakeable) and self._device.is_faked:
             return True
 
-        state_store = resolve_async_attr(
+        state_store: StateStore = resolve_async_attr(
             self, self._device, "state_store", self._device
         )
         msgs = resolve_async_attr(
@@ -92,21 +93,10 @@ class RamsesEntity(CoordinatorEntity):
             "_msgs_",
             resolve_async_attr(self, self._device, "_msgs", {}),
         )
-
-        if not msgs:
+        _dtm = latest_dtm(msgs)
+        if _dtm is None:
             return False
-
-        latest_dtm = None
-        for msg in msgs.values():
-            msg_dtm = getattr(msg, "dtm", None)
-            if msg_dtm:
-                if latest_dtm is None or msg_dtm > latest_dtm:
-                    latest_dtm = msg_dtm
-
-        if latest_dtm is None:
-            return False
-
-        return bool(dt_util.now() - dt_util.as_utc(latest_dtm) < timedelta(minutes=60))
+        return bool(dt_util.now() - dt_util.as_utc(_dtm) < timedelta(minutes=60))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

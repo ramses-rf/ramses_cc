@@ -13,6 +13,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 
+from ramses_tx import Code, Message
+
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -104,6 +106,22 @@ def as_iso(val: Any) -> str:
     if isinstance(val, datetime):
         return val.replace(tzinfo=None).isoformat()
     return str(val)
+
+
+def latest_dtm(msgs: dict[Code, Message]) -> datetime | None:
+    """Get the latest datetime from the device registry."""
+    if not msgs:
+        return None
+    latest_dtm = None
+    for msg in msgs.values():
+        msg_dtm = getattr(msg, "dtm", None)
+        if msg_dtm:
+            if latest_dtm is None or msg_dtm > latest_dtm:
+                latest_dtm = msg_dtm
+
+    if latest_dtm is None:
+        return None
+    return latest_dtm
 
 
 def resolve_async_attr(

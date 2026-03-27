@@ -54,7 +54,7 @@ from .const import (
 )
 from .coordinator import RamsesCoordinator
 from .entity import RamsesEntity, RamsesEntityDescription
-from .helpers import resolve_async_attr
+from .helpers import latest_dtm, resolve_async_attr
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -159,10 +159,12 @@ class RamsesSystemBinarySensor(RamsesBinarySensor):
     @property
     def available(self) -> bool:
         """Return True if the last system sync message is recent."""
-        if hasattr(self._device, "state_store"):
-            msg = self._device.state_store._msgs_.get(Code._1F09)
-        else:
-            msg = resolve_async_attr(self, self._device, "_msgs", {}).get(Code._1F09)
+        msgs: dict[Code, Message] | None = resolve_async_attr(
+            self, self._device.state_store, "_msgs_", None
+        )
+        if msgs is None:
+            msgs = resolve_async_attr(self, self._device, "_msgs", {})
+        msg: Message = msgs.get(Code._1F09)
         _dtm: dt = msg.dtm
         return bool(
             msg
@@ -179,7 +181,7 @@ class RamsesSystemBinarySensor(RamsesBinarySensor):
 
 
 class RamsesGatewayBinarySensor(RamsesBinarySensor):
-    """Representation of a gateway (a HGI80)."""
+    """Representation of a gateway (a HGI80 or substitute)."""
 
     _device: HgiGateway
     _cached_attrs: dict[str, Any] | None = None
@@ -188,6 +190,7 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the integration-specific gateway state attributes."""
+        # never called unless entity is available()
         _LOGGER.debug(
             "Fetching extra_state_attributes for RamsesGatewayBinarySensor %s",
             self._device,
@@ -195,6 +198,7 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
         gwy: Gateway = resolve_async_attr(
             self, self._device, "_gwy"
         )  # note: only class trying direct access to ._gwy
+        # gwy never gets updated after boot, no problem for schema etc
         engine = resolve_async_attr(self, gwy, "_engine", None)
         known_list = resolve_async_attr(self, gwy, "known_list", None)
         if not isinstance(known_list, dict):
@@ -248,17 +252,41 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
         return super().extra_state_attributes | self._cached_attrs
 
     @property
+    def available(self) -> bool:
+        """Always True, since we always have an HGI gateway."""
+        # must override super Entity is_on
+        return True
+
+    @property
     def is_on(self) -> bool:
         """Return True if the gateway has received messages recently."""
-        _LOGGER.debug("Fetching state for RamsesGatewayBinarySensor %s", self._device)
-        gwy: Gateway = resolve_async_attr(
-            self, self._device, "_gwy"
-        )  # note: only class trying direct access to ._gwy
-        engine = resolve_async_attr(self, gwy, "_engine", None)
-        msg: Message = resolve_async_attr(self, engine, "_this_msg", None)
-        _dtm: dt = msg.dtm
+        # TODO instead of direct _gwy access (which fails in 0.55.6) use
+        #  the "latest_dtm" attr (change ramses_rf_attr below when available in ramses_rf)
+
+        # gwy: Gateway = resolve_async_attr(
+        #     self, self._device, "_gwy"
+        # )  # note: only class trying direct access to ._gwy
+        # engine = resolve_async_attr(self, gwy, "_engine", None)
+        # msg: Message = resolve_async_attr(self, engine, "_this_msg", None)
+        # never updated after FIRST hgi config TODO clean up above
+
+        gateway_dtm: dt | None = resolve_async_attr(
+            self,
+            self._device,
+            self.entity_description.gateway_dtm,
+            None,  # ramses_rf_attr, None
+        )
+        if gateway_dtm is None:
+            msgs: dict[Code, Message] = resolve_async_attr(
+                self, self._device.state_store, "_msgs_", None
+            )
+            gateway_dtm = latest_dtm(
+                msgs
+            )  # never updated TODO remove this block when gateway_dtm is in ramses_rf
+
         return not bool(
-            msg and (dt_util.now() - dt_util.as_utc(_dtm) < td(seconds=300))
+            gateway_dtm
+            and (dt_util.now() - dt_util.as_utc(gateway_dtm) < td(seconds=300))
             # TODO fix test error: can't < with MagickMock()
         )
 
@@ -281,7 +309,7 @@ class RamsesBinarySensorEntityDescription(
 BINARY_SENSOR_DESCRIPTIONS: tuple[RamsesBinarySensorEntityDescription, ...] = (
     RamsesBinarySensorEntityDescription(
         key="status",
-        ramses_rf_attr="id",
+        ramses_rf_attr="id",  # TODO replace by ="gateway_dtm",
         name="Gateway status",
         ramses_rf_class=HgiGateway,
         ramses_cc_class=RamsesGatewayBinarySensor,
