@@ -13,7 +13,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
+    MockConfigEntry,
+)
 
 from custom_components.ramses_cc.const import (
     CONF_ADVANCED_FEATURES,
@@ -44,7 +46,7 @@ class mock_message:
 
 # Mock Coordinator
 @pytest.fixture
-def mock_coordinator(learn_device_id=None) -> MagicMock:
+def mock_coordinator(learn_device_id: str | None = None) -> MagicMock:
     """A mock object simulating the RamsesCoordinator."""
     coordinator = MagicMock()
     coordinator.async_register_platform = MagicMock()
@@ -54,13 +56,13 @@ def mock_coordinator(learn_device_id=None) -> MagicMock:
 
 # Mock HomeAssistant
 @pytest.fixture
-def mock_hass() -> None:
+def mock_hass() -> MagicMock:
     return MagicMock(spec=HomeAssistant, data={})
 
 
 # Mock ConfigEntry
 @pytest.fixture
-def mock_config_entry() -> None:
+def mock_config_entry() -> MagicMock:
     return MagicMock(spec=ConfigEntry, entry_id="123")
 
 
@@ -89,7 +91,9 @@ def test_ramses_event_type() -> None:
 
 # Test RamsesEvent
 @pytest.mark.asyncio
-async def test_ramses_event_init(mock_hass, mock_coordinator) -> None:
+async def test_ramses_event_init(
+    mock_hass: MagicMock, mock_coordinator: MagicMock
+) -> None:
     event = RamsesEvent(
         mock_coordinator,
         mock_hass,
@@ -100,7 +104,9 @@ async def test_ramses_event_init(mock_hass, mock_coordinator) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ramses_event_update_data(mock_hass, mock_coordinator) -> None:
+async def test_ramses_event_update_data(
+    mock_hass: MagicMock, mock_coordinator: MagicMock
+) -> None:
     event = RamsesEvent(
         mock_coordinator,
         mock_hass,
@@ -115,7 +121,9 @@ async def test_ramses_event_update_data(mock_hass, mock_coordinator) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ramses_event_update_data_error(mock_hass, mock_coordinator) -> None:
+async def test_ramses_event_update_data_error(
+    mock_hass: MagicMock, mock_coordinator: MagicMock
+) -> None:
     event = RamsesEvent(
         mock_coordinator,
         mock_hass,
@@ -129,7 +137,9 @@ async def test_ramses_event_update_data_error(mock_hass, mock_coordinator) -> No
 
 
 @pytest.mark.asyncio
-async def test_ramses_event_async_added_to_hass(mock_hass, mock_coordinator) -> None:
+async def test_ramses_event_async_added_to_hass(
+    mock_hass: MagicMock, mock_coordinator: MagicMock
+) -> None:
     mock_callback = MagicMock()
     event = RamsesEvent(
         mock_coordinator,
@@ -144,7 +154,7 @@ async def test_ramses_event_async_added_to_hass(mock_hass, mock_coordinator) -> 
 
 @pytest.mark.asyncio
 async def test_ramses_event_async_will_remove_from_hass(
-    mock_hass, mock_coordinator
+    mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
     mock_remove = MagicMock()
     event = RamsesEvent(
@@ -160,7 +170,9 @@ async def test_ramses_event_async_will_remove_from_hass(
 
 # Test RamsesLearnEvent
 @pytest.mark.asyncio
-async def test_ramses_learn_event_init(mock_hass, mock_coordinator) -> None:
+async def test_ramses_learn_event_init(
+    mock_hass: MagicMock, mock_coordinator: MagicMock
+) -> None:
     mock_coordinator.learn_device_id = "dev1"
     event = RamsesLearnEvent(
         mock_coordinator, mock_hass, {"type": RamsesEventType.LEARN}
@@ -171,7 +183,7 @@ async def test_ramses_learn_event_init(mock_hass, mock_coordinator) -> None:
 
 @pytest.mark.asyncio
 async def test_ramses_learn_event_async_process_msg(
-    mock_hass, mock_coordinator
+    mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
     mock_coordinator.learn_device_id = "dev1"
     event = RamsesLearnEvent(
@@ -200,7 +212,9 @@ async def test_ramses_learn_event_async_process_msg(
 
 # Test RamsesRegexEvent
 @pytest.mark.asyncio
-async def test_ramses_regex_event_init(mock_hass, mock_coordinator) -> None:
+async def test_ramses_regex_event_init(
+    mock_hass: MagicMock, mock_coordinator: MagicMock
+) -> None:
     regex = re.compile("test")
     event = RamsesRegexEvent(
         mock_coordinator, mock_hass, {"type": RamsesEventType.REGEX}, regex=regex
@@ -211,7 +225,7 @@ async def test_ramses_regex_event_init(mock_hass, mock_coordinator) -> None:
 
 @pytest.mark.asyncio
 async def test_ramses_regex_event_async_process_msg(
-    mock_hass, mock_coordinator
+    mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
     regex = re.compile("payload1")
     event = RamsesRegexEvent(
@@ -320,7 +334,7 @@ async def test_domain_events(hass: HomeAssistant, mock_coordinator: MagicMock) -
     # assert loaded_entry.state == ConfigEntryState.LOADED
 
     PLATFORMS = [Platform.EVENT]
-    callback_func: Callable | None = None
+    callback_func: Callable[..., Any] | None = None
 
     # We need to capture the inner 'async_process_msg' function defined inside RamsesEvent
     await hass.config_entries.async_forward_entry_setups(
@@ -372,7 +386,8 @@ async def test_domain_events(hass: HomeAssistant, mock_coordinator: MagicMock) -
     hass.bus.async_listen(f"{DOMAIN}_learn", capture_learn)
 
     # Fire the callback again
-    callback_func(msg)
+    if callback_func is not None:
+        callback_func(msg)
     await hass.async_block_till_done()
 
     assert len(learn_events) == 1

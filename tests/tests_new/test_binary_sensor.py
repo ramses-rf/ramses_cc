@@ -161,7 +161,7 @@ async def test_battery_binary_sensor(mock_coordinator: MagicMock) -> None:
 
 
 async def test_logbook_binary_sensor_availability(mock_coordinator: MagicMock) -> None:
-    """Test RamsesLogbookBinarySensor availability based on message age.
+    """Test RamsesLogbookBinarySensor availability delegates to device.
 
     :param mock_coordinator: The mock coordinator fixture.
     """
@@ -178,28 +178,13 @@ async def test_logbook_binary_sensor_availability(mock_coordinator: MagicMock) -
 
     sensor: Any = RamsesLogbookBinarySensor(mock_coordinator, mock_device, description)
 
-    # Setup the mocked state_store
-    mock_device.state_store = MagicMock()
+    # Case A: Device is not available
+    mock_device.is_available = False
+    assert sensor.available is False
 
-    # Case A: No message -> Not available
-    mock_device.state_store._msgs_ = {}
-    avail_1 = sensor.available
-    assert avail_1 is False
-
-    # Case B: Recent message -> Available
-    msg = MagicMock()
-    msg.dtm = dt_util.now()
-    mock_device.state_store._msgs_ = {"0418": msg}
-
-    avail_2 = sensor.available
-    assert avail_2 is True
-
-    # Case C: Old message -> Not available
-    msg.dtm = dt_util.now() - timedelta(seconds=1300)
-    mock_device.state_store._msgs_ = {"0418": msg}
-
-    avail_3 = sensor.available
-    assert avail_3 is False
+    # Case B: Device is available
+    mock_device.is_available = True
+    assert sensor.available is True
 
 
 async def test_logbook_binary_sensor_state(mock_coordinator: MagicMock) -> None:
@@ -234,7 +219,7 @@ async def test_logbook_binary_sensor_state(mock_coordinator: MagicMock) -> None:
 
 
 async def test_system_binary_sensor_availability(mock_coordinator: MagicMock) -> None:
-    """Test RamsesSystemBinarySensor availability calculation.
+    """Test RamsesSystemBinarySensor availability delegates to device.
 
     :param mock_coordinator: The mock coordinator fixture.
     """
@@ -251,29 +236,13 @@ async def test_system_binary_sensor_availability(mock_coordinator: MagicMock) ->
 
     sensor: Any = RamsesSystemBinarySensor(mock_coordinator, mock_device, description)
 
-    # Setup the mocked state_store
-    mock_device.state_store = MagicMock()
+    # Case A: Device is not available
+    mock_device.is_available = False
+    assert sensor.available is False
 
-    # 1. Case A: No message -> Not available
-    mock_device.state_store._msgs_ = {}
-
-    # Assign to variable to prevent Mypy from narrowing sensor.available to Literal[False]
-    avail_a = sensor.available
-    assert avail_a is False
-
-    # 2. Case B: Old message -> Not available
-    msg = MagicMock()
-    msg.dtm = dt_util.now() - timedelta(seconds=100)
-    msg.payload = {"remaining_seconds": 10}  # Limit is 30 seconds
-    mock_device.state_store._msgs_ = {"1F09": msg}
-
-    avail_b = sensor.available
-    assert avail_b is False
-
-    # 3. Case C: Recent message -> Available
-    msg.dtm = dt_util.now()
-    avail_c = sensor.available
-    assert avail_c is True
+    # Case B: Device is available
+    mock_device.is_available = True
+    assert sensor.available is True
 
 
 @patch("custom_components.ramses_cc.binary_sensor.resolve_async_attr")

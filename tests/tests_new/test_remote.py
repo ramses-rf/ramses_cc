@@ -315,7 +315,7 @@ async def test_remote_learn_command_success(
 
 
 # TODO(eb): adapt this LeChat test suggestion to the above test_remote_learn_command_success:
-async def test_async_learn_command_callback():
+async def test_async_learn_command_callback() -> None:
     # Mock the class instance
     mock_instance = AsyncMock()
     mock_instance._commands = {}
@@ -384,7 +384,7 @@ async def test_async_learn_command_success(
     remote_entity: RamsesRemote,
     mock_coordinator: MagicMock,
     mock_remote_device: MagicMock,
-):
+) -> None:
     """Test successful learning of a command."""
     # Setup
     device = remote_entity
@@ -410,7 +410,7 @@ async def test_async_learn_command_success(
 @pytest.mark.asyncio
 async def test_async_learn_command_invalid_command_type(
     remote_entity: RamsesRemote,
-):
+) -> None:
     """Test that a HomeAssistantError is raised for invalid command types."""
     # Setup
     device = remote_entity
@@ -424,7 +424,7 @@ async def test_async_learn_command_invalid_command_type(
 @pytest.mark.asyncio
 async def test_async_learn_command_command_already_exists(
     remote_entity: RamsesRemote,
-):
+) -> None:
     """Test that the existing command is deleted before learning a new one."""
     # Setup
     device = remote_entity
@@ -447,7 +447,7 @@ async def test_async_learn_command_command_already_exists(
 @pytest.mark.asyncio
 async def test_async_learn_command_kwargs_not_empty(
     remote_entity: RamsesRemote,
-):
+) -> None:
     """Test that an assertion error is raised if kwargs are not empty."""
     # Setup
     device = remote_entity

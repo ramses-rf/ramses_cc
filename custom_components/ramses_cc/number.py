@@ -673,6 +673,10 @@ class RamsesNumberParam(RamsesNumberBase):
         :return: True if the entity has a valid value, False otherwise
         :rtype: bool
         """
+
+        if not super().available:
+            return False
+
         if not self._normalized_param_id:
             return False
 

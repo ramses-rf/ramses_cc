@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.const import ATTR_ID
@@ -12,7 +11,6 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import dt as dt_util
 
 from ramses_rf.device import Fakeable
 from ramses_rf.entity_base import Entity as RamsesRFEntity
@@ -73,33 +71,20 @@ class RamsesEntity(CoordinatorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if the entity is available based on recent communication.
+        """Return True if the entity is available based on protocol health.
 
-        Checks if the device is faked or if a valid packet has been received
-        within the last 60 minutes.
+        Delegates the health check to the underlying ramses_rf device. Faked
+        devices are always considered available.
 
         :return: True if the device is active and communicating, False otherwise.
+        :rtype: bool
         """
         if isinstance(self._device, Fakeable) and self._device.is_faked:
             return True
 
-        state_store = getattr(self._device, "state_store", self._device)
-        msgs = getattr(state_store, "_msgs_", getattr(self._device, "_msgs", {}))
-
-        if not msgs:
-            return False
-
-        latest_dtm = None
-        for msg in msgs.values():
-            msg_dtm = getattr(msg, "dtm", None)
-            if msg_dtm:
-                if latest_dtm is None or msg_dtm > latest_dtm:
-                    latest_dtm = msg_dtm
-
-        if latest_dtm is None:
-            return False
-
-        return bool(dt_util.now() - dt_util.as_utc(latest_dtm) < timedelta(minutes=60))
+        # Safely delegate to the library's is_available property.
+        # Defaults to True if an older version of ramses_rf is present.
+        return bool(getattr(self._device, "is_available", True))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

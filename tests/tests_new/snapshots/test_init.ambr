@@ -5,25 +5,43 @@
       'attributes': ReadOnlyDict({
         'device_class': 'problem',
         'friendly_name': 'CTL 01:145038 System status',
+        'id': '01:145038',
+        'working_schema': dict({
+          'orphans': list([
+          ]),
+          'stored_hotwater': dict({
+          }),
+          'system': dict({
+            'appliance_control': None,
+          }),
+          'underfloor_heating': dict({
+          }),
+          'zones': dict({
+          }),
+        }),
       }),
       'context': <ANY>,
       'entity_id': 'binary_sensor.ctl_01_145038_system_status',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
-      'state': 'unavailable',
+      'state': 'off',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
+        'active_faults': None,
         'device_class': 'problem',
         'friendly_name': 'CTL 01:145038 Active fault',
+        'id': '01:145038',
+        'latest_event': None,
+        'latest_fault': None,
       }),
       'context': <ANY>,
       'entity_id': 'binary_sensor.ctl_01_145038_active_fault',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
-      'state': 'unavailable',
+      'state': 'off',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
