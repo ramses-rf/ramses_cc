@@ -38,13 +38,16 @@ from ramses_tx.const import Code
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
     SCH_SERIAL_PORT_CONFIG,
+    SZ_BUFFER_CAPACITY,
     SZ_ENFORCE_KNOWN_LIST,
-    SZ_FILE_NAME,
+    SZ_FLUSH_INTERVAL,
     SZ_KNOWN_LIST,
     SZ_LOG_ALL_MQTT,
     SZ_PACKET_LOG,
+    SZ_PACKET_LOG_PATH,
+    SZ_PACKET_LOG_PREFIX,
+    SZ_PACKET_LOG_RETENTION_DAYS,
     SZ_PORT_NAME,
-    SZ_ROTATE_BACKUPS,
     SZ_ROTATE_BYTES,
     SZ_SERIAL_PORT,
     SZ_SQLITE_INDEX,
@@ -925,9 +928,41 @@ class BaseRamsesFlow(FlowHandler):
 
         data_schema = {
             vol.Optional(
-                SZ_FILE_NAME,
-                description={"suggested_value": suggested_values.get(SZ_FILE_NAME)},
+                SZ_PACKET_LOG_PATH,
+                default="/config/ramses_rf_logs/",
+                description={
+                    "suggested_value": suggested_values.get(
+                        SZ_PACKET_LOG_PATH, "/config/ramses_rf_logs/"
+                    )
+                },
             ): selector.TextSelector(),
+            vol.Optional(
+                SZ_PACKET_LOG_PREFIX,
+                default="packet_log",
+                description={
+                    "suggested_value": suggested_values.get(
+                        SZ_PACKET_LOG_PREFIX, "packet_log"
+                    )
+                },
+            ): selector.TextSelector(),
+            vol.Optional(
+                SZ_PACKET_LOG_RETENTION_DAYS,
+                default=7,
+                description={
+                    "suggested_value": suggested_values.get(
+                        SZ_PACKET_LOG_RETENTION_DAYS, 7
+                    )
+                },
+            ): vol.All(
+                selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        unit_of_measurement="days",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Coerce(int),
+            ),
             vol.Optional(
                 SZ_ROTATE_BYTES,
                 description={"suggested_value": suggested_values.get(SZ_ROTATE_BYTES)},
@@ -942,26 +977,10 @@ class BaseRamsesFlow(FlowHandler):
                 vol.Coerce(int),
             ),
             vol.Optional(
-                SZ_ROTATE_BACKUPS,
-                default=7,
-                description={
-                    "suggested_value": suggested_values.get(SZ_ROTATE_BACKUPS)
-                },
-            ): vol.All(
-                selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=0,
-                        unit_of_measurement="backups",
-                        mode=selector.NumberSelectorMode.BOX,
-                    )
-                ),
-                vol.Coerce(int),
-            ),
-            vol.Optional(
-                "buffer_capacity",
+                SZ_BUFFER_CAPACITY,
                 default=0,
                 description={
-                    "suggested_value": suggested_values.get("buffer_capacity", 0)
+                    "suggested_value": suggested_values.get(SZ_BUFFER_CAPACITY, 0)
                 },
             ): vol.All(
                 selector.NumberSelector(
@@ -974,10 +993,10 @@ class BaseRamsesFlow(FlowHandler):
                 vol.Coerce(int),
             ),
             vol.Optional(
-                "flush_interval",
-                default=0.0,
+                SZ_FLUSH_INTERVAL,
+                default=60.0,
                 description={
-                    "suggested_value": suggested_values.get("flush_interval", 0.0)
+                    "suggested_value": suggested_values.get(SZ_FLUSH_INTERVAL, 60.0)
                 },
             ): vol.All(
                 selector.NumberSelector(

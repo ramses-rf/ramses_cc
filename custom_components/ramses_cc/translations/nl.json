@@ -96,15 +96,17 @@
                 "title": "Packet-log",
                 "description": "Optioneel packet-logbestand voor probleemoplossing en doorontwikkeling van de ramses_rf integratie.",
                 "data": {
-                    "file_name": "Bestandsnaam packet-log",
-                    "rotate_bytes": "Maximumgrootte per packet-log. Laat leeg voor dagelijks log",
-                    "rotate_backups": "Aantal te bewaren packet-logs",
+                    "packet_log_path": "Pad naar logmap",
+                    "packet_log_prefix": "Voorvoegsel logbestand",
+                    "packet_log_retention_days": "Dagen om logs te bewaren",
                     "buffer_capacity": "Geheugenbuffer capaciteit (regels)",
                     "flush_interval": "Tijdsinterval voor legen buffer (seconden)",
                     "flush_level": "Leeg buffer bij foutniveau"
                 },
                 "data_description": {
-                    "file_name": "Pad naar het packet-logbestand. Bewaarde backups krijgen deze bestandsnaam + een achtervoegsel.",
+                    "packet_log_path": "Pad naar de map waar logbestanden worden opgeslagen (bijv. /config/ramses_rf_logs/).",
+                    "packet_log_prefix": "Voorvoegsel voor de bestandsnaam (bijv. 'packet_log' maakt 'packet_log.log').",
+                    "packet_log_retention_days": "Aantal dagen om historische log-backups te bewaren voordat ze worden verwijderd.",
                     "buffer_capacity": "Aantal regels in het werkgeheugen (RAM) voordat deze naar schijf worden geschreven. Gebruik 0 om de 'flight recorder' uit te schakelen.",
                     "flush_interval": "Interval dat de geheugenbuffer weggeschreven moet worden, in seconden.",
                     "flush_level": "Bij welk type log-melding (bijv. WARNING of ERROR) de buffer direct naar schijf geschreven moet worden."
@@ -206,15 +208,17 @@
                 "title": "Berichten-logboek",
                 "description": "Optioneel berichten-logbestand voor oplossen van problemen en ontwikkeling van de integratie.",
                 "data": {
-                    "file_name": "Bestandsnaam berichten-logbestanden",
-                    "rotate_bytes": "Maximumgrootte van elk berichten-logbestanden",
-                    "rotate_backups": "Aantal te bewaren berichten-logbestanden",
+                    "packet_log_path": "Pad naar logmap",
+                    "packet_log_prefix": "Voorvoegsel logbestand",
+                    "packet_log_retention_days": "Dagen om logs te bewaren",
                     "buffer_capacity": "Geheugenbuffer capaciteit (regels)",
                     "flush_interval": "Tijdsinterval voor legen buffer (seconden)",
                     "flush_level": "Leeg buffer bij foutniveau"
                 },
                 "data_description": {
-                    "file_name": "Pad naar het berichten-logbestand. Bewaarde backups gebruiken deze naam + een achtervoegsel.",
+                    "packet_log_path": "Pad naar de map waar logbestanden worden opgeslagen (bijv. /config/ramses_rf_logs/).",
+                    "packet_log_prefix": "Voorvoegsel voor de bestandsnaam (bijv. 'packet_log' maakt 'packet_log.log').",
+                    "packet_log_retention_days": "Aantal dagen om historische log-backups te bewaren voordat ze worden verwijderd.",
                     "buffer_capacity": "Aantal regels in het werkgeheugen (RAM) voordat deze naar schijf worden geschreven. Gebruik 0 om de 'flight recorder' uit te schakelen.",
                     "flush_interval": "Interval dat de geheugenbuffer weggeschreven moet worden, in seconden.",
                     "flush_level": "Bij welk type log-melding (bijv. WARNING of ERROR) de buffer direct naar schijf geschreven moet worden."

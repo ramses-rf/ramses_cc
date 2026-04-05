@@ -71,6 +71,16 @@ async def test_entities(
     config = configuration_fixture(instance)
     config[DOMAIN]["serial_port"] = rf.ports[0]
 
+    # Convert legacy packet_log keys from fixtures to the new schema dynamically
+    if "packet_log" in config.get(DOMAIN, {}) and isinstance(
+        config[DOMAIN]["packet_log"], dict
+    ):
+        pkt_log = config[DOMAIN]["packet_log"]
+        if "file_name" in pkt_log:
+            pkt_log["packet_log_prefix"] = pkt_log.pop("file_name").split(".")[0]
+        if "rotate_backups" in pkt_log:
+            pkt_log["packet_log_retention_days"] = pkt_log.pop("rotate_backups")
+
     # Patch 'available' to always be True during setup so historical packet logs
     # render fully populated states in the snapshot, bypassing the 60-minute timeout.
     with (

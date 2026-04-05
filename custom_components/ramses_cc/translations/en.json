@@ -96,15 +96,17 @@
                 "title": "Packet log",
                 "description": "Optional packet log to aid troubleshooting and help development.",
                 "data": {
-                    "file_name": "Packet log file name",
-                    "rotate_bytes": "Maximum size of each packet log",
-                    "rotate_backups": "Number of packet logs to keep",
+                    "packet_log_path": "Packet log folder path",
+                    "packet_log_prefix": "Packet log file prefix",
+                    "packet_log_retention_days": "Days to keep logs",
                     "buffer_capacity": "Memory buffer capacity (lines)",
                     "flush_interval": "Timer flush interval (seconds)",
                     "flush_level": "Error trigger flush level"
                 },
                 "data_description": {
-                    "file_name": "Path to a packet log file. Retained backups will use this filename with a suffix.",
+                    "packet_log_path": "Path to the folder where logs will be stored (e.g., /config/ramses_rf_logs/).",
+                    "packet_log_prefix": "Prefix for the log files (e.g., 'packet_log' creates 'packet_log.log').",
+                    "packet_log_retention_days": "Number of days to keep historical log backups before deleting them.",
                     "buffer_capacity": "Number of packet log lines to buffer in RAM before writing to disk. Set to 0 to disable the flight recorder.",
                     "flush_interval": "Periodic interval in seconds to flush the memory buffer to disk. Set to 0 to disable timer flushing.",
                     "flush_level": "Logging severity level that will instantly trigger a buffer flush to disk (e.g., WARNING or ERROR)."
@@ -205,15 +207,17 @@
                 "title": "Packet log",
                 "description": "Optional packet log to aid troubleshooting and help development.",
                 "data": {
-                    "file_name": "Packet log file name",
-                    "rotate_bytes": "Maximum size of each packet log. Leave empty for daily logs",
-                    "rotate_backups": "Number of packet logs to keep",
+                    "packet_log_path": "Packet log folder path",
+                    "packet_log_prefix": "Packet log file prefix",
+                    "packet_log_retention_days": "Days to keep logs",
                     "buffer_capacity": "Memory buffer capacity (lines)",
                     "flush_interval": "Timer flush interval (seconds)",
                     "flush_level": "Error trigger flush level"
                 },
                 "data_description": {
-                    "file_name": "Path to a packet log file. Retained backups will use this filename with a suffix.",
+                    "packet_log_path": "Path to the folder where logs will be stored (e.g., /config/ramses_rf_logs/).",
+                    "packet_log_prefix": "Prefix for the log files (e.g., 'packet_log' creates 'packet_log.log').",
+                    "packet_log_retention_days": "Number of days to keep historical log backups before deleting them.",
                     "buffer_capacity": "Number of packet log lines to buffer in RAM before writing to disk. Set to 0 to disable the flight recorder.",
                     "flush_interval": "Periodic interval in seconds to flush the memory buffer to disk. Set to 0 to disable timer flushing.",
                     "flush_level": "Logging severity level that will instantly trigger a buffer flush to disk (e.g., WARNING or ERROR)."

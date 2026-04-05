@@ -103,7 +103,7 @@ async def test_full_user_flow(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input={
-            "file_name": "test_flight_recorder.log",
+            "packet_log_prefix": "test_flight_recorder",
             "buffer_capacity": 50,
             "flush_interval": 2.5,
             "flush_level": "30",  # Simulate UI Dropdown returning a string
@@ -115,7 +115,9 @@ async def test_full_user_flow(hass: HomeAssistant) -> None:
     assert result["options"][CONF_GATEWAY_TIMEOUT] == 15
 
     # Assert flight recorder inputs are casted correctly
-    assert result["options"][SZ_PACKET_LOG]["file_name"] == "test_flight_recorder.log"
+    assert (
+        result["options"][SZ_PACKET_LOG]["packet_log_prefix"] == "test_flight_recorder"
+    )
     assert result["options"][SZ_PACKET_LOG]["buffer_capacity"] == 50
     assert result["options"][SZ_PACKET_LOG]["flush_interval"] == 2.5
     assert result["options"][SZ_PACKET_LOG]["flush_level"] == 30  # Should cast to int

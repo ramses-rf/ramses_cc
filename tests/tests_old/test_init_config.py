@@ -40,17 +40,20 @@ TEST_CONFIGS = {
     "config_11": {
         "serial_port": {"port_name": None},
         "ramses_rf": {"disable_discovery": True},
-        "packet_log": "packet.log",
+        "packet_log": "packet_log",
     },
     "config_12": {
         "serial_port": {"port_name": None},
         "ramses_rf": {"disable_discovery": True},
-        "packet_log": {"file_name": "packet.log"},
+        "packet_log": {"packet_log_prefix": "packet_log"},
     },
     "config_13": {
         "serial_port": {"port_name": None},
         "ramses_rf": {"disable_discovery": True},
-        "packet_log": {"file_name": "packet.log", "rotate_backups": 7},
+        "packet_log": {
+            "packet_log_prefix": "packet_log",
+            "packet_log_retention_days": 7,
+        },
     },
     "config_fan_unbind": {
         "serial_port": {"port_name": None},
