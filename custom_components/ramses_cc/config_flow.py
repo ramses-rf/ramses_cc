@@ -34,7 +34,6 @@ from ramses_rf.schemas import (
     SZ_RESTORE_CACHE,
     SZ_SCHEMA,
 )
-from ramses_tx.const import Code
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
     SCH_SERIAL_PORT_CONFIG,
@@ -1156,10 +1155,20 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     def filter_schema_packets(
                         packets: dict[str, str],
                     ) -> dict[str, str]:
+                        msg_code_filter = {"0004", "0005", "000C"}
                         return {
                             dtm: pkt
                             for dtm, pkt in packets.items()
-                            if pkt[41:45] not in [Code._0004, Code._0005, Code._000C]
+                            if (  # PacketDTO dictionary format since 0.56.3, cf. coordinator
+                                isinstance(pkt, dict)
+                                and pkt.get("code") not in msg_code_filter
+                            )
+                            or (  # legacy 0.54.x string packets
+                                isinstance(pkt, str)
+                                and not any(
+                                    f" {code} " in pkt for code in msg_code_filter
+                                )
+                            )
                         }
 
                     # Filter out cached packets used for schema discovery
