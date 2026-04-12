@@ -1153,8 +1153,8 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     stored_data[SZ_CLIENT_STATE].pop(SZ_SCHEMA)
 
                     def filter_schema_packets(
-                        packets: dict[str, str],
-                    ) -> dict[str, str]:
+                        packets: dict[str, dict[str, Any] | str],
+                    ) -> dict[str, dict[str, Any] | str]:
                         msg_code_filter = {"0004", "0005", "000C"}
                         return {
                             dtm: pkt
