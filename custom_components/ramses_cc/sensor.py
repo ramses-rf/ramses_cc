@@ -491,7 +491,7 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
     RamsesSensorEntityDescription(
         key=SZ_FILTER_REMAINING_PERCENT,
         ramses_rf_attr=SZ_FILTER_REMAINING_PERCENT,
-        name="Filter remaining",
+        name="Filter remaining (%)",
         native_unit_of_measurement=PERCENTAGE,
     ),
     RamsesSensorEntityDescription(
