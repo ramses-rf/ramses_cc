@@ -51,6 +51,7 @@ from ramses_rf.const import (
     SZ_PRE_HEAT,
     SZ_RELAY_DEMAND,
     SZ_REMAINING_MINS,
+    SZ_REMAINING_PERCENT,
     SZ_SETPOINT,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
@@ -536,6 +537,12 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
         ramses_rf_attr=SZ_REMAINING_MINS,
         name="Remaining time",
         native_unit_of_measurement=UnitOfTime.MINUTES,
+    ),
+    RamsesSensorEntityDescription(
+        key=SZ_REMAINING_PERCENT,
+        ramses_rf_attr=SZ_REMAINING_PERCENT,
+        name="Filter remaining pc",
+        native_unit_of_measurement=PERCENTAGE,
     ),
     RamsesSensorEntityDescription(
         key=SZ_SPEED_CAPABILITIES,
