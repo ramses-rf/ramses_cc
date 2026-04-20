@@ -42,6 +42,7 @@ from ramses_rf.const import (
     SZ_FAN_MODE,
     SZ_FAN_RATE,
     SZ_FILTER_REMAINING,
+    SZ_FILTER_REMAINING_PERCENT,
     SZ_HEAT_DEMAND,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
@@ -51,7 +52,6 @@ from ramses_rf.const import (
     SZ_PRE_HEAT,
     SZ_RELAY_DEMAND,
     SZ_REMAINING_MINS,
-    SZ_REMAINING_PERCENT,
     SZ_SETPOINT,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
@@ -131,7 +131,7 @@ class RamsesSensor(RamsesEntity, SensorEntity):
         entity_description: RamsesEntityDescription,
     ) -> None:
         """Initialize the sensor."""
-        _LOGGER.info("Found %s: %s", device.id, entity_description.key)
+        _LOGGER.info("Initializing %s: %s", device.id, entity_description.key)
         super().__init__(coordinator, device, entity_description)
 
         self._attr_unique_id = f"{device.id}-{entity_description.key}"
@@ -250,6 +250,8 @@ class RamsesSensorEntityDescription(RamsesEntityDescription, SensorEntityDescrip
     ramses_cc_icon_off: str | None = None  # no SensorEntityDescription.icon_off attr
     ramses_rf_attr: str
     ramses_rf_class: type[RamsesRFEntity] | UnionType = RamsesRFEntity
+    # key is used to create HA unique_id
+    # ramses_rf_attr must match ramses_rf device method
 
 
 SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
@@ -487,6 +489,12 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTime.DAYS,
     ),
     RamsesSensorEntityDescription(
+        key=SZ_FILTER_REMAINING_PERCENT,
+        ramses_rf_attr=SZ_FILTER_REMAINING_PERCENT,
+        name="Filter remaining",
+        native_unit_of_measurement=PERCENTAGE,
+    ),
+    RamsesSensorEntityDescription(
         key=SZ_INDOOR_HUMIDITY,
         ramses_rf_attr=SZ_INDOOR_HUMIDITY,
         name="Indoor humidity",
@@ -537,12 +545,6 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
         ramses_rf_attr=SZ_REMAINING_MINS,
         name="Remaining time",
         native_unit_of_measurement=UnitOfTime.MINUTES,
-    ),
-    RamsesSensorEntityDescription(
-        key=SZ_REMAINING_PERCENT,
-        ramses_rf_attr=SZ_REMAINING_PERCENT,
-        name="Filter remaining pc",
-        native_unit_of_measurement=PERCENTAGE,
     ),
     RamsesSensorEntityDescription(
         key=SZ_SPEED_CAPABILITIES,
