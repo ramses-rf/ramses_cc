@@ -81,6 +81,23 @@ class RamsesFanHandler:
             [device],
         )
 
+    def start_filter_poller(self, device: RamsesRFEntity) -> None:
+        """Start the filter_remaining poller for a FAN.
+
+        :param device: The ramses_rf device instance to poll.
+        """
+        # Only proceed if this is a FAN device
+        if not isinstance(device, HvacVentilator):
+            return
+
+        if not self.coordinator.client:
+            _LOGGER.warning("Cannot start filter_poller for device: Client not ready")
+            return
+
+        device_id = device.id
+        _LOGGER.info("Starting 10D0 filter_poller for FAN %s", device_id)
+        device.init_filter_poller(device_id)  # calls RF entity EBR DEBUG
+
     async def setup_fan_bound_devices(self, device: Device) -> None:
         """Set up bound devices for a FAN device.
 
@@ -153,10 +170,11 @@ class RamsesFanHandler:
             )
 
     async def async_setup_fan_device(self, device: Device) -> None:
-        """Set up a FAN device and its parameter entities.
+        """Set up a FAN device, its parameter entities and the 10D0 poller.
 
         Configures bindings, sets up initialization callbacks for parameter
-        discovery, and establishes parameter update callbacks for event firing.
+        discovery, establishes parameter update callbacks for event firing
+        and starts the 10D0 filter_remaining poller.
 
         :param device: The device instance to set up.
         """
@@ -177,6 +195,8 @@ class RamsesFanHandler:
                     )
                     # Create parameter entities after first message is received
                     self.create_parameter_entities(device)
+                    # Start the FilterChange poller
+                    self.init_poller(device)
                     # Request all parameters after creating entities (non-blocking if fails)
                     _call: dict[str, DeviceIdT] = {
                         "device_id": device.id,
