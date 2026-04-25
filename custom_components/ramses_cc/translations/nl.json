@@ -71,7 +71,7 @@
                     "schema": "Systeemschema(s)",
                     "known_list": "Erkende device_id's",
                     "enforce_known_list": "Accepteer alleen berichten van erkende device ID's",
-                    "log_all_mqtt": "Log alle MQTT-topics"
+                    "log_all_mqtt": "Log Tx + alle MQTT-topics"
                 },
                 "data_description": {
                     "schema": "Een mapping van systeem device-ID's naar hun schema's. Houd dit eenvoudig en vermeld alleen devices die niet automatisch verschijnen.",
@@ -181,7 +181,7 @@
                     "schema": "Systeemschema('s)",
                     "known_list": "Erkende device_id's",
                     "enforce_known_list": "Accepteer alleen berichten van erkende device ID's",
-                    "log_all_mqtt": "Log alle MQTT-topics"
+                    "log_all_mqtt": "Log Tx + alle MQTT-topics"
                 },
                 "data_description": {
                     "schema": "Een mapping van systeem device-ID's naar hun schema's. Houd dit eenvoudig en vermeld alleen devices die niet automatisch verschijnen.",
