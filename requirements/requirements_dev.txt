@@ -19,7 +19,7 @@
 
 # used for development (typing)
     mypy >= 1.18.0                               # latest: 1.19.1
-    voluptuous >= 0.15.2                         # latest: 0.16.0 = HA
+    voluptuous >= 0.16.0                         # latest: 0.16.0 = HA
 
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest
