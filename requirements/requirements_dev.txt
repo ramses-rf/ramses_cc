@@ -5,7 +5,7 @@
 # - pip list | grep -E 'ramses|serial'
 
   aiousbwatcher         >= 1.1.2                 # as per: manifest.json latest: 1.1.1
-  aioesphomeapi         >= 44.20.0               # required by config_flow > homeassistant.components.usb
+  aioesphomeapi         >= 44.23.0               # required by config_flow > homeassistant.components.usb
   pyserial-asyncio-fast >= 0.16                  # as per: manifest.json latest: 0.16
   ramses-rf             == 0.56.7                # as per: manifest.json latest:
   # pycares               == 5.0.1               # ha_cc 2026.2: aiodns 4.0.0: pycares==5.0.1=latest
