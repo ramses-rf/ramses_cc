@@ -248,7 +248,7 @@ class RamsesSensor(RamsesEntity, SensorEntity):
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesSensorEntityDescription(RamsesEntityDescription, SensorEntityDescription):
-    """Class describing Ramses binary sensor entities."""
+    """Class describing Ramses sensor entities."""
 
     entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
     state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT

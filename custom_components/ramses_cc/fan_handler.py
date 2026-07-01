@@ -12,7 +12,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from ramses_rf.devices import Device, HvacRemoteBase, HvacVentilator
 from ramses_rf.entity import Entity as RamsesRFEntity
-from ramses_tx import Command
 from ramses_tx.const import DevType
 from ramses_tx.typing import DeviceIdT
 
@@ -261,17 +260,4 @@ class RamsesFanHandler:
                     "Entities will still work for received parameter updates.",
                     device.id,
                     err,
-                )
-
-            # HACK: Force one time RQ of 10D0 - TODO(eb): remove when PR #632 is working
-            try:
-                cmd = Command.from_cli(f"RQ {device.id} 10D0 00")
-                _LOGGER.debug("Poll 10D0 filter_remaining for %s", device.id)
-                await device._gwy.async_send_cmd(cmd)
-            except Exception as err:
-                _LOGGER.debug(
-                    "Failed to poll filter_remaining for %s: %s",
-                    device.id,
-                    err,
-                    exc_info=True,
                 )
