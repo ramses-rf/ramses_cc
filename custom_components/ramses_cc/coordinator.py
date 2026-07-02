@@ -106,6 +106,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
         self.service_handler = RamsesServiceHandler(self)
         self.mqtt_bridge: RamsesMqttBridge | None = None
         self.discovery_manager: DiscoveryManager | None = None
+        self._cached_discovery_state: dict[str, Any] | None = None
+        self._suppress_reload: bool = False
 
         # Redact port details for safe exchange of logs
         print_options = deepcopy(dict(self.options))  # need an extra copy
@@ -372,8 +374,19 @@ class RamsesCoordinator(DataUpdateCoordinator):
         await self.async_save_client_state()
 
     async def _async_stop_discovery_scan(self) -> None:
-        """Stop the discovery scan engine."""
+        """Stop the discovery scan engine.
+
+        Saves discovery state before stopping so it can be restored on reload.
+        """
         if self.discovery_manager:
+            # Export and cache state before stopping, so async_save_client_state
+            # (which runs later in the unload chain) still has it available
+            self._cached_discovery_state = self.discovery_manager.export_state()
+            _LOGGER.info(
+                "Stopping discovery scan: caching %d metadata entries for save",
+                len(self._cached_discovery_state.get("devices", {})),
+            )
+            await self.async_save_client_state()
             self.discovery_manager.stop()
             self.discovery_manager = None
 
@@ -576,7 +589,16 @@ class RamsesCoordinator(DataUpdateCoordinator):
         remotes = self._remotes | remotes_from_entities
 
         discovery_state = (
-            self.discovery_manager.export_state() if self.discovery_manager else None
+            self.discovery_manager.export_state()
+            if self.discovery_manager
+            else getattr(self, "_cached_discovery_state", None)
+        )
+
+        _LOGGER.info(
+            "Saving state: discovery_manager=%s, cached=%s, discovery_devices=%d",
+            bool(self.discovery_manager),
+            bool(getattr(self, "_cached_discovery_state", None)),
+            len(discovery_state.get("devices", {})) if discovery_state else 0,
         )
 
         await self.store.async_save(schema, packets, remotes, discovery_state)

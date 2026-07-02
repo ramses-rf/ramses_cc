@@ -1040,71 +1040,78 @@ class RamsesServiceHandler:
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
 
-        # Merge the generated/provided schema entry into the config entry
-        # and add the device to the known_list so enforce_known_list allows it
+        # Merge the generated/provided schema entry into the coordinator's
+        # local options and add the device to the known_list + runtime include
+        # lists so enforce_known_list allows it.
         if entry and entry.metadata.schema_entry:
-            await self._merge_schema_entry(entry.metadata.schema_entry, device_id)
+            self._apply_schema_entry(
+                entry.metadata.schema_entry, device_id, owner=owner
+            )
 
-        # Trigger discovery for this specific device
+        # Persist the updated options to the config entry immediately.
+        # We suppress the reload by wrapping in a flag that the update
+        # listener checks — the running coordinator already has the updated
+        # options, so no reload is needed.
+        if entry and entry.metadata.schema_entry:
+            self._coordinator._suppress_reload = True  # noqa: SLF001
+            self.hass.config_entries.async_update_entry(
+                self._coordinator.entry, options=self._coordinator.options
+            )
+            self._coordinator._suppress_reload = False  # noqa: SLF001
+
+        # Trigger discovery for this specific device (entities created here)
         _LOGGER.info("Accepted discovered device: %s, triggering discovery", device_id)
         await self.async_discover_known_devices(
             _MockServiceCall({"device_id": device_id})
         )
 
-    async def _merge_schema_entry(
-        self, fragment: dict[str, Any], device_id: str
+    def _apply_schema_entry(
+        self, fragment: dict[str, Any], device_id: str, *, owner: str | None = None
     ) -> None:
-        """Deep-merge a schema fragment into the config entry's schema.
+        """Apply a schema fragment to the coordinator's local options.
 
-        Also adds the device_id to the known_list (both the config entry
-        and the running ramses_rf client's include lists) so that
-        enforce_known_list allows ramses_rf to create the device.
+        Deep-merges the fragment into the schema, adds the device_id to the
+        known_list (with optional owner as alias), and updates the running
+        ramses_rf client's include lists so that enforce_known_list allows
+        packet processing and device creation.  Does NOT update the config
+        entry (caller does that separately to control when the reload happens).
 
         :param fragment: A partial schema dict (e.g. from generate_schema_entry).
         :param device_id: The device ID being accepted (added to known_list).
+        :param owner: Optional owner label (stored as alias in known_list).
         """
         from ramses_rf.helpers import deep_merge
 
-        # 1. Merge schema
-        current_schema: dict[str, Any] = dict(
-            self._coordinator.options.get(CONF_SCHEMA, {})
-        )
+        # 1. Merge schema into local options
+        current_options = dict(self._coordinator.options)
+        current_schema: dict[str, Any] = dict(current_options.get(CONF_SCHEMA, {}))
         merged = deep_merge(current_schema, fragment)
+        current_options[CONF_SCHEMA] = merged
 
         # 2. Add device_id to known_list if not already present
-        current_known: dict[str, Any] = dict(
-            self._coordinator.options.get(SZ_KNOWN_LIST, {})
-        )
+        current_known: dict[str, Any] = dict(current_options.get(SZ_KNOWN_LIST, {}))
         if device_id not in current_known:
             current_known[device_id] = {}
+        if owner:
+            current_known[device_id]["alias"] = owner
+        current_options[SZ_KNOWN_LIST] = current_known
 
-        # 3. Update config entry
-        new_options = {
-            **self._coordinator.entry.options,
-            CONF_SCHEMA: merged,
-            SZ_KNOWN_LIST: current_known,
-        }
-        self.hass.config_entries.async_update_entry(
-            self._coordinator.entry, options=new_options
-        )
         # Update the coordinator's local copy so discover_known_devices sees it
-        self._coordinator.options = new_options
+        self._coordinator.options = current_options
 
-        # 4. Add to the running ramses_rf client's include lists so
+        # 3. Add to the running ramses_rf client's include lists so
         #    enforce_known_list allows packet processing and device creation
         client = self._coordinator.client
         if client:
-            # Protocol-level filter (engine._include)
             engine = getattr(client, "_engine", None)
             if engine and device_id not in engine._include:
                 engine._include.append(device_id)
-            # Device-level filter (device_filter._include)
             dev_filter = getattr(client, "_device_filter", None)
             if dev_filter and device_id not in dev_filter._include:
                 dev_filter._include.append(device_id)
 
         _LOGGER.debug(
-            "Merged schema fragment for %s, known_list now has %d entries",
+            "Applied schema fragment for %s, known_list now has %d entries",
             device_id,
             len(current_known),
         )

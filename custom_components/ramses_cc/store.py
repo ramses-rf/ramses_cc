@@ -41,6 +41,10 @@ class RamsesStore:
     ) -> None:
         """Save the current state to persistent storage.
 
+        If ``discovery`` is None, any existing discovery state is preserved
+        (not overwritten) — this prevents a new coordinator from wiping the
+        discovery state during reload before the scan engine has started.
+
         :param schema: The current device schema
         :param packets: The cached packet log (supports legacy strings and JSON DTOs)
         :param remotes: The known remotes and their commands
@@ -50,6 +54,13 @@ class RamsesStore:
             SZ_CLIENT_STATE: {SZ_SCHEMA: schema, SZ_PACKETS: packets},
             SZ_REMOTES: remotes,
         }
+
         if discovery is not None:
             data[SZ_DISCOVERY] = discovery
+        else:
+            # Preserve existing discovery state if we don't have new data
+            existing = await self._store.async_load()
+            if existing and SZ_DISCOVERY in existing:
+                data[SZ_DISCOVERY] = existing[SZ_DISCOVERY]
+
         await self._store.async_save(data)

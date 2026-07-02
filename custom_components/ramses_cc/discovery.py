@@ -360,8 +360,8 @@ class DiscoveryManager:
                 }
             return {SZ_ORPHANS_HEAT: [device_id]}
 
-        # ── TRV / THM: zone sensor ──────────────────────────────────
-        if lt in ("TRV", "THM"):
+        # ── TRV / THM / RND: zone sensor ───────────────────────────
+        if lt in ("TRV", "THM", "RND"):
             if ctl_id and zone_idx:
                 return {
                     ctl_id: {

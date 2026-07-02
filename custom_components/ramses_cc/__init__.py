@@ -310,6 +310,17 @@ def _healed_serial_port_options(
 
 async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
+    # Check if the coordinator has suppressed the reload (e.g. during
+    # accept_discovered_device, where the running coordinator already has
+    # the updated options and a reload would be disruptive)
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if coordinator and getattr(coordinator, "_suppress_reload", False):
+        _LOGGER.debug(
+            "Config entry %s updated, but reload suppressed (accept flow)",
+            entry.entry_id,
+        )
+        return
+
     _LOGGER.debug("Config entry %s updated, reloading integration...", entry.entry_id)
 
     # Just reload the entry, which will handle unloading and setting up again
