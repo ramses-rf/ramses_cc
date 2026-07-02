@@ -20,6 +20,7 @@ from ramses_rf.schemas import (
     SZ_APPLIANCE_CONTROL,
     SZ_BOUND_TO,
     SZ_CONFIG,
+    SZ_MAIN_TCS,
     SZ_ORPHANS_HEAT,
     SZ_ORPHANS_HVAC,
     SZ_RESTORE_CACHE,
@@ -72,12 +73,17 @@ from .const import (
     ATTR_TIMEOUT,
     ATTR_UNTIL,
     CONF_ADVANCED_FEATURES,
+    CONF_AUTO_NOTIFY,
     CONF_COMMANDS,
     CONF_DEV_MODE,
+    CONF_LOST_THRESHOLD,
     CONF_MESSAGE_EVENTS,
+    CONF_PASSIVE_SCAN,
     CONF_RAMSES_RF,
     CONF_SEND_PACKET,
     CONF_UNKNOWN_CODES,
+    SZ_DEVICE_COMMENTS,
+    SZ_DISABLED_DEVICES,
     SystemMode,
     ZoneMode,
 )
@@ -106,6 +112,11 @@ SCH_ADVANCED_FEATURES = vol.Schema(
         vol.Optional(CONF_MESSAGE_EVENTS, default=None): vol.Any(None, cv.is_regex),
         vol.Optional(CONF_DEV_MODE): cv.boolean,
         vol.Optional(CONF_UNKNOWN_CODES): cv.boolean,
+        vol.Optional(CONF_PASSIVE_SCAN, default=False): cv.boolean,
+        vol.Optional(CONF_AUTO_NOTIFY, default=True): cv.boolean,
+        vol.Optional(CONF_LOST_THRESHOLD, default=7): vol.All(
+            cv.positive_int, vol.Range(min=1, max=90)
+        ),
     }
 )
 
@@ -241,7 +252,16 @@ def schema_is_minimal(schema: _SchemaT) -> bool:
     sch: _SchemaT
 
     for key, sch in schema.items():
-        if key in (SZ_BLOCK_LIST, SZ_KNOWN_LIST, SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC):
+        if key in (
+            SZ_BLOCK_LIST,
+            SZ_KNOWN_LIST,
+            SZ_MAIN_TCS,
+            SZ_ORPHANS_HEAT,
+            SZ_ORPHANS_HVAC,
+            SZ_DISABLED_DEVICES,
+            SZ_DEVICE_COMMENTS,
+            "transport_constructor",
+        ):
             continue
 
         try:
@@ -295,6 +315,64 @@ SVC_SEND_PACKET: Final = "send_packet"
 SCH_DISCOVER_KNOWN_DEVICES = vol.Schema(
     {
         vol.Optional("device_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+# Discovery scan service schemas
+
+SCH_GET_DISCOVERED_DEVICES = vol.Schema(
+    {
+        vol.Optional("status"): vol.In(
+            ("new", "accepted", "discarded", "removed", "lost")
+        ),
+        vol.Optional("enabled"): cv.boolean,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_ACCEPT_DISCOVERED_DEVICE = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        vol.Optional("owner"): vol.All(str, vol.Length(max=50)),
+        vol.Optional("schema_entry"): dict,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_DISCARD_DISCOVERED_DEVICE = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_REMOVE_DISCOVERED_DEVICE = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_ENABLE_DISCOVERED_DEVICE = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_DISABLE_DISCOVERED_DEVICE = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SCH_ADD_FAKED_REM = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        vol.Required("bound_to"): _SCH_DEVICE_ID,
+        vol.Optional("alias"): vol.All(str, vol.Length(max=50)),
     },
     extra=vol.PREVENT_EXTRA,
 )

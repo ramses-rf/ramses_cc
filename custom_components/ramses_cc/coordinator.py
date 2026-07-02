@@ -27,13 +27,30 @@ from homeassistant.helpers.dispatcher import (
     async_dispatcher_send,
 )
 from homeassistant.helpers.entity_platform import EntityPlatform
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from ramses_rf.devices import Device, HvacRemoteBase, HvacVentilator
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.schemas import (
+    SZ_ACTUATORS,
+    SZ_APPLIANCE_CONTROL,
+    SZ_DHW_SYSTEM,
+    SZ_DHW_VALVE,
+    SZ_HTG_VALVE,
+    SZ_MAIN_TCS,
+    SZ_ORPHANS,
+    SZ_ORPHANS_HEAT,
+    SZ_ORPHANS_HVAC,
+    SZ_REMOTES,
+    SZ_SENSOR,
+    SZ_SENSORS,
+    SZ_SYSTEM,
+    SZ_UFH_SYSTEM,
+    SZ_ZONES,
+)
 from ramses_rf.systems import Evohome, System, Zone
 from ramses_rf.topology import Child
 from ramses_tx import exceptions as exc
@@ -42,11 +59,15 @@ from ramses_tx.const import SZ_ACTIVE_HGI, Code
 from ramses_tx.schemas import extract_serial_port
 
 from .const import (
+    CONF_ADVANCED_FEATURES,
+    CONF_AUTO_NOTIFY,
     CONF_COMMANDS,
     CONF_GATEWAY_TIMEOUT,
+    CONF_LOST_THRESHOLD,
     CONF_MQTT_HGI_ID,
     CONF_MQTT_TOPIC,
     CONF_MQTT_USE_HA,
+    CONF_PASSIVE_SCAN,
     CONF_RAMSES_RF,
     CONF_SCAN_INTERVAL,
     CONF_SCHEMA,
@@ -55,15 +76,17 @@ from .const import (
     DOMAIN,
     SIGNAL_NEW_DEVICES,
     SZ_CLIENT_STATE,
+    SZ_DEVICE_COMMENTS,
+    SZ_DISABLED_DEVICES,
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST,
     SZ_PACKET_LOG,
     SZ_PACKETS,
     SZ_PORT_NAME,
-    SZ_REMOTES,
     SZ_SCHEMA,
     SZ_SERIAL_PORT,
 )
+from .discovery import DiscoveryManager
 from .fan_handler import RamsesFanHandler
 from .mqtt_bridge import RamsesMqttBridge
 from .schemas import merge_schemas, schema_is_minimal
@@ -100,6 +123,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         self.fan_handler = RamsesFanHandler(self)
         self.service_handler = RamsesServiceHandler(self)
         self.mqtt_bridge: RamsesMqttBridge | None = None
+        self.discovery_manager: DiscoveryManager | None = None
+        self._cached_discovery_state: dict[str, Any] | None = None
+        self._suppress_reload: bool = False
 
         # Redact port details for safe exchange of logs
         print_options = deepcopy(dict(self.options))  # need an extra copy
@@ -245,8 +271,45 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         client_state: dict[str, Any] = storage.get(SZ_CLIENT_STATE, {})
 
-        # 2. Schema Handling
+        # 1b. Migration: when passive scan is enabled, check if known_list
+        # has devices not in schema and migrate them.  For legacy setups
+        # (passive scan off), the derivation logic already handles
+        # known_list-only devices, so no migration is needed.
         config_schema = self.options.get(CONF_SCHEMA, {})
+        advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
+        if advanced.get(CONF_PASSIVE_SCAN, False):
+            user_known_list = self.options.get(SZ_KNOWN_LIST, {})
+            schema_device_ids = self._extract_schema_device_ids(config_schema)
+            known_list_only = set(user_known_list.keys()) - schema_device_ids
+            # Filter out HGI devices (gateways, handled by transport config)
+            known_list_only = {d for d in known_list_only if not d.startswith("18:")}
+
+            if known_list_only:
+                _LOGGER.warning(
+                    "Migration: %d known_list devices not in schema: %s. "
+                    "Backing up and migrating to schema as orphans.",
+                    len(known_list_only),
+                    sorted(known_list_only),
+                )
+                # Backup before migration
+                await self.store.async_save_backup(config_schema, user_known_list)
+
+                # Migrate: add missing devices to schema as heat orphans
+                migrated_schema = dict(config_schema)
+                existing_orphans = list(migrated_schema.get(SZ_ORPHANS_HEAT, []))
+                for device_id in sorted(known_list_only):
+                    if device_id not in existing_orphans:
+                        existing_orphans.append(device_id)
+                if existing_orphans != list(config_schema.get(SZ_ORPHANS_HEAT, [])):
+                    migrated_schema[SZ_ORPHANS_HEAT] = existing_orphans
+                    self.options[CONF_SCHEMA] = migrated_schema
+                    config_schema = migrated_schema
+                    _LOGGER.info(
+                        "Migration complete: schema now has %d orphan devices",
+                        len(existing_orphans),
+                    )
+
+        # 2. Schema Handling
         _LOGGER.debug("CONFIG_SCHEMA: %s", config_schema)
         if not schema_is_minimal(config_schema):
             _LOGGER.warning("The config schema is not minimal (consider minimising it)")
@@ -305,6 +368,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
             )
         )
 
+        # 3. Start passive device scan if enabled
+        advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
+        if advanced.get(CONF_PASSIVE_SCAN, False) and self.client:
+            await self._async_start_discovery_scan()
+
         # Trigger the first update immediately (calls _async_update_data)
         # This will raise ConfigEntryNotReady if it fails, which is handled by HA
         await self.async_config_entry_first_refresh()
@@ -317,10 +385,262 @@ class RamsesCoordinator(DataUpdateCoordinator):
         )
         self.entry.async_on_unload(self.async_save_client_state)
 
+    async def _async_start_discovery_scan(self) -> None:
+        """Start the passive device scan engine and discovery manager."""
+        from ramses_rf.discovery_scan import DiscoveryScan
+
+        if not self.client:
+            _LOGGER.warning("Cannot start discovery scan: client not initialized")
+            return
+
+        advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
+        scan = DiscoveryScan(self.client)
+        self.discovery_manager = DiscoveryManager(
+            self.hass,
+            scan,
+            auto_notify=advanced.get(CONF_AUTO_NOTIFY, True),
+            lost_threshold_days=advanced.get(CONF_LOST_THRESHOLD, 7),
+        )
+
+        # Restore persisted state
+        stored = await self.store.async_load()
+        from .discovery import SZ_DISCOVERY
+
+        if stored.get(SZ_DISCOVERY):
+            self.discovery_manager.restore_state(stored[SZ_DISCOVERY])
+
+        # Schedule periodic checkpoint + check for new/lost devices.
+        # Use 5 min interval for now — TODO: replace with a real-time
+        # callback from ramses_rf's DiscoveryScan (see notepad.txt).
+        self.entry.async_on_unload(
+            async_track_time_interval(
+                self.hass,
+                self._async_discovery_checkpoint,
+                td(minutes=5),
+            )
+        )
+        # Run an immediate check after 10 seconds so new devices from
+        # cached packets are detected quickly.
+        unsub = async_call_later(self.hass, 10, self._async_discovery_checkpoint)
+        self.entry.async_on_unload(unsub)
+        self.entry.async_on_unload(self._async_stop_discovery_scan)
+        _LOGGER.info("Passive device scan started")
+
+    async def _async_discovery_checkpoint(self, _: dt | None = None) -> None:
+        """Periodic checkpoint: check for new/lost devices and save state."""
+        if not self.discovery_manager:
+            return
+        self.discovery_manager.check_for_new_devices()
+        self.discovery_manager.check_for_lost_devices()
+        await self.async_save_client_state()
+
+    async def _async_stop_discovery_scan(self) -> None:
+        """Stop the discovery scan engine.
+
+        Saves discovery state before stopping so it can be restored on reload.
+        """
+        if self.discovery_manager:
+            # Export and cache state before stopping, so async_save_client_state
+            # (which runs later in the unload chain) still has it available
+            self._cached_discovery_state = self.discovery_manager.export_state()
+            _LOGGER.info(
+                "Stopping discovery scan: caching %d metadata entries for save",
+                len(self._cached_discovery_state.get("devices", {})),
+            )
+            await self.async_save_client_state()
+            self.discovery_manager.stop()
+            self.discovery_manager = None
+
+    # ── Schema-as-single-source-of-truth ──────────────────────────────
+
+    # Keys that ramses_cc adds to the schema dict but ramses_rf doesn't
+    # understand.  They are stripped before passing the schema to the Gateway.
+    _SCHEMA_EXTENSION_KEYS: Final[frozenset[str]] = frozenset(
+        {SZ_DISABLED_DEVICES, SZ_DEVICE_COMMENTS}
+    )
+
+    @staticmethod
+    def _extract_schema_device_ids(schema: dict[str, Any]) -> set[str]:
+        """Extract all device IDs from a schema dict (for migration checks).
+
+        Delegates to the same logic as ``_derive_known_list_from_schema``
+        but returns only the device ID set, excluding disabled devices.
+        """
+        # Reuse the derivation logic, just take the keys
+        derived = RamsesCoordinator._derive_known_list_from_schema(schema)
+        return set(derived.keys()) | set(schema.get(SZ_DISABLED_DEVICES, []))
+
+    @staticmethod
+    def _strip_schema_extensions(schema: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of *schema* with ramses_cc-only keys removed.
+
+        ramses_rf's ``SCH_GLOBAL_SCHEMAS`` validator would reject our
+        extension keys (``disabled_devices``, ``device_comments``), so we
+        strip them before passing the schema to the Gateway.
+
+        Also strips ``None`` values for known optional keys like
+        ``main_tcs`` — ramses_rf's validator rejects ``null`` even though
+        the key is ``vol.Optional``.
+
+        For VCS (ventilation) devices (FAN, prefix ``30:``), ramses_rf
+        requires at least one of ``remotes``/``sensors`` keys to be
+        present.  We inject ``remotes: []`` when neither exists so that
+        minimal schema entries like ``{"30:160000": {}}`` validate.
+        """
+        result: dict[str, Any] = {}
+        for k, v in schema.items():
+            if k in RamsesCoordinator._SCHEMA_EXTENSION_KEYS or v is None:
+                continue
+            if (
+                isinstance(v, dict)
+                and _DEVICE_ID_RE.match(str(k))
+                and str(k).startswith("30:")
+                and "remotes" not in v
+                and "sensors" not in v
+            ):
+                v = {**v, "remotes": []}
+            result[k] = v
+        return result
+
+    @staticmethod
+    def _derive_known_list_from_schema(
+        schema: dict[str, Any],
+        *,
+        user_overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Derive a known_list from the schema structure.
+
+        Walks the schema (same logic as ``_extract_device_ids_from_schema``
+        in services.py) and returns a known_list dict where each device ID
+        maps to an empty traits dict ``{}``.  This is enough for
+        ``enforce_known_list`` to allow the device through — ramses_rf will
+        infer the class from the address prefix and message codes.
+
+        If *user_overrides* is provided, those entries take precedence for
+        any traits the user has set (alias, faked, class, scheme, bound).
+        Disabled devices (listed in ``SZ_DISABLED_DEVICES``) are excluded
+        from the derived known_list.
+
+        :param schema: The global schema dict (may contain extension keys).
+        :param user_overrides: Optional known_list entries from config that
+            override the derived defaults.
+        :return: A known_list dict suitable for ``GatewayConfig.known_list``.
+        """
+        disabled: set[str] = set(schema.get(SZ_DISABLED_DEVICES, []))
+
+        # Collect all device IDs from the schema structure
+        device_ids: set[str] = set()
+
+        # Main TCS (the CTL)
+        if ctl_id := schema.get(SZ_MAIN_TCS):
+            device_ids.add(ctl_id)
+
+        for key, value in schema.items():
+            # Skip non-device-id keys and our extension keys
+            if key in RamsesCoordinator._SCHEMA_EXTENSION_KEYS:
+                continue
+            if key in (
+                SZ_MAIN_TCS,
+                SZ_ORPHANS_HEAT,
+                SZ_ORPHANS_HVAC,
+                "transport_constructor",
+            ):
+                continue
+            if not _DEVICE_ID_RE.match(str(key)):
+                continue
+
+            # key is a device_id (CTL or FAN)
+            device_ids.add(str(key))
+
+            if not isinstance(value, dict):
+                continue
+
+            # Heat TCS structure
+            if isinstance(value.get(SZ_SYSTEM), dict):
+                if app_id := value[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL):
+                    device_ids.add(app_id)
+
+            if isinstance(value.get(SZ_DHW_SYSTEM), dict):
+                dhw = value[SZ_DHW_SYSTEM]
+                if sensor_id := dhw.get(SZ_SENSOR):
+                    device_ids.add(sensor_id)
+                if valve_id := dhw.get(SZ_DHW_VALVE):
+                    device_ids.add(valve_id)
+                if valve_id := dhw.get(SZ_HTG_VALVE):
+                    device_ids.add(valve_id)
+
+            if isinstance(value.get(SZ_UFH_SYSTEM), dict):
+                for ufc_id in value[SZ_UFH_SYSTEM]:
+                    if _DEVICE_ID_RE.match(str(ufc_id)):
+                        device_ids.add(str(ufc_id))
+
+            if isinstance(value.get(SZ_ZONES), dict):
+                for zone_data in value[SZ_ZONES].values():
+                    if not isinstance(zone_data, dict):
+                        continue
+                    if sensor_id := zone_data.get(SZ_SENSOR):
+                        device_ids.add(sensor_id)
+                    for act_id in zone_data.get(SZ_ACTUATORS, []):
+                        device_ids.add(act_id)
+
+            for orphan_id in value.get(SZ_ORPHANS, []):
+                device_ids.add(orphan_id)
+
+            # HVAC VCS structure
+            for remote_id in value.get(SZ_REMOTES, []):
+                device_ids.add(remote_id)
+            for sensor_id in value.get(SZ_SENSORS, []):
+                device_ids.add(sensor_id)
+
+        # Global orphans
+        for orphan_id in schema.get(SZ_ORPHANS_HEAT, []):
+            device_ids.add(orphan_id)
+        for orphan_id in schema.get(SZ_ORPHANS_HVAC, []):
+            device_ids.add(orphan_id)
+
+        # Build the known_list, excluding disabled devices
+        known_list: dict[str, Any] = {}
+        for device_id in device_ids:
+            if device_id in disabled:
+                continue
+            known_list[device_id] = {}
+
+        # Apply user overrides (deep merge: user traits win)
+        if user_overrides:
+            for device_id, traits in user_overrides.items():
+                if device_id in disabled:
+                    continue
+                if device_id not in known_list:
+                    # User has a device in known_list that's not in the schema.
+                    # Keep it (backward compatibility — maybe ramses_rf needs it).
+                    known_list[device_id] = (
+                        dict(traits) if isinstance(traits, dict) else traits
+                    )
+                elif isinstance(traits, dict) and isinstance(
+                    known_list[device_id], dict
+                ):
+                    known_list[device_id] = {**known_list[device_id], **traits}
+
+        return known_list
+
     def _create_client(self, schema: dict[str, Any]) -> Gateway:
         """Create and configure a new RAMSES client instance."""
 
         raw_config = self.options.get(CONF_RAMSES_RF, {}).copy()
+
+        # When passive scan is enabled, force enforce_known_list so ramses_rf
+        # doesn't auto-create devices from traffic — the only path to entity
+        # creation should be through accept_discovered_device.
+        advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
+        if advanced.get(CONF_PASSIVE_SCAN, False):
+            if not raw_config.get(SZ_ENFORCE_KNOWN_LIST):
+                _LOGGER.warning(
+                    "Passive scan is enabled but enforce_known_list is off — "
+                    "forcing enforce_known_list=True to prevent auto-creation "
+                    "of entities from traffic. Accept discovered devices via "
+                    "the accept_discovered_device service instead."
+                )
+                raw_config[SZ_ENFORCE_KNOWN_LIST] = True
 
         engine_kwargs: dict[str, Any] = {}
         gateway_kwargs: dict[str, Any] = {}
@@ -336,14 +656,21 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         engine_kwargs["app_context"] = self.hass
 
-        raw_known_list = self.options.get(SZ_KNOWN_LIST, {})
+        # ── Schema as single source of truth ──────────────────────────
+        # Derive known_list from the schema (device IDs from topology),
+        # then merge user overrides (alias, faked, class, scheme, bound).
+        user_known_list = self.options.get(SZ_KNOWN_LIST, {})
+        derived_known_list = self._derive_known_list_from_schema(
+            schema, user_overrides=user_known_list
+        )
+        # Strip commands from traits (ramses_rf doesn't accept them)
         sanitized_known_list = {
             device_id: (
-                {key: value for key, value in traits.items() if key != CONF_COMMANDS}
+                {k: v for k, v in traits.items() if k != CONF_COMMANDS}
                 if isinstance(traits, dict)
                 else traits
             )
-            for device_id, traits in raw_known_list.items()
+            for device_id, traits in derived_known_list.items()
         }
         # Device traits (class/alias/faked/bound/scheme) are consumed by
         # ramses_rf DeviceRegistry via GatewayConfig.known_list.
@@ -352,7 +679,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
         packet_log = self.options.get(SZ_PACKET_LOG, {})
         engine_kwargs["packet_log"] = packet_log
 
-        gateway_kwargs["schema"] = schema
+        # Strip ramses_cc-only extension keys before passing to ramses_rf
+        gateway_kwargs["schema"] = self._strip_schema_extensions(schema)
 
         gateway_timeout = self.options.get(CONF_GATEWAY_TIMEOUT)
         if gateway_timeout is not None:
@@ -501,7 +829,20 @@ class RamsesCoordinator(DataUpdateCoordinator):
         }
         remotes = self._remotes | remotes_from_entities
 
-        await self.store.async_save(schema, packets, remotes)
+        discovery_state = (
+            self.discovery_manager.export_state()
+            if self.discovery_manager
+            else getattr(self, "_cached_discovery_state", None)
+        )
+
+        _LOGGER.info(
+            "Saving state: discovery_manager=%s, cached=%s, discovery_devices=%d",
+            bool(self.discovery_manager),
+            bool(getattr(self, "_cached_discovery_state", None)),
+            len(discovery_state.get("devices", {})) if discovery_state else 0,
+        )
+
+        await self.store.async_save(schema, packets, remotes, discovery_state)
 
     def _get_device(self, device_id: str) -> Any | None:
         """Get a device by ID."""
@@ -812,6 +1153,55 @@ class RamsesCoordinator(DataUpdateCoordinator):
         :param call: The service call object containing parameters.
         """
         await self.service_handler.async_discover_known_devices(call)
+
+    async def async_get_discovered_devices(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_get_discovered_devices(call)
+
+    async def async_accept_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_accept_discovered_device(call)
+
+    async def async_discard_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_discard_discovered_device(call)
+
+    async def async_remove_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_remove_discovered_device(call)
+
+    async def async_enable_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_enable_discovered_device(call)
+
+    async def async_disable_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_disable_discovered_device(call)
+
+    async def async_add_faked_rem(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_add_faked_rem(call)
 
     async def async_get_fan_param(self, call: dict[str, Any] | ServiceCall) -> None:
         """Delegate to Service Handler.

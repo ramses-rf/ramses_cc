@@ -790,3 +790,117 @@ add_command:
 # (https://www.home-assistant.io/docs/blueprint/selectors/).
 # Entity selector parameters will automatically be applied to device and area, and
 # device selector parameters will automatically be applied to area
+
+
+# Passive device scan services (available when passive_scan is enabled)
+
+get_discovered_devices:
+  # Retrieve the list of devices discovered by the passive scan, optionally filtered by status or enabled flag. Fires a ramses_cc_discovered_devices event with the results.
+  fields:
+    status:
+      # Filter by discovery status (new, accepted, discarded, removed, lost).
+      example: new
+      required: false
+      selector:
+        select:
+          options:
+            - new
+            - accepted
+            - discarded
+            - removed
+            - lost
+    enabled:
+      # Filter by enabled flag.
+      example: true
+      required: false
+      selector:
+        boolean:
+
+accept_discovered_device:
+  # Accept a discovered device, auto-generate a schema entry, and trigger entity creation.
+  fields:
+    device_id:
+      # The device ID to accept.
+      example: "04:056053"
+      required: true
+      selector:
+        text:
+    owner:
+      # Optional owner label for this device.
+      example: "henk"
+      required: false
+      selector:
+        text:
+    schema_entry:
+      # Optional schema entry override (JSON dict). If omitted, the auto-detected entry is used.
+      required: false
+      selector:
+        object:
+    ctl_id:
+      # Optional CTL device ID for placing TRV/BDR/DHW/OTB devices in a TCS.
+      example: "01:145038"
+      required: false
+      selector:
+        text:
+
+discard_discovered_device:
+  # Discard a discovered device. It stays in the list for spam prevention but won't be created.
+  fields:
+    device_id:
+      # The device ID to discard.
+      example: "04:056053"
+      required: true
+      selector:
+        text:
+
+remove_discovered_device:
+  # Mark a previously accepted device as removed (it no longer exists). Discovery info is kept to prevent re-notification.
+  fields:
+    device_id:
+      # The device ID to remove.
+      example: "04:056053"
+      required: true
+      selector:
+        text:
+
+enable_discovered_device:
+  # Enable a disabled or discarded device without changing its status.
+  fields:
+    device_id:
+      # The device ID to enable.
+      example: "04:056053"
+      required: true
+      selector:
+        text:
+
+disable_discovered_device:
+  # Disable an accepted device temporarily (e.g. for maintenance) without changing its status.
+  fields:
+    device_id:
+      # The device ID to disable.
+      example: "04:056053"
+      required: true
+      selector:
+        text:
+
+add_faked_rem:
+  # Create a faked REM (virtual remote) for sending commands to a FAN. No RF traffic needed.
+  fields:
+    device_id:
+      # The device ID for the faked REM (any valid 37: address).
+      example: "37:000001"
+      required: true
+      selector:
+        text:
+    bound_to:
+      # The FAN device ID this REM is bound to.
+      example: "32:157747"
+      required: true
+      selector:
+        text:
+    alias:
+      # Optional friendly name for this faked REM.
+      example: "Virtual REM for living room"
+      required: false
+      selector:
+        text:

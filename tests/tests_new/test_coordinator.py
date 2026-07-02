@@ -766,7 +766,7 @@ async def test_save_client_state_hybrid_compatibility(
     await mock_coordinator.async_save_client_state()
 
     # Verify the awaitable was awaited and data passed to store
-    mock_save.assert_awaited_with({"type": "async"}, {}, {})
+    mock_save.assert_awaited_with({"type": "async"}, {}, {}, None)
     mock_save.reset_mock()
 
     # --- SCENARIO 2: Old Sync Client ---
@@ -778,7 +778,7 @@ async def test_save_client_state_hybrid_compatibility(
     await mock_coordinator.async_save_client_state()
 
     # Verify the synchronous result was handled correctly
-    mock_save.assert_awaited_with({"type": "sync"}, {}, {})
+    mock_save.assert_awaited_with({"type": "sync"}, {}, {}, None)
 
 
 def self_resolving_async_mock(*args: Any) -> Any:
@@ -2129,3 +2129,187 @@ async def test_discover_entities_does_not_suppress_base_exceptions(
     # 3. Call discovery and assert the RuntimeError successfully escapes
     with pytest.raises(RuntimeError, match="Critical transport failure"):
         await mock_coordinator._discover_new_entities()
+
+
+# ── Schema-as-single-source-of-truth tests ──────────────────────────────
+
+
+class TestDeriveKnownListFromSchema:
+    """Tests for _derive_known_list_from_schema."""
+
+    def test_empty_schema(self) -> None:
+        """Empty schema produces empty known_list."""
+        result = RamsesCoordinator._derive_known_list_from_schema({})
+        assert result == {}
+
+    def test_main_tcs_only(self) -> None:
+        """Schema with just main_tcs produces CTL in known_list."""
+        schema = {"main_tcs": "01:145038", "01:145038": {}}
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        assert "01:145038" in result
+        assert result["01:145038"] == {}
+
+    def test_full_tcs_structure(self) -> None:
+        """Full TCS with zones, DHW, system produces all device IDs."""
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {
+                "system": {"appliance_control": "10:064873"},
+                "stored_hotwater": {
+                    "sensor": "07:012345",
+                    "hotwater_valve": "13:111111",
+                    "heating_valve": "13:222222",
+                },
+                "underfloor_heating": {
+                    "02:333333": {"circuits": {"01": {"zone_idx": "01"}}}
+                },
+                "zones": {
+                    "01": {"sensor": "04:056053", "actuators": ["04:111111"]},
+                    "02": {"sensor": "22:123456"},
+                },
+                "orphans": ["23:777777"],
+            },
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        expected_ids = {
+            "01:145038",
+            "10:064873",
+            "07:012345",
+            "13:111111",
+            "13:222222",
+            "02:333333",
+            "04:056053",
+            "04:111111",
+            "22:123456",
+            "23:777777",
+        }
+        assert set(result.keys()) == expected_ids
+        # All entries should be empty dicts (no traits)
+        for traits in result.values():
+            assert traits == {}
+
+    def test_hvac_vcs_structure(self) -> None:
+        """HVAC VCS with remotes and sensors."""
+        schema = {
+            "30:111222": {
+                "remotes": ["37:168270", "37:168271"],
+                "sensors": ["39:000001"],
+            },
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        expected_ids = {"30:111222", "37:168270", "37:168271", "39:000001"}
+        assert set(result.keys()) == expected_ids
+
+    def test_global_orphans(self) -> None:
+        """Global orphan lists are included."""
+        schema = {
+            "orphans_heat": ["23:111111", "23:222222"],
+            "orphans_hvac": ["39:333333"],
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        assert "23:111111" in result
+        assert "23:222222" in result
+        assert "39:333333" in result
+
+    def test_disabled_devices_excluded(self) -> None:
+        """Devices in disabled_devices list are excluded from known_list."""
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {"zones": {"01": {"sensor": "04:056053"}}},
+            "disabled_devices": ["04:056053"],
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        assert "01:145038" in result
+        assert "04:056053" not in result
+
+    def test_user_overrides_merged(self) -> None:
+        """User overrides are merged into derived known_list."""
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {"zones": {"01": {"sensor": "04:056053"}}},
+        }
+        overrides = {
+            "01:145038": {"class": "CTL", "alias": "My Controller"},
+            "04:056053": {"alias": "Living Room"},
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(
+            schema, user_overrides=overrides
+        )
+        assert result["01:145038"]["alias"] == "My Controller"
+        assert result["01:145038"]["class"] == "CTL"
+        assert result["04:056053"]["alias"] == "Living Room"
+
+    def test_user_override_for_device_not_in_schema(self) -> None:
+        """User overrides for devices not in schema are kept (backward compat)."""
+        schema = {"main_tcs": "01:145038", "01:145038": {}}
+        overrides = {"03:123456": {"class": "THM", "faked": True}}
+        result = RamsesCoordinator._derive_known_list_from_schema(
+            schema, user_overrides=overrides
+        )
+        assert "03:123456" in result
+        assert result["03:123456"]["class"] == "THM"
+        assert result["03:123456"]["faked"] is True
+
+    def test_user_override_disabled_device_excluded(self) -> None:
+        """User overrides for disabled devices are excluded."""
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {"zones": {"01": {"sensor": "04:056053"}}},
+            "disabled_devices": ["04:056053"],
+        }
+        overrides = {"04:056053": {"alias": "Should not appear"}}
+        result = RamsesCoordinator._derive_known_list_from_schema(
+            schema, user_overrides=overrides
+        )
+        assert "04:056053" not in result
+
+
+class TestStripSchemaExtensions:
+    """Tests for _strip_schema_extensions."""
+
+    def test_strips_disabled_devices(self) -> None:
+        """disabled_devices key is stripped."""
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {},
+            "disabled_devices": ["04:056053"],
+        }
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert "disabled_devices" not in result
+        assert "main_tcs" in result
+        assert "01:145038" in result
+
+    def test_strips_device_comments(self) -> None:
+        """device_comments key is stripped."""
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {},
+            "device_comments": {"01:145038": "My Controller"},
+        }
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert "device_comments" not in result
+
+    def test_no_extensions_returns_copy(self) -> None:
+        """Schema without extensions is returned as-is (copy)."""
+        schema = {"main_tcs": "01:145038", "01:145038": {}}
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert result == schema
+        assert result is not schema  # should be a new dict
+
+    def test_vcs_gets_default_remotes(self) -> None:
+        """VCS (FAN, 30:) devices without remotes/sensors get remotes: []."""
+        schema = {"30:160000": {}}
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert result["30:160000"] == {"remotes": []}
+
+    def test_vcs_with_sensors_not_modified(self) -> None:
+        """VCS devices that already have sensors are not modified."""
+        schema = {"30:160000": {"sensors": ["01:123456"]}}
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert result["30:160000"] == {"sensors": ["01:123456"]}
+
+    def test_vcs_with_remotes_not_modified(self) -> None:
+        """VCS devices that already have remotes are not modified."""
+        schema = {"30:160000": {"remotes": ["01:123456"]}}
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert result["30:160000"] == {"remotes": ["01:123456"]}
