@@ -645,11 +645,21 @@ class DiscoveryManager:
                 line += f", {dev.confidence}"
             if dev.zone_idx:
                 line += f", zone={dev.zone_idx}"
+            if dev.bound_to:
+                line += f", bound to {dev.bound_to}"
+            if dev.is_battery:
+                line += ", battery"
             line += ")"
             lines.append(line)
 
-        lines.append("\nCall `ramses_cc.get_discovered_devices` for details.")
-        lines.append("Call `ramses_cc.accept_discovered_device` to add to schema.")
+        lines.append(
+            "\n[Review discovered devices](/config/integrations/integration/ramses_cc)"
+            " — open **Configure → Review discovered devices** to accept or decline."
+        )
+        lines.append(
+            "Or call `ramses_cc.accept_discovered_device` / "
+            "`ramses_cc.discard_discovered_device` services."
+        )
 
         async_create_notification(
             self._hass,

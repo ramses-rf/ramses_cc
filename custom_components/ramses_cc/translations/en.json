@@ -19,6 +19,7 @@
                     "schema": "System schema and known devices",
                     "advanced_features": "Advanced features",
                     "packet_log": "Packet log",
+                    "review_discovered": "Review discovered devices",
                     "clear_cache": "Clear cache"
                 }
             },
@@ -145,6 +146,7 @@
                     "schema": "System schema and known devices",
                     "advanced_features": "Advanced features",
                     "packet_log": "Packet log",
+                    "review_discovered": "Review discovered devices",
                     "clear_cache": "Clear cache"
                 }
             },
@@ -237,8 +239,14 @@
                 "description": "Select items below to immediately clear their cache and reload the integration after significant changes to your system schema or configuration.",
                 "data": {
                     "clear_schema": "Clear discovered system schema(s)",
-                    "clear_packets": "Clear system state (recent packets)"
+                    "clear_packets": "Clear system state (recent packets)",
+                    "clear_discovery": "Clear discovery state (found devices list)"
                 }
+            },
+            "review_discovered": {
+                "title": "Review discovered devices",
+                "description": "{message}",
+                "data": {}
             }
         }
     },

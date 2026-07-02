@@ -1332,6 +1332,8 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         Shows devices found by the passive scan that haven't been reviewed yet.
         The user can accept (add to schema) or decline (add to schema as disabled).
         """
+        self.get_options()  # populate self.options from config entry
+
         # Get the coordinator's discovery manager
         coordinators = self.hass.data.get(DOMAIN, {})
         coordinator = None
@@ -1367,19 +1369,21 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             changed = False
 
             for entry in devices:
-                device_id = entry.device_id
+                device_id = entry.device.device_id
                 action = user_input.get(f"device_{device_id}", "skip")
                 if action == "accept":
-                    # Add to schema using the generated schema entry
-                    if entry.schema_entry:
-                        from ramses_rf.helpers import deep_merge
-
-                        config_schema = deep_merge(config_schema, entry.schema_entry)
-                        changed = True
-                    # Update discovery status
-                    coordinator.discovery_manager.accept_device(
+                    # Accept the device — this generates a schema entry
+                    accepted = coordinator.discovery_manager.accept_device(
                         device_id, owner=user_input.get(f"owner_{device_id}")
                     )
+                    # Add to schema using the generated schema entry
+                    if accepted.metadata.schema_entry:
+                        from ramses_rf.helpers import deep_merge
+
+                        config_schema = deep_merge(
+                            config_schema, accepted.metadata.schema_entry
+                        )
+                        changed = True
                 elif action == "decline":
                     # Add to disabled devices list
                     if device_id not in disabled:
@@ -1394,22 +1398,72 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
             return self._async_save()
 
-        # Build form with device selectors
+        # Build a summary table for the description
+        lines: list[str] = [f"**{len(devices)} device(s) to review:**\n"]
+        lines.append(
+            "| Device | Type | Conf | RSSI | Codes | Bound | Zone | Batt | Pkts |"
+        )
+        lines.append(
+            "|--------|------|------|------|-------|-------|------|------|------|"
+        )
+        for entry in devices:
+            d = entry.device
+            codes = ", ".join(sorted(d.codes_seen[:4]))
+            if len(d.codes_seen) > 4:
+                codes += f" (+{len(d.codes_seen) - 4})"
+            rssi = f"{d.rssi:.0f}" if d.rssi is not None else "—"
+            pkt_count = d.src_count + d.dst_count
+            lines.append(
+                f"| `{d.device_id}` | {d.likely_type or '?'} | {d.confidence} | {rssi} | {codes} | {d.bound_to or '—'} | {d.zone_idx or '—'} | {'yes' if d.is_battery else 'no'} | {pkt_count} |"
+            )
+        summary = "\n".join(lines)
+
+        # Build form with device selectors — each field name includes
+        # the device info so the user can see what they're accepting.
         form_fields: dict[Any, Any] = {}
         for entry in devices:
-            device_id = entry.device_id
-            label = f"{device_id} ({entry.likely_type or 'unknown'})"
-            if entry.bound_to:
-                label += f" → {entry.bound_to}"
-            form_fields[vol.Required(f"device_{device_id}", default="skip")] = vol.In(
-                [("skip", "Skip for now"), ("accept", "Accept"), ("decline", "Decline")]
+            d = entry.device
+            device_id = d.device_id
+            # Build a descriptive name for the field
+            desc_parts = [f"{device_id}", f"type={d.likely_type or '?'}"]
+            if d.confidence:
+                desc_parts.append(f"conf={d.confidence}")
+            if d.bound_to:
+                desc_parts.append(f"bound={d.bound_to}")
+            if d.zone_idx:
+                desc_parts.append(f"zone={d.zone_idx}")
+            if d.is_battery:
+                desc_parts.append("battery")
+            pkt_count = d.src_count + d.dst_count
+            desc_parts.append(f"pkts={pkt_count}")
+            field_label = " | ".join(desc_parts)
+
+            form_fields[
+                vol.Required(
+                    f"device_{device_id}",
+                    default="skip",
+                    description={"label": field_label},
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "skip", "label": "Skip for now"},
+                        {"value": "accept", "label": "Accept"},
+                        {"value": "decline", "label": "Decline"},
+                    ],
+                )
             )
-            form_fields[vol.Optional(f"owner_{device_id}")] = selector.TextSelector()
+            form_fields[
+                vol.Optional(
+                    f"owner_{device_id}",
+                    description={"label": f"Alias/owner for {device_id}"},
+                )
+            ] = selector.TextSelector()
 
         return self.async_show_form(
             step_id="review_discovered",
             data_schema=vol.Schema(form_fields),
-            description_placeholders={"message": f"{len(devices)} device(s) to review"},
+            description_placeholders={"message": summary},
             last_step=True,
         )
 
@@ -1468,6 +1522,12 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
                 if user_input["clear_packets"]:
                     stored_data[SZ_CLIENT_STATE].pop(SZ_PACKETS)
+
+            if user_input.get("clear_discovery"):
+                from .discovery import SZ_DISCOVERY
+
+                stored_data.pop(SZ_DISCOVERY, None)
+
             await store.async_save(stored_data)
 
             if self.config_entry is not None and self.config_entry.entry_id is not None:
@@ -1480,6 +1540,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         data_schema = {
             vol.Required("clear_schema", default=False): selector.BooleanSelector(),
             vol.Required("clear_packets", default=False): selector.BooleanSelector(),
+            vol.Required("clear_discovery", default=False): selector.BooleanSelector(),
         }
 
         return self.async_show_form(

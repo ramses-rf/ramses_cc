@@ -19,6 +19,7 @@
                     "schema": "Systeemschema en erkende apparaten",
                     "advanced_features": "Geavanceerde instellingen",
                     "packet_log": "Packet-log",
+                    "review_discovered": "Bekijk ontdekte apparaten",
                     "clear_cache": "Wis cache"
                 }
             },
@@ -139,6 +140,7 @@
                     "schema": "Systeemschema en erkende devices",
                     "advanced_features": "Geavanceerde opties",
                     "packet_log": "Packet-log",
+                    "review_discovered": "Bekijk ontdekte apparaten",
                     "clear_cache": "Cache beheren"
                 }
             },
@@ -225,8 +227,14 @@
                 "description": "De geselecteerde caches worden direct gewist als je op [Verzenden] klikt. Herlaad daarna de integratie na grote aanpassingen in het systeemschema of de configuratie. Beide schuifjes naar links = niets wissen",
                 "data": {
                     "clear_schema": "Wis ontdekte systeemschema('s)",
-                    "clear_packets": "Wis systeemtoestand (recente berichten)"
+                    "clear_packets": "Wis systeemtoestand (recente berichten)",
+                    "clear_discovery": "Wis discovery-state (gevonden apparaten)"
                 }
+            },
+            "review_discovered": {
+                "title": "Bekijk ontdekte apparaten",
+                "description": "{message}",
+                "data": {}
             }
         }
     },

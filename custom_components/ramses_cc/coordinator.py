@@ -27,7 +27,7 @@ from homeassistant.helpers.dispatcher import (
     async_dispatcher_send,
 )
 from homeassistant.helpers.entity_platform import EntityPlatform
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -409,14 +409,20 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if stored.get(SZ_DISCOVERY):
             self.discovery_manager.restore_state(stored[SZ_DISCOVERY])
 
-        # Schedule periodic checkpoint + check for new/lost devices
+        # Schedule periodic checkpoint + check for new/lost devices.
+        # Use 5 min interval for now — TODO: replace with a real-time
+        # callback from ramses_rf's DiscoveryScan (see notepad.txt).
         self.entry.async_on_unload(
             async_track_time_interval(
                 self.hass,
                 self._async_discovery_checkpoint,
-                td(minutes=30),
+                td(minutes=5),
             )
         )
+        # Run an immediate check after 10 seconds so new devices from
+        # cached packets are detected quickly.
+        unsub = async_call_later(self.hass, 10, self._async_discovery_checkpoint)
+        self.entry.async_on_unload(unsub)
         self.entry.async_on_unload(self._async_stop_discovery_scan)
         _LOGGER.info("Passive device scan started")
 
@@ -471,12 +477,30 @@ class RamsesCoordinator(DataUpdateCoordinator):
         ramses_rf's ``SCH_GLOBAL_SCHEMAS`` validator would reject our
         extension keys (``disabled_devices``, ``device_comments``), so we
         strip them before passing the schema to the Gateway.
+
+        Also strips ``None`` values for known optional keys like
+        ``main_tcs`` — ramses_rf's validator rejects ``null`` even though
+        the key is ``vol.Optional``.
+
+        For VCS (ventilation) devices (FAN, prefix ``30:``), ramses_rf
+        requires at least one of ``remotes``/``sensors`` keys to be
+        present.  We inject ``remotes: []`` when neither exists so that
+        minimal schema entries like ``{"30:160000": {}}`` validate.
         """
-        return {
-            k: v
-            for k, v in schema.items()
-            if k not in RamsesCoordinator._SCHEMA_EXTENSION_KEYS
-        }
+        result: dict[str, Any] = {}
+        for k, v in schema.items():
+            if k in RamsesCoordinator._SCHEMA_EXTENSION_KEYS or v is None:
+                continue
+            if (
+                isinstance(v, dict)
+                and _DEVICE_ID_RE.match(str(k))
+                and str(k).startswith("30:")
+                and "remotes" not in v
+                and "sensors" not in v
+            ):
+                v = {**v, "remotes": []}
+            result[k] = v
+        return result
 
     @staticmethod
     def _derive_known_list_from_schema(

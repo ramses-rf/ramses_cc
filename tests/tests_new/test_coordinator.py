@@ -2295,3 +2295,21 @@ class TestStripSchemaExtensions:
         result = RamsesCoordinator._strip_schema_extensions(schema)
         assert result == schema
         assert result is not schema  # should be a new dict
+
+    def test_vcs_gets_default_remotes(self) -> None:
+        """VCS (FAN, 30:) devices without remotes/sensors get remotes: []."""
+        schema = {"30:160000": {}}
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert result["30:160000"] == {"remotes": []}
+
+    def test_vcs_with_sensors_not_modified(self) -> None:
+        """VCS devices that already have sensors are not modified."""
+        schema = {"30:160000": {"sensors": ["01:123456"]}}
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert result["30:160000"] == {"sensors": ["01:123456"]}
+
+    def test_vcs_with_remotes_not_modified(self) -> None:
+        """VCS devices that already have remotes are not modified."""
+        schema = {"30:160000": {"remotes": ["01:123456"]}}
+        result = RamsesCoordinator._strip_schema_extensions(schema)
+        assert result["30:160000"] == {"remotes": ["01:123456"]}
