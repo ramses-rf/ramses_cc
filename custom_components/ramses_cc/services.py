@@ -52,6 +52,18 @@ _CALL_LATER_DELAY: Final = 5  # needed for tests
 _DEVICE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9A-F]{2}:[0-9A-F]{6}$", re.I)
 
 
+class _MockServiceCall:
+    """Minimal stand-in for ServiceCall when invoking a service handler internally.
+
+    Only provides ``.data`` — enough for handlers that only read data fields.
+    """
+
+    __slots__ = ("data",)
+
+    def __init__(self, data: dict[str, Any]) -> None:
+        self.data = data
+
+
 class RamsesServiceHandler:
     """Handler for RAMSES integration service calls."""
 
@@ -1000,10 +1012,13 @@ class RamsesServiceHandler:
     async def async_accept_discovered_device(self, call: ServiceCall) -> None:
         """Handle the accept_discovered_device service call.
 
-        Accepts a discovered device, adds it to the schema, and triggers
-        discover_known_devices to create the entity.
+        Accepts a discovered device, auto-generates a schema entry (if
+        not provided), merges it into the config entry schema, adds the
+        device to the known_list (so enforce_known_list allows it), and
+        triggers discover_known_devices to create the entity.
 
-        :param call: The service call with device_id and optional owner/schema_entry.
+        :param call: The service call with device_id and optional
+            owner/schema_entry/ctl_id.
         :raises HomeAssistantError: If the discovery manager is not running.
         :raises ServiceValidationError: If the device is not in the discovery list.
         """
@@ -1013,19 +1028,86 @@ class RamsesServiceHandler:
         device_id = call.data["device_id"]
         owner = call.data.get("owner")
         schema_entry = call.data.get("schema_entry")
+        ctl_id = call.data.get("ctl_id")
 
         try:
-            self._coordinator.discovery_manager.accept_device(
-                device_id, owner=owner, schema_entry=schema_entry
+            entry = self._coordinator.discovery_manager.accept_device(
+                device_id,
+                owner=owner,
+                schema_entry=schema_entry,
+                ctl_id=ctl_id,
             )
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
 
-        # TODO: update the config entry schema with the accepted device
-        # and call discover_known_devices to create the entity.
-        # This requires the schema auto-generation logic from the plan.
+        # Merge the generated/provided schema entry into the config entry
+        # and add the device to the known_list so enforce_known_list allows it
+        if entry and entry.metadata.schema_entry:
+            await self._merge_schema_entry(entry.metadata.schema_entry, device_id)
 
-        _LOGGER.info("Accepted discovered device: %s", device_id)
+        # Trigger discovery for this specific device
+        _LOGGER.info("Accepted discovered device: %s, triggering discovery", device_id)
+        await self.async_discover_known_devices(
+            _MockServiceCall({"device_id": device_id})
+        )
+
+    async def _merge_schema_entry(
+        self, fragment: dict[str, Any], device_id: str
+    ) -> None:
+        """Deep-merge a schema fragment into the config entry's schema.
+
+        Also adds the device_id to the known_list (both the config entry
+        and the running ramses_rf client's include lists) so that
+        enforce_known_list allows ramses_rf to create the device.
+
+        :param fragment: A partial schema dict (e.g. from generate_schema_entry).
+        :param device_id: The device ID being accepted (added to known_list).
+        """
+        from ramses_rf.helpers import deep_merge
+
+        # 1. Merge schema
+        current_schema: dict[str, Any] = dict(
+            self._coordinator.options.get(CONF_SCHEMA, {})
+        )
+        merged = deep_merge(current_schema, fragment)
+
+        # 2. Add device_id to known_list if not already present
+        current_known: dict[str, Any] = dict(
+            self._coordinator.options.get(SZ_KNOWN_LIST, {})
+        )
+        if device_id not in current_known:
+            current_known[device_id] = {}
+
+        # 3. Update config entry
+        new_options = {
+            **self._coordinator.entry.options,
+            CONF_SCHEMA: merged,
+            SZ_KNOWN_LIST: current_known,
+        }
+        self.hass.config_entries.async_update_entry(
+            self._coordinator.entry, options=new_options
+        )
+        # Update the coordinator's local copy so discover_known_devices sees it
+        self._coordinator.options = new_options
+
+        # 4. Add to the running ramses_rf client's include lists so
+        #    enforce_known_list allows packet processing and device creation
+        client = self._coordinator.client
+        if client:
+            # Protocol-level filter (engine._include)
+            engine = getattr(client, "_engine", None)
+            if engine and device_id not in engine._include:
+                engine._include.append(device_id)
+            # Device-level filter (device_filter._include)
+            dev_filter = getattr(client, "_device_filter", None)
+            if dev_filter and device_id not in dev_filter._include:
+                dev_filter._include.append(device_id)
+
+        _LOGGER.debug(
+            "Merged schema fragment for %s, known_list now has %d entries",
+            device_id,
+            len(current_known),
+        )
 
     async def async_discard_discovered_device(self, call: ServiceCall) -> None:
         """Handle the discard_discovered_device service call.

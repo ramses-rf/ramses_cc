@@ -437,3 +437,78 @@ class TestLostDeviceDetection:
         manager.discard_device("04:056053")
         lost_ids = manager.check_for_lost_devices()
         assert lost_ids == []
+
+
+class TestGenerateSchemaEntry:
+    """Tests for DiscoveryManager.generate_schema_entry."""
+
+    def test_ctl_creates_main_tcs(self) -> None:
+        result = DiscoveryManager.generate_schema_entry("01:145038", "CTL")
+        from ramses_rf.schemas import SZ_MAIN_TCS
+
+        assert result[SZ_MAIN_TCS] == "01:145038"
+        assert "01:145038" in result
+
+    def test_trv_with_ctl_and_zone(self) -> None:
+        result = DiscoveryManager.generate_schema_entry(
+            "04:056053", "TRV", ctl_id="01:145038", zone_idx="02"
+        )
+        from ramses_rf.schemas import SZ_SENSOR, SZ_ZONES
+
+        assert result["01:145038"][SZ_ZONES]["02"][SZ_SENSOR] == "04:056053"
+
+    def test_trv_without_ctl_goes_to_orphans(self) -> None:
+        result = DiscoveryManager.generate_schema_entry("04:056053", "TRV")
+        from ramses_rf.schemas import SZ_ORPHANS_HEAT
+
+        assert "04:056053" in result[SZ_ORPHANS_HEAT]
+
+    def test_bdr_with_ctl_and_zone(self) -> None:
+        result = DiscoveryManager.generate_schema_entry(
+            "13:123456", "BDR", ctl_id="01:145038", zone_idx="01"
+        )
+        from ramses_rf.schemas import SZ_ACTUATORS, SZ_ZONES
+
+        assert "13:123456" in result["01:145038"][SZ_ZONES]["01"][SZ_ACTUATORS]
+
+    def test_dhw_with_ctl(self) -> None:
+        result = DiscoveryManager.generate_schema_entry(
+            "07:123456", "DHW", ctl_id="01:145038"
+        )
+        from ramses_rf.schemas import SZ_DHW_SYSTEM, SZ_SENSOR
+
+        assert result["01:145038"][SZ_DHW_SYSTEM][SZ_SENSOR] == "07:123456"
+
+    def test_otb_with_ctl(self) -> None:
+        result = DiscoveryManager.generate_schema_entry(
+            "10:064873", "OTB", ctl_id="01:145038"
+        )
+        from ramses_rf.schemas import SZ_APPLIANCE_CONTROL, SZ_SYSTEM
+
+        assert result["01:145038"][SZ_SYSTEM][SZ_APPLIANCE_CONTROL] == "10:064873"
+
+    def test_fan_creates_vcs(self) -> None:
+        result = DiscoveryManager.generate_schema_entry("32:123456", "FAN")
+        from ramses_rf.schemas import SZ_REMOTES
+
+        assert SZ_REMOTES in result["32:123456"]
+
+    def test_rem_with_parent_fan(self) -> None:
+        result = DiscoveryManager.generate_schema_entry(
+            "37:123456", "REM", bound_to="32:123456"
+        )
+        from ramses_rf.schemas import SZ_REMOTES
+
+        assert "37:123456" in result["32:123456"][SZ_REMOTES]
+
+    def test_rem_without_parent_goes_to_hvac_orphans(self) -> None:
+        result = DiscoveryManager.generate_schema_entry("37:123456", "REM")
+        from ramses_rf.schemas import SZ_ORPHANS_HVAC
+
+        assert "37:123456" in result[SZ_ORPHANS_HVAC]
+
+    def test_unknown_type_goes_to_heat_orphans(self) -> None:
+        result = DiscoveryManager.generate_schema_entry("04:999999", "unknown")
+        from ramses_rf.schemas import SZ_ORPHANS_HEAT
+
+        assert "04:999999" in result[SZ_ORPHANS_HEAT]

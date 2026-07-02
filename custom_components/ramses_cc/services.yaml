@@ -817,7 +817,7 @@ get_discovered_devices:
         boolean:
 
 accept_discovered_device:
-  # Accept a discovered device and add it to the schema. The device will be created on the next discover_known_devices call.
+  # Accept a discovered device, auto-generate a schema entry, and trigger entity creation.
   fields:
     device_id:
       # The device ID to accept.
@@ -836,6 +836,12 @@ accept_discovered_device:
       required: false
       selector:
         object:
+    ctl_id:
+      # Optional CTL device ID for placing TRV/BDR/DHW/OTB devices in a TCS.
+      example: "01:145038"
+      required: false
+      selector:
+        text:
 
 discard_discovered_device:
   # Discard a discovered device. It stays in the list for spam prevention but won't be created.

@@ -382,6 +382,20 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         raw_config = self.options.get(CONF_RAMSES_RF, {}).copy()
 
+        # When passive scan is enabled, force enforce_known_list so ramses_rf
+        # doesn't auto-create devices from traffic — the only path to entity
+        # creation should be through accept_discovered_device.
+        advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
+        if advanced.get(CONF_PASSIVE_SCAN, False):
+            if not raw_config.get(SZ_ENFORCE_KNOWN_LIST):
+                _LOGGER.warning(
+                    "Passive scan is enabled but enforce_known_list is off — "
+                    "forcing enforce_known_list=True to prevent auto-creation "
+                    "of entities from traffic. Accept discovered devices via "
+                    "the accept_discovered_device service instead."
+                )
+                raw_config[SZ_ENFORCE_KNOWN_LIST] = True
+
         engine_kwargs: dict[str, Any] = {}
         gateway_kwargs: dict[str, Any] = {}
 

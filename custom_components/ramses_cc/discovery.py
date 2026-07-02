@@ -266,21 +266,141 @@ class DiscoveryManager:
                 return entry
         return None
 
+    @staticmethod
+    def generate_schema_entry(
+        device_id: str,
+        likely_type: str,
+        *,
+        bound_to: str | None = None,
+        zone_idx: str | None = None,
+        ctl_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Generate a schema fragment for a discovered device.
+
+        Maps the scan engine's ``likely_type`` to the appropriate
+        ramses_rf global schema structure.  Returns a *fragment* —
+        the caller merges it into the full schema dict.
+
+        :param device_id: The device ID (e.g. ``04:056053``).
+        :param likely_type: One of CTL, TRV, DHW, OTB, BDR, FAN, REM, THM.
+        :param bound_to: Optional parent device ID (for REM → FAN).
+        :param zone_idx: Optional zone index (for TRV/THM in a TCS).
+        :param ctl_id: Optional CTL device ID (for placing devices in a TCS).
+        :return: A dict that can be deep-merged into the global schema.
+        """
+        from ramses_rf.schemas import (
+            SZ_ACTUATORS,
+            SZ_APPLIANCE_CONTROL,
+            SZ_DHW_SYSTEM,
+            SZ_DHW_VALVE,
+            SZ_MAIN_TCS,
+            SZ_ORPHANS,
+            SZ_ORPHANS_HEAT,
+            SZ_ORPHANS_HVAC,
+            SZ_REMOTES,
+            SZ_SENSOR,
+            SZ_SYSTEM,
+            SZ_ZONES,
+        )
+
+        lt = likely_type.upper()
+
+        # ── CTL: Temperature Control System controller ──────────────
+        if lt == "CTL":
+            return {
+                SZ_MAIN_TCS: device_id,
+                device_id: {},
+            }
+
+        # ── FAN: HVAC VCS controller ────────────────────────────────
+        if lt == "FAN":
+            return {
+                device_id: {SZ_REMOTES: []},
+            }
+
+        # ── REM: HVAC remote — add to parent FAN's remotes list ─────
+        if lt == "REM":
+            parent = bound_to or ctl_id
+            if parent:
+                return {
+                    parent: {SZ_REMOTES: [device_id]},
+                }
+            return {SZ_ORPHANS_HVAC: [device_id]}
+
+        # ── OTB: OpenTherm Bridge — appliance_control for a CTL ─────
+        if lt == "OTB":
+            if ctl_id:
+                return {
+                    ctl_id: {SZ_SYSTEM: {SZ_APPLIANCE_CONTROL: device_id}},
+                }
+            return {SZ_ORPHANS_HEAT: [device_id]}
+
+        # ── BDR: relay — DHW valve or zone actuator ─────────────────
+        if lt == "BDR":
+            if ctl_id and zone_idx:
+                return {
+                    ctl_id: {
+                        SZ_ZONES: {
+                            zone_idx: {SZ_ACTUATORS: [device_id]},
+                        },
+                    },
+                }
+            if ctl_id:
+                # No zone — put in DHW as htg_valve
+                return {
+                    ctl_id: {SZ_DHW_SYSTEM: {SZ_DHW_VALVE: device_id}},
+                }
+            return {SZ_ORPHANS_HEAT: [device_id]}
+
+        # ── DHW: stored hot water sensor ────────────────────────────
+        if lt == "DHW":
+            if ctl_id:
+                return {
+                    ctl_id: {SZ_DHW_SYSTEM: {SZ_SENSOR: device_id}},
+                }
+            return {SZ_ORPHANS_HEAT: [device_id]}
+
+        # ── TRV / THM: zone sensor ──────────────────────────────────
+        if lt in ("TRV", "THM"):
+            if ctl_id and zone_idx:
+                return {
+                    ctl_id: {
+                        SZ_ZONES: {
+                            zone_idx: {SZ_SENSOR: device_id},
+                        },
+                    },
+                }
+            if ctl_id:
+                # No zone — put in orphans of this TCS
+                return {
+                    ctl_id: {SZ_ORPHANS: [device_id]},
+                }
+            return {SZ_ORPHANS_HEAT: [device_id]}
+
+        # ── Default: orphan ─────────────────────────────────────────
+        return {SZ_ORPHANS_HEAT: [device_id]}
+
     def accept_device(
         self,
         device_id: str,
         *,
         owner: str | None = None,
         schema_entry: dict[str, Any] | None = None,
+        ctl_id: str | None = None,
     ) -> DiscoveredDeviceEntry:
         """Accept a discovered device — add to schema.
 
-        Sets status=accepted, enabled=true. The caller is responsible for
-        updating the config entry schema and calling discover_known_devices.
+        Sets status=accepted, enabled=true.  If no ``schema_entry`` is
+        provided, one is auto-generated from the scan engine's
+        ``likely_type`` / ``bound_to`` / ``zone_idx`` data.
+
+        The caller is still responsible for merging the schema entry
+        into the config entry and calling ``discover_known_devices``.
 
         :param device_id: The device ID to accept.
         :param owner: Optional owner label.
-        :param schema_entry: Optional schema entry override.
+        :param schema_entry: Optional schema entry override (skips auto-gen).
+        :param ctl_id: Optional CTL device ID for placing devices in a TCS.
         :return: The updated device entry.
         :raise ValueError: If the device is not in the discovery list.
         """
@@ -296,8 +416,23 @@ class DiscoveryManager:
         meta.accepted_at = dt.now().isoformat()
         if owner is not None:
             meta.owner = owner
+
+        # Auto-generate schema entry if not explicitly provided
         if schema_entry is not None:
             meta.schema_entry = schema_entry
+        else:
+            entry = self.get_device(device_id)
+            dev = entry.device if entry else None
+            likely_type = dev.likely_type if dev else "unknown"
+            bound_to = dev.bound_to if dev else None
+            zone_idx = dev.zone_idx if dev else None
+            meta.schema_entry = self.generate_schema_entry(
+                device_id,
+                likely_type,
+                bound_to=bound_to,
+                zone_idx=zone_idx,
+                ctl_id=ctl_id,
+            )
 
         self._metadata[device_id] = meta
         _LOGGER.info("DiscoveryManager: accepted device %s", device_id)

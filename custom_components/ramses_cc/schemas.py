@@ -20,6 +20,7 @@ from ramses_rf.schemas import (
     SZ_APPLIANCE_CONTROL,
     SZ_BOUND_TO,
     SZ_CONFIG,
+    SZ_MAIN_TCS,
     SZ_ORPHANS_HEAT,
     SZ_ORPHANS_HVAC,
     SZ_RESTORE_CACHE,
@@ -249,7 +250,14 @@ def schema_is_minimal(schema: _SchemaT) -> bool:
     sch: _SchemaT
 
     for key, sch in schema.items():
-        if key in (SZ_BLOCK_LIST, SZ_KNOWN_LIST, SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC):
+        if key in (
+            SZ_BLOCK_LIST,
+            SZ_KNOWN_LIST,
+            SZ_MAIN_TCS,
+            SZ_ORPHANS_HEAT,
+            SZ_ORPHANS_HVAC,
+            "transport_constructor",
+        ):
             continue
 
         try:
