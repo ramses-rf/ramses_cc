@@ -82,6 +82,8 @@ from .const import (
     CONF_RAMSES_RF,
     CONF_SEND_PACKET,
     CONF_UNKNOWN_CODES,
+    SZ_DEVICE_COMMENTS,
+    SZ_DISABLED_DEVICES,
     SystemMode,
     ZoneMode,
 )
@@ -256,6 +258,8 @@ def schema_is_minimal(schema: _SchemaT) -> bool:
             SZ_MAIN_TCS,
             SZ_ORPHANS_HEAT,
             SZ_ORPHANS_HVAC,
+            SZ_DISABLED_DEVICES,
+            SZ_DEVICE_COMMENTS,
             "transport_constructor",
         ):
             continue

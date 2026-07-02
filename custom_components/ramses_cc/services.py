@@ -41,7 +41,7 @@ from ramses_tx.exceptions import (
     TransportError,
 )
 
-from .const import CONF_SCHEMA, DOMAIN, SZ_KNOWN_LIST
+from .const import CONF_SCHEMA, DOMAIN, SZ_DISABLED_DEVICES, SZ_KNOWN_LIST
 
 if TYPE_CHECKING:
     from .coordinator import RamsesCoordinator
@@ -700,12 +700,13 @@ class RamsesServiceHandler:
             device_ids.add(ctl_id)
 
         for key, value in schema.items():
-            # Skip non-device-id keys
+            # Skip non-device-id keys and ramses_cc extension keys
             if key in (
                 SZ_MAIN_TCS,
                 SZ_ORPHANS_HEAT,
                 SZ_ORPHANS_HVAC,
                 "transport_constructor",
+                SZ_DISABLED_DEVICES,
             ):
                 continue
             if not _DEVICE_ID_RE.match(str(key)):
@@ -796,6 +797,10 @@ class RamsesServiceHandler:
         all_device_ids: set[str] = set(known_list.keys())
         schema_device_ids = self._extract_device_ids_from_schema(config_schema)
         all_device_ids |= schema_device_ids
+
+        # Skip disabled devices (declined via discovery review)
+        disabled: set[str] = set(config_schema.get(SZ_DISABLED_DEVICES, []))
+        all_device_ids -= disabled
 
         if not all_device_ids:
             _LOGGER.warning(
@@ -1070,15 +1075,19 @@ class RamsesServiceHandler:
     ) -> None:
         """Apply a schema fragment to the coordinator's local options.
 
-        Deep-merges the fragment into the schema, adds the device_id to the
-        known_list (with optional owner as alias), and updates the running
-        ramses_rf client's include lists so that enforce_known_list allows
-        packet processing and device creation.  Does NOT update the config
-        entry (caller does that separately to control when the reload happens).
+        Deep-merges the fragment into the schema.  The known_list is now
+        auto-derived from the schema at client creation time, so we only
+        need to add the device to the user-known_list if there are trait
+        overrides (e.g. owner/alias).  Also updates the running ramses_rf
+        client's include lists so that enforce_known_list allows packet
+        processing and device creation.
+
+        Does NOT update the config entry (caller does that separately to
+        control when the reload happens).
 
         :param fragment: A partial schema dict (e.g. from generate_schema_entry).
-        :param device_id: The device ID being accepted (added to known_list).
-        :param owner: Optional owner label (stored as alias in known_list).
+        :param device_id: The device ID being accepted.
+        :param owner: Optional owner label (stored as alias in known_list overrides).
         """
         from ramses_rf.helpers import deep_merge
 
@@ -1088,13 +1097,16 @@ class RamsesServiceHandler:
         merged = deep_merge(current_schema, fragment)
         current_options[CONF_SCHEMA] = merged
 
-        # 2. Add device_id to known_list if not already present
-        current_known: dict[str, Any] = dict(current_options.get(SZ_KNOWN_LIST, {}))
-        if device_id not in current_known:
-            current_known[device_id] = {}
+        # 2. Only add to known_list if there are trait overrides (e.g. alias).
+        #    The known_list is auto-derived from the schema, so we don't need
+        #    to add the device ID just for enforce_known_list — that happens
+        #    automatically.  We only keep user overrides here.
         if owner:
+            current_known: dict[str, Any] = dict(current_options.get(SZ_KNOWN_LIST, {}))
+            if device_id not in current_known:
+                current_known[device_id] = {}
             current_known[device_id]["alias"] = owner
-        current_options[SZ_KNOWN_LIST] = current_known
+            current_options[SZ_KNOWN_LIST] = current_known
 
         # Update the coordinator's local copy so discover_known_devices sees it
         self._coordinator.options = current_options
@@ -1111,9 +1123,8 @@ class RamsesServiceHandler:
                 dev_filter._include.append(device_id)
 
         _LOGGER.debug(
-            "Applied schema fragment for %s, known_list now has %d entries",
+            "Applied schema fragment for %s (known_list auto-derived from schema)",
             device_id,
-            len(current_known),
         )
 
     async def async_discard_discovered_device(self, call: ServiceCall) -> None:

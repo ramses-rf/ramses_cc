@@ -34,6 +34,23 @@ from homeassistant.util import dt as dt_util
 from ramses_rf.devices import Device, HvacRemoteBase, HvacVentilator
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.schemas import (
+    SZ_ACTUATORS,
+    SZ_APPLIANCE_CONTROL,
+    SZ_DHW_SYSTEM,
+    SZ_DHW_VALVE,
+    SZ_HTG_VALVE,
+    SZ_MAIN_TCS,
+    SZ_ORPHANS,
+    SZ_ORPHANS_HEAT,
+    SZ_ORPHANS_HVAC,
+    SZ_REMOTES,
+    SZ_SENSOR,
+    SZ_SENSORS,
+    SZ_SYSTEM,
+    SZ_UFH_SYSTEM,
+    SZ_ZONES,
+)
 from ramses_rf.systems import Evohome, System, Zone
 from ramses_rf.topology import Child
 from ramses_tx import exceptions as exc
@@ -59,12 +76,13 @@ from .const import (
     DOMAIN,
     SIGNAL_NEW_DEVICES,
     SZ_CLIENT_STATE,
+    SZ_DEVICE_COMMENTS,
+    SZ_DISABLED_DEVICES,
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST,
     SZ_PACKET_LOG,
     SZ_PACKETS,
     SZ_PORT_NAME,
-    SZ_REMOTES,
     SZ_SCHEMA,
     SZ_SERIAL_PORT,
 )
@@ -253,8 +271,45 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         client_state: dict[str, Any] = storage.get(SZ_CLIENT_STATE, {})
 
-        # 2. Schema Handling
+        # 1b. Migration: when passive scan is enabled, check if known_list
+        # has devices not in schema and migrate them.  For legacy setups
+        # (passive scan off), the derivation logic already handles
+        # known_list-only devices, so no migration is needed.
         config_schema = self.options.get(CONF_SCHEMA, {})
+        advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
+        if advanced.get(CONF_PASSIVE_SCAN, False):
+            user_known_list = self.options.get(SZ_KNOWN_LIST, {})
+            schema_device_ids = self._extract_schema_device_ids(config_schema)
+            known_list_only = set(user_known_list.keys()) - schema_device_ids
+            # Filter out HGI devices (gateways, handled by transport config)
+            known_list_only = {d for d in known_list_only if not d.startswith("18:")}
+
+            if known_list_only:
+                _LOGGER.warning(
+                    "Migration: %d known_list devices not in schema: %s. "
+                    "Backing up and migrating to schema as orphans.",
+                    len(known_list_only),
+                    sorted(known_list_only),
+                )
+                # Backup before migration
+                await self.store.async_save_backup(config_schema, user_known_list)
+
+                # Migrate: add missing devices to schema as heat orphans
+                migrated_schema = dict(config_schema)
+                existing_orphans = list(migrated_schema.get(SZ_ORPHANS_HEAT, []))
+                for device_id in sorted(known_list_only):
+                    if device_id not in existing_orphans:
+                        existing_orphans.append(device_id)
+                if existing_orphans != list(config_schema.get(SZ_ORPHANS_HEAT, [])):
+                    migrated_schema[SZ_ORPHANS_HEAT] = existing_orphans
+                    self.options[CONF_SCHEMA] = migrated_schema
+                    config_schema = migrated_schema
+                    _LOGGER.info(
+                        "Migration complete: schema now has %d orphan devices",
+                        len(existing_orphans),
+                    )
+
+        # 2. Schema Handling
         _LOGGER.debug("CONFIG_SCHEMA: %s", config_schema)
         if not schema_is_minimal(config_schema):
             _LOGGER.warning("The config schema is not minimal (consider minimising it)")
@@ -390,6 +445,160 @@ class RamsesCoordinator(DataUpdateCoordinator):
             self.discovery_manager.stop()
             self.discovery_manager = None
 
+    # ── Schema-as-single-source-of-truth ──────────────────────────────
+
+    # Keys that ramses_cc adds to the schema dict but ramses_rf doesn't
+    # understand.  They are stripped before passing the schema to the Gateway.
+    _SCHEMA_EXTENSION_KEYS: Final[frozenset[str]] = frozenset(
+        {SZ_DISABLED_DEVICES, SZ_DEVICE_COMMENTS}
+    )
+
+    @staticmethod
+    def _extract_schema_device_ids(schema: dict[str, Any]) -> set[str]:
+        """Extract all device IDs from a schema dict (for migration checks).
+
+        Delegates to the same logic as ``_derive_known_list_from_schema``
+        but returns only the device ID set, excluding disabled devices.
+        """
+        # Reuse the derivation logic, just take the keys
+        derived = RamsesCoordinator._derive_known_list_from_schema(schema)
+        return set(derived.keys()) | set(schema.get(SZ_DISABLED_DEVICES, []))
+
+    @staticmethod
+    def _strip_schema_extensions(schema: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of *schema* with ramses_cc-only keys removed.
+
+        ramses_rf's ``SCH_GLOBAL_SCHEMAS`` validator would reject our
+        extension keys (``disabled_devices``, ``device_comments``), so we
+        strip them before passing the schema to the Gateway.
+        """
+        return {
+            k: v
+            for k, v in schema.items()
+            if k not in RamsesCoordinator._SCHEMA_EXTENSION_KEYS
+        }
+
+    @staticmethod
+    def _derive_known_list_from_schema(
+        schema: dict[str, Any],
+        *,
+        user_overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Derive a known_list from the schema structure.
+
+        Walks the schema (same logic as ``_extract_device_ids_from_schema``
+        in services.py) and returns a known_list dict where each device ID
+        maps to an empty traits dict ``{}``.  This is enough for
+        ``enforce_known_list`` to allow the device through — ramses_rf will
+        infer the class from the address prefix and message codes.
+
+        If *user_overrides* is provided, those entries take precedence for
+        any traits the user has set (alias, faked, class, scheme, bound).
+        Disabled devices (listed in ``SZ_DISABLED_DEVICES``) are excluded
+        from the derived known_list.
+
+        :param schema: The global schema dict (may contain extension keys).
+        :param user_overrides: Optional known_list entries from config that
+            override the derived defaults.
+        :return: A known_list dict suitable for ``GatewayConfig.known_list``.
+        """
+        disabled: set[str] = set(schema.get(SZ_DISABLED_DEVICES, []))
+
+        # Collect all device IDs from the schema structure
+        device_ids: set[str] = set()
+
+        # Main TCS (the CTL)
+        if ctl_id := schema.get(SZ_MAIN_TCS):
+            device_ids.add(ctl_id)
+
+        for key, value in schema.items():
+            # Skip non-device-id keys and our extension keys
+            if key in RamsesCoordinator._SCHEMA_EXTENSION_KEYS:
+                continue
+            if key in (
+                SZ_MAIN_TCS,
+                SZ_ORPHANS_HEAT,
+                SZ_ORPHANS_HVAC,
+                "transport_constructor",
+            ):
+                continue
+            if not _DEVICE_ID_RE.match(str(key)):
+                continue
+
+            # key is a device_id (CTL or FAN)
+            device_ids.add(str(key))
+
+            if not isinstance(value, dict):
+                continue
+
+            # Heat TCS structure
+            if isinstance(value.get(SZ_SYSTEM), dict):
+                if app_id := value[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL):
+                    device_ids.add(app_id)
+
+            if isinstance(value.get(SZ_DHW_SYSTEM), dict):
+                dhw = value[SZ_DHW_SYSTEM]
+                if sensor_id := dhw.get(SZ_SENSOR):
+                    device_ids.add(sensor_id)
+                if valve_id := dhw.get(SZ_DHW_VALVE):
+                    device_ids.add(valve_id)
+                if valve_id := dhw.get(SZ_HTG_VALVE):
+                    device_ids.add(valve_id)
+
+            if isinstance(value.get(SZ_UFH_SYSTEM), dict):
+                for ufc_id in value[SZ_UFH_SYSTEM]:
+                    if _DEVICE_ID_RE.match(str(ufc_id)):
+                        device_ids.add(str(ufc_id))
+
+            if isinstance(value.get(SZ_ZONES), dict):
+                for zone_data in value[SZ_ZONES].values():
+                    if not isinstance(zone_data, dict):
+                        continue
+                    if sensor_id := zone_data.get(SZ_SENSOR):
+                        device_ids.add(sensor_id)
+                    for act_id in zone_data.get(SZ_ACTUATORS, []):
+                        device_ids.add(act_id)
+
+            for orphan_id in value.get(SZ_ORPHANS, []):
+                device_ids.add(orphan_id)
+
+            # HVAC VCS structure
+            for remote_id in value.get(SZ_REMOTES, []):
+                device_ids.add(remote_id)
+            for sensor_id in value.get(SZ_SENSORS, []):
+                device_ids.add(sensor_id)
+
+        # Global orphans
+        for orphan_id in schema.get(SZ_ORPHANS_HEAT, []):
+            device_ids.add(orphan_id)
+        for orphan_id in schema.get(SZ_ORPHANS_HVAC, []):
+            device_ids.add(orphan_id)
+
+        # Build the known_list, excluding disabled devices
+        known_list: dict[str, Any] = {}
+        for device_id in device_ids:
+            if device_id in disabled:
+                continue
+            known_list[device_id] = {}
+
+        # Apply user overrides (deep merge: user traits win)
+        if user_overrides:
+            for device_id, traits in user_overrides.items():
+                if device_id in disabled:
+                    continue
+                if device_id not in known_list:
+                    # User has a device in known_list that's not in the schema.
+                    # Keep it (backward compatibility — maybe ramses_rf needs it).
+                    known_list[device_id] = (
+                        dict(traits) if isinstance(traits, dict) else traits
+                    )
+                elif isinstance(traits, dict) and isinstance(
+                    known_list[device_id], dict
+                ):
+                    known_list[device_id] = {**known_list[device_id], **traits}
+
+        return known_list
+
     def _create_client(self, schema: dict[str, Any]) -> Gateway:
         """Create and configure a new RAMSES client instance."""
 
@@ -423,14 +632,21 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         engine_kwargs["app_context"] = self.hass
 
-        raw_known_list = self.options.get(SZ_KNOWN_LIST, {})
+        # ── Schema as single source of truth ──────────────────────────
+        # Derive known_list from the schema (device IDs from topology),
+        # then merge user overrides (alias, faked, class, scheme, bound).
+        user_known_list = self.options.get(SZ_KNOWN_LIST, {})
+        derived_known_list = self._derive_known_list_from_schema(
+            schema, user_overrides=user_known_list
+        )
+        # Strip commands from traits (ramses_rf doesn't accept them)
         sanitized_known_list = {
             device_id: (
-                {key: value for key, value in traits.items() if key != CONF_COMMANDS}
+                {k: v for k, v in traits.items() if k != CONF_COMMANDS}
                 if isinstance(traits, dict)
                 else traits
             )
-            for device_id, traits in raw_known_list.items()
+            for device_id, traits in derived_known_list.items()
         }
         # Device traits (class/alias/faked/bound/scheme) are consumed by
         # ramses_rf DeviceRegistry via GatewayConfig.known_list.
@@ -439,7 +655,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
         packet_log = self.options.get(SZ_PACKET_LOG, {})
         engine_kwargs["packet_log"] = packet_log
 
-        gateway_kwargs["schema"] = schema
+        # Strip ramses_cc-only extension keys before passing to ramses_rf
+        gateway_kwargs["schema"] = self._strip_schema_extensions(schema)
 
         gateway_timeout = self.options.get(CONF_GATEWAY_TIMEOUT)
         if gateway_timeout is not None:

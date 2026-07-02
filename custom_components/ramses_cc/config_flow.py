@@ -70,6 +70,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
     SZ_CLIENT_STATE,
+    SZ_DISABLED_DEVICES,
     SZ_PACKETS,
 )
 from .schemas import SCH_GLOBAL_TRAITS_DICT
@@ -960,7 +961,10 @@ class BaseRamsesFlow:
             ): selector.ObjectSelector(),
             vol.Optional(
                 SZ_KNOWN_LIST,
-                description={"suggested_value": suggested_values.get(SZ_KNOWN_LIST)},
+                description={
+                    "suggested_value": suggested_values.get(SZ_KNOWN_LIST),
+                    "help": "Optional: only needed for trait overrides (alias, faked, class, scheme). Device IDs are auto-derived from the schema.",
+                },
             ): selector.ObjectSelector(),
             vol.Required(
                 SZ_ENFORCE_KNOWN_LIST,
@@ -1297,6 +1301,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 "schema",
                 "advanced_features",
                 "packet_log",
+                "review_discovered",
                 "clear_cache",
             ],
         )
@@ -1318,6 +1323,95 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             )
 
         return result
+
+    async def async_step_review_discovered(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Review discovered devices and accept/decline them.
+
+        Shows devices found by the passive scan that haven't been reviewed yet.
+        The user can accept (add to schema) or decline (add to schema as disabled).
+        """
+        # Get the coordinator's discovery manager
+        coordinators = self.hass.data.get(DOMAIN, {})
+        coordinator = None
+        for coord in coordinators.values():
+            if hasattr(coord, "discovery_manager"):
+                coordinator = coord
+                break
+
+        if not coordinator or not coordinator.discovery_manager:
+            return self.async_show_form(
+                step_id="review_discovered",
+                description_placeholders={
+                    "message": "Passive device scan is not enabled."
+                },
+                last_step=True,
+            )
+
+        # Get pending devices (status=new)
+        from .discovery import DiscoveryStatus
+
+        devices = coordinator.discovery_manager.get_devices(status=DiscoveryStatus.NEW)
+        if not devices:
+            return self.async_show_form(
+                step_id="review_discovered",
+                description_placeholders={"message": "No new devices to review."},
+                last_step=True,
+            )
+
+        if user_input is not None:
+            # Process accept/decline for each device
+            config_schema = dict(self.options.get(CONF_SCHEMA, {}))
+            disabled = list(config_schema.get(SZ_DISABLED_DEVICES, []))
+            changed = False
+
+            for entry in devices:
+                device_id = entry.device_id
+                action = user_input.get(f"device_{device_id}", "skip")
+                if action == "accept":
+                    # Add to schema using the generated schema entry
+                    if entry.schema_entry:
+                        from ramses_rf.helpers import deep_merge
+
+                        config_schema = deep_merge(config_schema, entry.schema_entry)
+                        changed = True
+                    # Update discovery status
+                    coordinator.discovery_manager.accept_device(
+                        device_id, owner=user_input.get(f"owner_{device_id}")
+                    )
+                elif action == "decline":
+                    # Add to disabled devices list
+                    if device_id not in disabled:
+                        disabled.append(device_id)
+                        changed = True
+                    # Update discovery status
+                    coordinator.discovery_manager.discard_device(device_id)
+
+            if changed:
+                config_schema[SZ_DISABLED_DEVICES] = disabled
+                self.options[CONF_SCHEMA] = config_schema
+
+            return self._async_save()
+
+        # Build form with device selectors
+        form_fields: dict[Any, Any] = {}
+        for entry in devices:
+            device_id = entry.device_id
+            label = f"{device_id} ({entry.likely_type or 'unknown'})"
+            if entry.bound_to:
+                label += f" → {entry.bound_to}"
+            form_fields[vol.Required(f"device_{device_id}", default="skip")] = vol.In(
+                [("skip", "Skip for now"), ("accept", "Accept"), ("decline", "Decline")]
+            )
+            form_fields[vol.Optional(f"owner_{device_id}")] = selector.TextSelector()
+
+        return self.async_show_form(
+            step_id="review_discovered",
+            data_schema=vol.Schema(form_fields),
+            description_placeholders={"message": f"{len(devices)} device(s) to review"},
+            last_step=True,
+        )
 
     async def async_step_clear_cache(
         self, user_input: dict[str, Any] | None = None

@@ -114,6 +114,11 @@ CONF_PASSIVE_SCAN: Final = "passive_scan"
 CONF_AUTO_NOTIFY: Final = "auto_notify"
 CONF_LOST_THRESHOLD: Final = "lost_threshold_days"
 
+# Schema extensions (ramses_cc-only keys, stripped before passing to ramses_rf)
+SZ_DISABLED_DEVICES: Final = "disabled_devices"
+SZ_DEVICE_COMMENTS: Final = "device_comments"
+SZ_SCHEMA_BACKUP: Final = "schema_backup"
+
 
 # Volume Flow Rate units, these specific unit are not defined in HA v2024.1
 class UnitOfVolumeFlowRate(StrEnum):
