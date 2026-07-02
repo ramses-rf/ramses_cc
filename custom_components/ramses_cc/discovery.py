@@ -17,7 +17,7 @@ import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime as dt
 from enum import StrEnum
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.components.persistent_notification import (
     async_create as async_create_notification,
@@ -25,9 +25,10 @@ from homeassistant.components.persistent_notification import (
 )
 from homeassistant.core import HomeAssistant
 
-from ramses_rf.discovery_scan import DiscoveredDevice, DiscoveryScan
-
 from .const import DOMAIN
+
+if TYPE_CHECKING:
+    from ramses_rf.discovery_scan import DiscoveredDevice, DiscoveryScan
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -230,6 +231,8 @@ class DiscoveryManager:
                 )
             else:
                 # Stub for faked/restored devices with no engine data
+                from ramses_rf.discovery_scan import DiscoveredDevice
+
                 entries.append(
                     DiscoveredDeviceEntry(
                         device=DiscoveredDevice(

@@ -21,7 +21,9 @@ from custom_components.ramses_cc.discovery import (
     DiscoveryManager,
     DiscoveryStatus,
 )
-from ramses_rf.discovery_scan import DiscoveredDevice
+
+discovery_scan = pytest.importorskip("ramses_rf.discovery_scan")
+DiscoveredDevice = discovery_scan.DiscoveredDevice
 
 
 def make_discovered_device(
