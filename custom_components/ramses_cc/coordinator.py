@@ -42,11 +42,15 @@ from ramses_tx.const import SZ_ACTIVE_HGI, Code
 from ramses_tx.schemas import extract_serial_port
 
 from .const import (
+    CONF_ADVANCED_FEATURES,
+    CONF_AUTO_NOTIFY,
     CONF_COMMANDS,
     CONF_GATEWAY_TIMEOUT,
+    CONF_LOST_THRESHOLD,
     CONF_MQTT_HGI_ID,
     CONF_MQTT_TOPIC,
     CONF_MQTT_USE_HA,
+    CONF_PASSIVE_SCAN,
     CONF_RAMSES_RF,
     CONF_SCAN_INTERVAL,
     CONF_SCHEMA,
@@ -64,6 +68,7 @@ from .const import (
     SZ_SCHEMA,
     SZ_SERIAL_PORT,
 )
+from .discovery import DiscoveryManager
 from .fan_handler import RamsesFanHandler
 from .mqtt_bridge import RamsesMqttBridge
 from .schemas import merge_schemas, schema_is_minimal
@@ -100,6 +105,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         self.fan_handler = RamsesFanHandler(self)
         self.service_handler = RamsesServiceHandler(self)
         self.mqtt_bridge: RamsesMqttBridge | None = None
+        self.discovery_manager: DiscoveryManager | None = None
 
         # Redact port details for safe exchange of logs
         print_options = deepcopy(dict(self.options))  # need an extra copy
@@ -305,6 +311,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
             )
         )
 
+        # 3. Start passive device scan if enabled
+        advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
+        if advanced.get(CONF_PASSIVE_SCAN, False) and self.client:
+            await self._async_start_discovery_scan()
+
         # Trigger the first update immediately (calls _async_update_data)
         # This will raise ConfigEntryNotReady if it fails, which is handled by HA
         await self.async_config_entry_first_refresh()
@@ -316,6 +327,55 @@ class RamsesCoordinator(DataUpdateCoordinator):
             )
         )
         self.entry.async_on_unload(self.async_save_client_state)
+
+    async def _async_start_discovery_scan(self) -> None:
+        """Start the passive device scan engine and discovery manager."""
+        from ramses_rf.discovery_scan import DiscoveryScan
+
+        if not self.client:
+            _LOGGER.warning("Cannot start discovery scan: client not initialized")
+            return
+
+        advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
+        scan = DiscoveryScan(self.client)
+        self.discovery_manager = DiscoveryManager(
+            self.hass,
+            scan,
+            auto_notify=advanced.get(CONF_AUTO_NOTIFY, True),
+            lost_threshold_days=advanced.get(CONF_LOST_THRESHOLD, 7),
+        )
+
+        # Restore persisted state
+        stored = await self.store.async_load()
+        from .discovery import SZ_DISCOVERY
+
+        if stored.get(SZ_DISCOVERY):
+            self.discovery_manager.restore_state(stored[SZ_DISCOVERY])
+
+        # Schedule periodic checkpoint + check for new/lost devices
+        self.entry.async_on_unload(
+            async_track_time_interval(
+                self.hass,
+                self._async_discovery_checkpoint,
+                td(minutes=30),
+            )
+        )
+        self.entry.async_on_unload(self._async_stop_discovery_scan)
+        _LOGGER.info("Passive device scan started")
+
+    async def _async_discovery_checkpoint(self, _: dt | None = None) -> None:
+        """Periodic checkpoint: check for new/lost devices and save state."""
+        if not self.discovery_manager:
+            return
+        self.discovery_manager.check_for_new_devices()
+        self.discovery_manager.check_for_lost_devices()
+        await self.async_save_client_state()
+
+    async def _async_stop_discovery_scan(self) -> None:
+        """Stop the discovery scan engine."""
+        if self.discovery_manager:
+            self.discovery_manager.stop()
+            self.discovery_manager = None
 
     def _create_client(self, schema: dict[str, Any]) -> Gateway:
         """Create and configure a new RAMSES client instance."""
@@ -501,7 +561,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
         }
         remotes = self._remotes | remotes_from_entities
 
-        await self.store.async_save(schema, packets, remotes)
+        discovery_state = (
+            self.discovery_manager.export_state() if self.discovery_manager else None
+        )
+
+        await self.store.async_save(schema, packets, remotes, discovery_state)
 
     def _get_device(self, device_id: str) -> Any | None:
         """Get a device by ID."""
@@ -812,6 +876,55 @@ class RamsesCoordinator(DataUpdateCoordinator):
         :param call: The service call object containing parameters.
         """
         await self.service_handler.async_discover_known_devices(call)
+
+    async def async_get_discovered_devices(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_get_discovered_devices(call)
+
+    async def async_accept_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_accept_discovered_device(call)
+
+    async def async_discard_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_discard_discovered_device(call)
+
+    async def async_remove_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_remove_discovered_device(call)
+
+    async def async_enable_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_enable_discovered_device(call)
+
+    async def async_disable_discovered_device(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_disable_discovered_device(call)
+
+    async def async_add_faked_rem(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_add_faked_rem(call)
 
     async def async_get_fan_param(self, call: dict[str, Any] | ServiceCall) -> None:
         """Delegate to Service Handler.

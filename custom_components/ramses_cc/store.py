@@ -15,6 +15,7 @@ from .const import (
     SZ_REMOTES,
     SZ_SCHEMA,
 )
+from .discovery import SZ_DISCOVERY
 
 
 class RamsesStore:
@@ -36,15 +37,19 @@ class RamsesStore:
         schema: dict[str, Any],
         packets: dict[str, dict[str, Any] | str],
         remotes: dict[str, Any],
+        discovery: dict[str, Any] | None = None,
     ) -> None:
         """Save the current state to persistent storage.
 
         :param schema: The current device schema
         :param packets: The cached packet log (supports legacy strings and JSON DTOs)
         :param remotes: The known remotes and their commands
+        :param discovery: The discovery scan state (metadata + engine state)
         """
-        data = {
+        data: dict[str, Any] = {
             SZ_CLIENT_STATE: {SZ_SCHEMA: schema, SZ_PACKETS: packets},
             SZ_REMOTES: remotes,
         }
+        if discovery is not None:
+            data[SZ_DISCOVERY] = discovery
         await self._store.async_save(data)

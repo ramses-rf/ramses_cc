@@ -60,19 +60,34 @@ from .const import (
     CONF_MQTT_HGI_ID,
     CONF_MQTT_TOPIC,
     CONF_MQTT_USE_HA,
+    CONF_PASSIVE_SCAN,
     CONF_SEND_PACKET,
     DOMAIN,
+    SVC_ACCEPT_DISCOVERED_DEVICE,
+    SVC_ADD_FAKED_REM,
+    SVC_DISABLE_DISCOVERED_DEVICE,
+    SVC_DISCARD_DISCOVERED_DEVICE,
     SVC_DISCOVER_KNOWN_DEVICES,
+    SVC_ENABLE_DISCOVERED_DEVICE,
+    SVC_GET_DISCOVERED_DEVICES,
+    SVC_REMOVE_DISCOVERED_DEVICE,
     SZ_PORT_NAME,
     SZ_SERIAL_PORT,
 )
 from .coordinator import RamsesCoordinator
 from .schemas import (
+    SCH_ACCEPT_DISCOVERED_DEVICE,
+    SCH_ADD_FAKED_REM,
     SCH_BIND_DEVICE,
+    SCH_DISABLE_DISCOVERED_DEVICE,
+    SCH_DISCARD_DISCOVERED_DEVICE,
     SCH_DISCOVER_KNOWN_DEVICES,
     SCH_DOMAIN_CONFIG,
+    SCH_ENABLE_DISCOVERED_DEVICE,
+    SCH_GET_DISCOVERED_DEVICES,
     SCH_GET_FAN_PARAM_DOMAIN,
     SCH_NO_SVC_PARAMS,
+    SCH_REMOVE_DISCOVERED_DEVICE,
     SCH_SEND_PACKET,
     SCH_SET_FAN_PARAM_DOMAIN,
     SCH_UPDATE_FAN_PARAMS_DOMAIN,
@@ -354,6 +369,34 @@ def async_register_domain_services(
         await _coordinator.async_discover_known_devices(call)
 
     @verify_domain_control(DOMAIN)
+    async def async_get_discovered_devices(call: ServiceCall) -> None:
+        await _coordinator.async_get_discovered_devices(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_accept_discovered_device(call: ServiceCall) -> None:
+        await _coordinator.async_accept_discovered_device(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_discard_discovered_device(call: ServiceCall) -> None:
+        await _coordinator.async_discard_discovered_device(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_remove_discovered_device(call: ServiceCall) -> None:
+        await _coordinator.async_remove_discovered_device(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_enable_discovered_device(call: ServiceCall) -> None:
+        await _coordinator.async_enable_discovered_device(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_disable_discovered_device(call: ServiceCall) -> None:
+        await _coordinator.async_disable_discovered_device(call)
+
+    @verify_domain_control(DOMAIN)
+    async def async_add_faked_rem(call: ServiceCall) -> None:
+        await _coordinator.async_add_faked_rem(call)
+
+    @verify_domain_control(DOMAIN)
     async def async_set_fan_param(call: ServiceCall) -> None:
         await _coordinator.async_set_fan_param(call)
 
@@ -380,6 +423,51 @@ def async_register_domain_services(
         async_discover_known_devices,
         schema=SCH_DISCOVER_KNOWN_DEVICES,
     )
+
+    # Passive device scan services (only if scan is enabled)
+    if entry.options.get(CONF_ADVANCED_FEATURES, {}).get(CONF_PASSIVE_SCAN):
+        hass.services.async_register(
+            DOMAIN,
+            SVC_GET_DISCOVERED_DEVICES,
+            async_get_discovered_devices,
+            schema=SCH_GET_DISCOVERED_DEVICES,
+        )
+        hass.services.async_register(
+            DOMAIN,
+            SVC_ACCEPT_DISCOVERED_DEVICE,
+            async_accept_discovered_device,
+            schema=SCH_ACCEPT_DISCOVERED_DEVICE,
+        )
+        hass.services.async_register(
+            DOMAIN,
+            SVC_DISCARD_DISCOVERED_DEVICE,
+            async_discard_discovered_device,
+            schema=SCH_DISCARD_DISCOVERED_DEVICE,
+        )
+        hass.services.async_register(
+            DOMAIN,
+            SVC_REMOVE_DISCOVERED_DEVICE,
+            async_remove_discovered_device,
+            schema=SCH_REMOVE_DISCOVERED_DEVICE,
+        )
+        hass.services.async_register(
+            DOMAIN,
+            SVC_ENABLE_DISCOVERED_DEVICE,
+            async_enable_discovered_device,
+            schema=SCH_ENABLE_DISCOVERED_DEVICE,
+        )
+        hass.services.async_register(
+            DOMAIN,
+            SVC_DISABLE_DISCOVERED_DEVICE,
+            async_disable_discovered_device,
+            schema=SCH_DISABLE_DISCOVERED_DEVICE,
+        )
+        hass.services.async_register(
+            DOMAIN,
+            SVC_ADD_FAKED_REM,
+            async_add_faked_rem,
+            schema=SCH_ADD_FAKED_REM,
+        )
 
     hass.services.async_register(
         DOMAIN, SVC_SET_FAN_PARAM, async_set_fan_param, schema=SCH_SET_FAN_PARAM_DOMAIN

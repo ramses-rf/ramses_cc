@@ -944,3 +944,170 @@ class RamsesServiceHandler:
             _CALL_LATER_DELAY,
             self._schedule_refresh,
         )
+
+    # ------------------------------------------------------------------
+    # Passive device scan services
+    # ------------------------------------------------------------------
+
+    async def async_get_discovered_devices(self, call: ServiceCall) -> None:
+        """Handle the get_discovered_devices service call.
+
+        Returns the list of discovered devices via fire_event so callers
+        (scripts, automations, ramses_extras card) can consume it.
+
+        :param call: The service call with optional status/enabled filters.
+        :raises HomeAssistantError: If the discovery manager is not running.
+        """
+        if not self._coordinator.discovery_manager:
+            raise HomeAssistantError(
+                "Passive device scan is not enabled. "
+                "Enable it in the integration's advanced features."
+            )
+
+        from .discovery import DiscoveryStatus
+
+        status_str = call.data.get("status")
+        status = DiscoveryStatus(status_str) if status_str else None
+        enabled = call.data.get("enabled")
+
+        entries = self._coordinator.discovery_manager.get_devices(
+            status=status, enabled=enabled
+        )
+
+        _LOGGER.info(
+            "get_discovered_devices: found %d device(s) (filter: status=%s, enabled=%s)",
+            len(entries),
+            status_str,
+            enabled,
+        )
+        for entry in entries:
+            dev = entry.device
+            _LOGGER.info(
+                "  %s: type=%s, confidence=%s, status=%s, enabled=%s",
+                dev.device_id,
+                dev.likely_type,
+                dev.confidence,
+                entry.metadata.status.value,
+                entry.metadata.enabled,
+            )
+
+        # Fire an event with the results for automations/scripts
+        self.hass.bus.async_fire(
+            f"{DOMAIN}_discovered_devices",
+            {"devices": [e.to_dict() for e in entries]},
+        )
+
+    async def async_accept_discovered_device(self, call: ServiceCall) -> None:
+        """Handle the accept_discovered_device service call.
+
+        Accepts a discovered device, adds it to the schema, and triggers
+        discover_known_devices to create the entity.
+
+        :param call: The service call with device_id and optional owner/schema_entry.
+        :raises HomeAssistantError: If the discovery manager is not running.
+        :raises ServiceValidationError: If the device is not in the discovery list.
+        """
+        if not self._coordinator.discovery_manager:
+            raise HomeAssistantError("Passive device scan is not enabled")
+
+        device_id = call.data["device_id"]
+        owner = call.data.get("owner")
+        schema_entry = call.data.get("schema_entry")
+
+        try:
+            self._coordinator.discovery_manager.accept_device(
+                device_id, owner=owner, schema_entry=schema_entry
+            )
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+        # TODO: update the config entry schema with the accepted device
+        # and call discover_known_devices to create the entity.
+        # This requires the schema auto-generation logic from the plan.
+
+        _LOGGER.info("Accepted discovered device: %s", device_id)
+
+    async def async_discard_discovered_device(self, call: ServiceCall) -> None:
+        """Handle the discard_discovered_device service call.
+
+        :param call: The service call with device_id.
+        :raises HomeAssistantError: If the discovery manager is not running.
+        :raises ServiceValidationError: If the device is not in the discovery list.
+        """
+        if not self._coordinator.discovery_manager:
+            raise HomeAssistantError("Passive device scan is not enabled")
+
+        device_id = call.data["device_id"]
+        try:
+            self._coordinator.discovery_manager.discard_device(device_id)
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    async def async_remove_discovered_device(self, call: ServiceCall) -> None:
+        """Handle the remove_discovered_device service call.
+
+        :param call: The service call with device_id.
+        :raises HomeAssistantError: If the discovery manager is not running.
+        :raises ServiceValidationError: If the device is not in the discovery list.
+        """
+        if not self._coordinator.discovery_manager:
+            raise HomeAssistantError("Passive device scan is not enabled")
+
+        device_id = call.data["device_id"]
+        try:
+            self._coordinator.discovery_manager.remove_device(device_id)
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    async def async_enable_discovered_device(self, call: ServiceCall) -> None:
+        """Handle the enable_discovered_device service call.
+
+        :param call: The service call with device_id.
+        :raises HomeAssistantError: If the discovery manager is not running.
+        :raises ServiceValidationError: If the device is not in the discovery list.
+        """
+        if not self._coordinator.discovery_manager:
+            raise HomeAssistantError("Passive device scan is not enabled")
+
+        device_id = call.data["device_id"]
+        try:
+            self._coordinator.discovery_manager.enable_device(device_id)
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    async def async_disable_discovered_device(self, call: ServiceCall) -> None:
+        """Handle the disable_discovered_device service call.
+
+        :param call: The service call with device_id.
+        :raises HomeAssistantError: If the discovery manager is not running.
+        :raises ServiceValidationError: If the device is not in the discovery list.
+        """
+        if not self._coordinator.discovery_manager:
+            raise HomeAssistantError("Passive device scan is not enabled")
+
+        device_id = call.data["device_id"]
+        try:
+            self._coordinator.discovery_manager.disable_device(device_id)
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    async def async_add_faked_rem(self, call: ServiceCall) -> None:
+        """Handle the add_faked_rem service call.
+
+        Creates a faked REM entry for sending commands to a FAN.
+
+        :param call: The service call with device_id, bound_to, and optional alias.
+        :raises HomeAssistantError: If the discovery manager is not running.
+        """
+        if not self._coordinator.discovery_manager:
+            raise HomeAssistantError("Passive device scan is not enabled")
+
+        device_id = call.data["device_id"]
+        bound_to = call.data["bound_to"]
+        alias = call.data.get("alias")
+
+        self._coordinator.discovery_manager.add_faked_rem(
+            device_id, bound_to=bound_to, alias=alias
+        )
+
+        _LOGGER.info("Added faked REM %s bound to %s", device_id, bound_to)

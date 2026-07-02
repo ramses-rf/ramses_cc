@@ -101,6 +101,18 @@ PRESET_PERMANENT: Final = "permanent"
 
 # Service name
 SVC_DISCOVER_KNOWN_DEVICES: Final = "discover_known_devices"
+SVC_GET_DISCOVERED_DEVICES: Final = "get_discovered_devices"
+SVC_ACCEPT_DISCOVERED_DEVICE: Final = "accept_discovered_device"
+SVC_DISCARD_DISCOVERED_DEVICE: Final = "discard_discovered_device"
+SVC_REMOVE_DISCOVERED_DEVICE: Final = "remove_discovered_device"
+SVC_ENABLE_DISCOVERED_DEVICE: Final = "enable_discovered_device"
+SVC_DISABLE_DISCOVERED_DEVICE: Final = "disable_discovered_device"
+SVC_ADD_FAKED_REM: Final = "add_faked_rem"
+
+# Discovery config
+CONF_PASSIVE_SCAN: Final = "passive_scan"
+CONF_AUTO_NOTIFY: Final = "auto_notify"
+CONF_LOST_THRESHOLD: Final = "lost_threshold_days"
 
 
 # Volume Flow Rate units, these specific unit are not defined in HA v2024.1

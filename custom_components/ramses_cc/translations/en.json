@@ -84,10 +84,16 @@
                 "title": "Advanced features",
                 "data": {
                     "send_packet": "Enable send_packet service for broadcasting bespoke packets",
-                    "message_events": "Emit event for messages matching this regular expression"
+                    "message_events": "Emit event for messages matching this regular expression",
+                    "passive_scan": "Enable passive device scan to discover unknown RF devices",
+                    "auto_notify": "Send persistent notifications when new devices are found",
+                    "lost_threshold_days": "Days without traffic before marking a device as lost"
                 },
                 "data_description": {
-                    "message_events": "Enter a regular expression against which to match messages. For example `RP.* 10:` will emit an event for every RP message sent by an OTB."
+                    "message_events": "Enter a regular expression against which to match messages. For example `RP.* 10:` will emit an event for every RP message sent by an OTB.",
+                    "passive_scan": "Listens to RF traffic and identifies unknown devices. Discovered devices can be reviewed and added to the schema via service calls.",
+                    "auto_notify": "When enabled, a persistent notification appears when new unknown devices are discovered.",
+                    "lost_threshold_days": "Number of days an accepted device can go without being seen before it is marked as lost."
                 }
             },
             "packet_log": {
@@ -194,10 +200,16 @@
                 "title": "Advanced features",
                 "data": {
                     "send_packet": "Enable send_packet service for casting bespoke packets",
-                    "message_events": "Regular expression to use as event filter"
+                    "message_events": "Regular expression to use as event filter",
+                    "passive_scan": "Enable passive device scan to discover unknown RF devices",
+                    "auto_notify": "Send persistent notifications when new devices are found",
+                    "lost_threshold_days": "Days without traffic before marking a device as lost"
                 },
                 "data_description": {
-                    "message_events": "Emit a ramses_cc event for each message matching the filter. For example `RP.* 10:` will emit an event for each message sent by an OTB. Leave empty to deactivate."
+                    "message_events": "Emit a ramses_cc event for each message matching the filter. For example `RP.* 10:` will emit an event for each message sent by an OTB. Leave empty to deactivate.",
+                    "passive_scan": "Listens to RF traffic and identifies unknown devices. Discovered devices can be reviewed and added to the schema via service calls.",
+                    "auto_notify": "When enabled, a persistent notification appears when new unknown devices are discovered.",
+                    "lost_threshold_days": "Number of days an accepted device can go without being seen before it is marked as lost."
                 }
             },
             "packet_log": {
@@ -267,6 +279,103 @@
                 "device_id": {
                     "name": "Device ID",
                     "description": "Optional: discover a single device. If omitted, all known_list devices are queried."
+                }
+            }
+        },
+
+        "get_discovered_devices": {
+            "name": "Get Discovered Devices",
+            "description": "Retrieve the list of devices discovered by the passive scan, optionally filtered by status or enabled flag. Fires a ramses_cc_discovered_devices event with the results.",
+            "fields": {
+                "status": {
+                    "name": "Status",
+                    "description": "Filter by discovery status (new, accepted, discarded, removed, lost)."
+                },
+                "enabled": {
+                    "name": "Enabled",
+                    "description": "Filter by enabled flag."
+                }
+            }
+        },
+
+        "accept_discovered_device": {
+            "name": "Accept Discovered Device",
+            "description": "Accept a discovered device and add it to the schema. The device will be created on the next discover_known_devices call.",
+            "fields": {
+                "device_id": {
+                    "name": "Device ID",
+                    "description": "The device ID to accept."
+                },
+                "owner": {
+                    "name": "Owner",
+                    "description": "Optional owner label for this device."
+                },
+                "schema_entry": {
+                    "name": "Schema Entry",
+                    "description": "Optional schema entry override (JSON dict). If omitted, the auto-detected entry is used."
+                }
+            }
+        },
+
+        "discard_discovered_device": {
+            "name": "Discard Discovered Device",
+            "description": "Discard a discovered device. It stays in the list for spam prevention but won't be created.",
+            "fields": {
+                "device_id": {
+                    "name": "Device ID",
+                    "description": "The device ID to discard."
+                }
+            }
+        },
+
+        "remove_discovered_device": {
+            "name": "Remove Discovered Device",
+            "description": "Mark a previously accepted device as removed (it no longer exists). Discovery info is kept to prevent re-notification.",
+            "fields": {
+                "device_id": {
+                    "name": "Device ID",
+                    "description": "The device ID to remove."
+                }
+            }
+        },
+
+        "enable_discovered_device": {
+            "name": "Enable Discovered Device",
+            "description": "Enable a disabled or discarded device without changing its status.",
+            "fields": {
+                "device_id": {
+                    "name": "Device ID",
+                    "description": "The device ID to enable."
+                }
+            }
+        },
+
+        "disable_discovered_device": {
+            "name": "Disable Discovered Device",
+            "description": "Disable an accepted device temporarily (e.g. for maintenance) without changing its status.",
+            "fields": {
+                "device_id": {
+                    "name": "Device ID",
+                    "description": "The device ID to disable."
+                }
+            }
+        },
+
+        "add_faked_rem": {
+            "name": "Add Faked REM",
+            "description": "Create a faked REM (virtual remote) for sending commands to a FAN. No RF traffic needed.",
+            "fields": {
+                "device_id": {
+                    "name": "Device ID",
+                    "description": "The device ID for the faked REM (any valid 37: address)."
+                },
+                "bound_to": {
+                    "name": "Bound To",
+                    "description": "The FAN device ID this REM is bound to."
+                },
+                "alias": {
+                    "name": "Alias",
+                    "description": "Optional friendly name for this faked REM."
                 }
             }
         },

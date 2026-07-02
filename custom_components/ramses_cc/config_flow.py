@@ -53,11 +53,14 @@ from ramses_tx.schemas import (
 
 from .const import (
     CONF_ADVANCED_FEATURES,
+    CONF_AUTO_NOTIFY,
     CONF_GATEWAY_TIMEOUT,
+    CONF_LOST_THRESHOLD,
     CONF_MESSAGE_EVENTS,
     CONF_MQTT_HGI_ID,
     CONF_MQTT_TOPIC,
     CONF_MQTT_USE_HA,
+    CONF_PASSIVE_SCAN,
     CONF_RAMSES_RF,
     CONF_SCHEMA,
     CONF_SEND_PACKET,
@@ -1032,6 +1035,32 @@ class BaseRamsesFlow:
                     "suggested_value": suggested_values.get(CONF_MESSAGE_EVENTS)
                 },
             ): selector.TextSelector(),
+            vol.Optional(
+                CONF_PASSIVE_SCAN,
+                default=False,
+                description={
+                    "suggested_value": suggested_values.get(CONF_PASSIVE_SCAN)
+                },
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_AUTO_NOTIFY,
+                default=True,
+                description={"suggested_value": suggested_values.get(CONF_AUTO_NOTIFY)},
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_LOST_THRESHOLD,
+                default=7,
+                description={
+                    "suggested_value": suggested_values.get(CONF_LOST_THRESHOLD)
+                },
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1,
+                    max=90,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="days",
+                )
+            ),
         }
 
         return self.async_show_form(
