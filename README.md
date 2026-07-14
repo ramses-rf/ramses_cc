@@ -4,7 +4,8 @@
 ![pytest](https://github.com/ramses-rf/ramses_cc/actions/workflows/check-test.yml/badge.svg?master)
 [![Coverage](https://github.com/ramses-rf/ramses_cc/actions/workflows/check-cov.yml/badge.svg?event=push)](https://github.com/ramses-rf/ramses_cc/actions/workflows/check-cov.yml)
 
-Test-release 0.58.0. Update advised if you run 0.56.7 or later. Notice: our Wiki [Config System Schema](https://github.com/ramses-rf/ramses_cc/wiki/2.1-Configuration-step-3:-Schemas) explains the new Scan tool.
+Test-release 0.58.0. Update advised if you run 0.56.7 or later.
+Notice: our Wiki [Config System Schema](https://github.com/ramses-rf/ramses_cc/wiki/2.1-Configuration-step-3:-Schemas) explains the new Config Schema Discovery tool.
 
 Requires HA Core 2026.5.0 or later. Uses config format V2 since 0.56.3.
 
