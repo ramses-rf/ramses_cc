@@ -798,10 +798,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
         stripped_schema = self._strip_schema_extensions(schema)
         schema_device_ids = self._extract_device_ids_from_stripped(stripped_schema)
         self.discovery_manager.sync_with_schema(schema_device_ids)
-        # Check for class mismatches between discovery and schema
-        # (schema is authoritative — this only logs warnings)
+        # Check for mismatches between discovery and schema
+        # (schema is authoritative — this only logs warnings + notification)
         if isinstance(schema, dict):
-            self.discovery_manager.check_class_mismatches(schema)
+            self.discovery_manager.check_all_mismatches(schema)
         self.discovery_manager.check_for_new_devices()
         self.discovery_manager.check_for_lost_devices()
         await self.async_save_client_state()
