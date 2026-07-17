@@ -587,9 +587,15 @@ class DiscoveryManager:
     ) -> int:
         """Check for schema devices not seen by discovery for a long time.
 
-        For each device that is in the schema but NOT in the scan engine's
-        device list (or has a very old ``last_seen``), sets ``orphaned``
-        on the device's metadata.
+        For each device that is in the schema AND in the scan engine's
+        device list, checks ``last_seen``.  If the device hasn't been
+        seen for longer than the threshold, sets ``orphaned`` on the
+        device's metadata.
+
+        Devices that are in the schema but NOT in the scan engine are
+        skipped — the scan may simply not have seen them yet, so
+        flagging them would be a false positive.  This mirrors the
+        behaviour of ``check_for_lost_devices``.
 
         :param schema: The current config entry schema (with _ traits).
         :param threshold_days: Days without traffic before flagging.
@@ -615,13 +621,8 @@ class DiscoveryManager:
 
             dev = scan_devices.get(device_id)
             if dev is None:
-                # Not in scan at all — check if it was ever seen
-                meta = self._metadata.get(device_id, DeviceMetadata())
-                if meta.status == DiscoveryStatus.NEW:
-                    continue  # never accepted — not orphaned
-                meta.orphaned = f"not seen by scan (threshold={threshold_days}d)"
-                self._metadata[device_id] = meta
-                orphaned.append(device_id)
+                # Not in scan — skip (scan may not have seen it yet).
+                # Same logic as check_for_lost_devices.
                 continue
 
             # In scan — check last_seen
@@ -635,7 +636,7 @@ class DiscoveryManager:
 
             if last_seen < threshold:
                 meta = self._metadata.get(device_id, DeviceMetadata())
-                meta.orphaned = f"last seen {last_seen_str} (>{threshold_days}d)"
+                meta.orphaned = f"last seen {last_seen_str} (>{threshold_days} days)"
                 self._metadata[device_id] = meta
                 orphaned.append(device_id)
                 _LOGGER.debug(

@@ -1508,24 +1508,23 @@ class TestCheckMissingClass:
 class TestCheckOrphanedDevices:
     """Tests for DiscoveryManager.check_orphaned_devices."""
 
-    def test_orphaned_when_not_in_scan(self) -> None:
+    def test_not_orphaned_when_not_in_scan(self) -> None:
+        """Device in schema but not in scan is NOT orphaned — scan may
+        not have seen it yet (same logic as check_for_lost_devices)."""
         scan = make_mock_scan([])  # no devices in scan
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        # Device in schema, accepted, but not in scan
+        # Device in schema, accepted, but not in scan — should NOT flag
         manager._metadata["04:056053"] = DeviceMetadata(status=DiscoveryStatus.ACCEPTED)
         schema = {"04:056053": {"_class": "TRV"}}
         count = manager.check_orphaned_devices(schema)
-        assert count == 1
-        meta = manager._metadata.get("04:056053")
-        assert meta is not None
-        assert meta.orphaned is not None
+        assert count == 0
 
     def test_not_orphaned_when_new_and_not_in_scan(self) -> None:
         scan = make_mock_scan([])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        # NEW device not in scan — not orphaned (never accepted)
+        # NEW device not in scan — not orphaned
         manager._metadata["04:056053"] = DeviceMetadata(status=DiscoveryStatus.NEW)
         schema = {"04:056053": {"_class": "TRV"}}
         count = manager.check_orphaned_devices(schema)
