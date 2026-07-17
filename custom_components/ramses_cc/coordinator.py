@@ -2623,10 +2623,19 @@ class RamsesCoordinator(DataUpdateCoordinator):
         runs every 5 minutes (SAVE_STATE_INTERVAL), so users don't have to
         wait after ramses_rf has learned new topology (e.g. from 000C).
 
+        Also runs the discovery mismatch checks (Phase 3c) so mismatches
+        are detected immediately rather than waiting for the 30-minute
+        checkpoint.
+
         :param _: Unused service call argument.
         """
         _LOGGER.info("Manual topology sync requested (sync_topology service)")
         await self.async_save_client_state()
+        # Run mismatch checks immediately (Phase 3c)
+        if self.discovery_manager:
+            schema = self.options.get(CONF_SCHEMA, {})
+            if isinstance(schema, dict):
+                self.discovery_manager.check_all_mismatches(schema)
 
     async def async_send_packet(self, call: ServiceCall) -> None:
         """Delegate to Service Handler.
