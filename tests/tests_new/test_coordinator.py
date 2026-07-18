@@ -4942,6 +4942,61 @@ async def test_async_save_client_state_no_backup_when_already_migrated(
     mock_backup.assert_not_awaited()
 
 
+async def test_async_save_client_state_survives_validation_failure(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Save cycle skips topology sync when _validate_schema_for_ramserf raises.
+
+    If the enriched schema fails validation, the save cycle should log the
+    error and skip the config entry update — NOT abort with an unhandled
+    ValueError, and NOT overwrite the config entry with an invalid schema.
+    The rest of the save (packets, remotes to .storage) should still happen.
+    """
+    assert mock_coordinator.client is not None
+
+    rem_id = "37:170000"
+    commands = {"boost": "I --- 37:170000 30:160000 --:------ 22F1 003 000030"}
+
+    config_schema: dict[str, Any] = {rem_id: {"_class": "REM"}}
+    original_options = {CONF_SCHEMA: config_schema, SZ_KNOWN_LIST: {}}
+    mock_coordinator.options = dict(original_options)
+
+    mock_coordinator._remotes = {rem_id: commands}
+    mock_coordinator._entities = {}
+    mock_coordinator._skip_topology_sync = False
+
+    # Enriched schema that will fail validation
+    enriched_schema = {rem_id: {"_class": "REM"}, "main_tcs": "01:123456"}
+    cast(Any, mock_coordinator.client).get_state = MagicMock(
+        return_value=(enriched_schema, {})
+    )
+
+    mock_save = AsyncMock()
+    cast(Any, mock_coordinator.store).async_save = mock_save
+    mock_backup = AsyncMock()
+    cast(Any, mock_coordinator.store).async_save_backup = mock_backup
+
+    with (
+        patch(
+            "custom_components.ramses_cc.coordinator.sync_learned_topology",
+            return_value=enriched_schema,
+        ),
+        patch.object(mock_coordinator, "discovery_manager", None),
+        patch.object(
+            mock_coordinator,
+            "_validate_schema_for_ramserf",
+            side_effect=ValueError("Schema validation failed: bad key"),
+        ),
+    ):
+        # Should NOT raise — the ValueError is caught
+        await mock_coordinator.async_save_client_state()
+
+    # Config entry options should NOT be updated with the invalid schema
+    assert mock_coordinator.options[CONF_SCHEMA] == config_schema
+    # The save to .storage should still happen (packets, remotes)
+    mock_save.assert_awaited()
+
+
 # ---------------------------------------------------------------------------
 # Phase 3b: _migrate_rem_commands_to_fan tests
 # ---------------------------------------------------------------------------

@@ -520,20 +520,37 @@ class DiscoveryManager:
             if not isinstance(schema_entry, dict):
                 continue
 
+            # _bound is str (REM/DIS → their FAN) or list[str] (FAN →
+            # its bound REMs, Phase 3b multi-REM format)
             schema_bound = schema_entry.get(SZ_TR_BOUND)
-            if not isinstance(schema_bound, str) or not schema_bound:
+            if isinstance(schema_bound, str):
+                schema_bound_ids = [schema_bound] if schema_bound else []
+            elif isinstance(schema_bound, list):
+                schema_bound_ids = [b for b in schema_bound if isinstance(b, str) and b]
+            else:
+                schema_bound_ids = []
+            if not schema_bound_ids:
                 continue  # no _bound in schema — nothing to compare
 
             scan_bound = dev.bound_to or ""
             if not scan_bound:
                 continue  # scan doesn't know — not a meaningful mismatch
 
-            # Normalize for comparison (case-insensitive)
-            if scan_bound.upper() != schema_bound.upper():
+            # Normalize for comparison (case-insensitive).  For a list,
+            # the scan's single bound_to must be one of the schema's
+            # bound IDs — otherwise it's a mismatch.
+            schema_bound_str = (
+                schema_bound
+                if isinstance(schema_bound, str)
+                else ", ".join(schema_bound_ids)
+            )
+            if scan_bound.upper() not in {b.upper() for b in schema_bound_ids}:
                 meta = self._metadata.get(device_id, DeviceMetadata())
-                meta.bound_mismatch = f"schema={schema_bound}, discovery={scan_bound}"
+                meta.bound_mismatch = (
+                    f"schema={schema_bound_str}, discovery={scan_bound}"
+                )
                 self._metadata[device_id] = meta
-                mismatches.append((device_id, schema_bound, scan_bound))
+                mismatches.append((device_id, schema_bound_str, scan_bound))
                 _LOGGER.debug(
                     "DiscoveryManager: bound mismatch for %s — "
                     "schema has _bound=%s but discovery suggests %s",

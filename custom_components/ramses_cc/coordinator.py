@@ -2161,25 +2161,44 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 # validator before saving.  This catches root-level _ traits
                 # or invalid device IDs early, instead of failing silently
                 # when ramses_rf rejects the schema on the next reload.
-                self._validate_schema_for_ramserf(enriched)
-                _LOGGER.info("Learned topology is richer than config, syncing back")
-                new_options = dict(self.options)
-                new_options[CONF_SCHEMA] = enriched
-                self.options = new_options
-                # Suppress the reload that async_update_entry would trigger,
-                # since the running coordinator already has the updated options
-                # and a reload would tear down the transport while pending
-                # _send_cmd tasks are still in flight (causing lingering tasks).
                 #
-                # NOTE: async_update_entry schedules the update listener as an
-                # async task.  Setting _suppress_reload to a timestamp and
-                # checking it with a 5-second window in the update listener
-                # avoids the race condition where the flag is reset before the
-                # listener runs.
-                self._suppress_reload = time.time()
-                self.hass.config_entries.async_update_entry(
-                    self.entry, options=new_options
-                )
+                # If validation fails, log the error and skip the config
+                # entry update — saving an invalid schema would cause a
+                # reload failure on the next restart.  The current config
+                # entry schema stays as-is (stale but valid) rather than
+                # being overwritten with an invalid one.  The rest of the
+                # save cycle (packets, remotes, discovery state) continues.
+                validation_ok = True
+                try:
+                    self._validate_schema_for_ramserf(enriched)
+                except ValueError as err:
+                    _LOGGER.error(
+                        "Schema validation failed during save cycle — "
+                        "skipping topology sync to avoid corrupting the "
+                        "config entry: %s",
+                        err,
+                    )
+                    validation_ok = False
+                if validation_ok:
+                    _LOGGER.info("Learned topology is richer than config, syncing back")
+                    new_options = dict(self.options)
+                    new_options[CONF_SCHEMA] = enriched
+                    self.options = new_options
+                    # Suppress the reload that async_update_entry would
+                    # trigger, since the running coordinator already has the
+                    # updated options and a reload would tear down the
+                    # transport while pending _send_cmd tasks are still in
+                    # flight (causing lingering tasks).
+                    #
+                    # NOTE: async_update_entry schedules the update listener
+                    # as an async task.  Setting _suppress_reload to a
+                    # timestamp and checking it with a 5-second window in
+                    # the update listener avoids the race condition where
+                    # the flag is reset before the listener runs.
+                    self._suppress_reload = time.time()
+                    self.hass.config_entries.async_update_entry(
+                        self.entry, options=new_options
+                    )
             elif comments_refreshed:
                 # No topology changes (enriched is None), but the scan engine
                 # captured new zone bindings in device_comments.  Persist the
