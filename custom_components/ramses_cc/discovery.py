@@ -336,6 +336,21 @@ class DiscoveryManager:
                     "DiscoveryManager: device %s not in schema, marked as REMOVED",
                     device_id,
                 )
+            elif device_id in schema_device_ids and meta.status == DiscoveryStatus.NEW:
+                # Device is in the schema (e.g. added manually via the schema
+                # editor) but discovery status is still NEW.  Mark it as
+                # ACCEPTED so it doesn't appear in the "new devices" section
+                # of the review form — it's already in the schema.  If there's
+                # a class mismatch, the review form will show it in the
+                # mismatch section where the user can resolve it.
+                meta.status = DiscoveryStatus.ACCEPTED
+                meta.enabled = True
+                self._metadata[device_id] = meta
+                _LOGGER.info(
+                    "DiscoveryManager: device %s is in schema but had NEW "
+                    "status, marked as ACCEPTED",
+                    device_id,
+                )
 
         # Second, add devices from the scan that aren't in discovery metadata
         # (e.g., devices seen by the system but not yet in discovery)

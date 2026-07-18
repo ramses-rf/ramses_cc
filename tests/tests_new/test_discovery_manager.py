@@ -1749,3 +1749,78 @@ class TestCheckAllMismatches:
         ) as mock_dismiss:
             manager.check_all_mismatches(schema)
             mock_dismiss.assert_called_once()
+
+
+class TestSyncWithSchema:
+    """Tests for DiscoveryManager.sync_with_schema.
+
+    sync_with_schema reconciles discovery metadata with the current schema.
+    Devices in the schema but with NEW status should be marked ACCEPTED —
+    they're already in the schema (e.g. added manually via the schema
+    editor), so showing them as "new devices to review" is confusing and
+    prevents the user from resolving class mismatches (the review form's
+    NEW section only has Accept/Decline/Skip, not Update _class).
+    """
+
+    def test_new_device_in_schema_marked_accepted(self) -> None:
+        """A device with NEW status that's in the schema is marked ACCEPTED."""
+        dev = make_discovered_device("37:154519", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # First sync to populate metadata from scan (status=NEW by default)
+        manager.sync_with_schema(set())
+        assert manager._metadata["37:154519"].status == DiscoveryStatus.NEW
+
+        # Now sync with schema that includes 37:154519 — should mark ACCEPTED
+        manager.sync_with_schema({"37:154519", "32:153289"})
+
+        entry = manager.get_device("37:154519")
+        assert entry is not None
+        assert entry.metadata.status == DiscoveryStatus.ACCEPTED
+        assert entry.metadata.enabled is True
+
+    def test_new_device_not_in_schema_stays_new(self) -> None:
+        """A device with NEW status that's NOT in the schema stays NEW."""
+        dev = make_discovered_device("37:154519", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # sync_with_schema — 37:154519 is NOT in the schema
+        manager.sync_with_schema({"32:153289"})
+
+        entry = manager.get_device("37:154519")
+        assert entry is not None
+        assert entry.metadata.status == DiscoveryStatus.NEW
+
+    def test_accepted_device_not_in_schema_marked_removed(self) -> None:
+        """An ACCEPTED device that's removed from the schema is marked REMOVED."""
+        dev = make_discovered_device("37:154519", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager.accept_device("37:154519")
+        assert (
+            manager.get_device("37:154519").metadata.status == DiscoveryStatus.ACCEPTED
+        )
+
+        # sync_with_schema — 37:154519 is no longer in the schema
+        manager.sync_with_schema({"32:153289"})
+
+        entry = manager.get_device("37:154519")
+        assert entry is not None
+        assert entry.metadata.status == DiscoveryStatus.REMOVED
+
+    def test_hgi_gateway_skipped(self) -> None:
+        """HGI gateways (18:) are skipped by sync_with_schema."""
+        dev = make_discovered_device("18:130236", "HGI")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # 18: devices are skipped — status stays whatever it was
+        manager.sync_with_schema(set())  # empty schema
+
+        # 18:130236 should not be in metadata (skipped by sync_with_schema)
+        # or if it is, its status should not be REMOVED
+        if "18:130236" in manager._metadata:
+            assert manager._metadata["18:130236"].status != DiscoveryStatus.REMOVED
