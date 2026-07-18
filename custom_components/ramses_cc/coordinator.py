@@ -1795,6 +1795,13 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # instead of known_list.  This prevents DeviceNotFoundError log spam
         # for neighbour's / other-RF-library devices — ramses_rf silently
         # drops their packets at the filter level.
+        #
+        # HGI devices (18:) are exempt: foreign HGIs communicate with our
+        # controller and the controller's responses (e.g. 0004 zone names,
+        # 2349 zone modes) are addressed to the foreign HGI.  Blocking them
+        # would prevent the active gateway from eavesdropping on those
+        # responses (issue 822).  ramses_rf's protocol filter already warns
+        # about foreign HGIs but lets their packets through for receiving.
         root_owner = schema.get(SZ_OWNER)
         block_list: dict[str, Any] = {}
         if root_owner:
@@ -1804,6 +1811,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     and _DEVICE_ID_RE.match(str(k))
                     and isinstance(v.get(SZ_TR_OWNER), str)
                     and v[SZ_TR_OWNER] != root_owner
+                    and str(k)[:2] != "18"  # don't block foreign HGIs
                 ):
                     block_list[str(k)] = {}
         # Also add _skipped devices to block_list (deferred decision — still

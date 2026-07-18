@@ -91,6 +91,7 @@ from .const import (
     CONF_UNKNOWN_CODES,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
+    SZ_TR_NAME,
     SZ_TR_OWNER,
     SZ_TR_SKIPPED,
     SystemMode,
@@ -1268,6 +1269,12 @@ def sync_learned_topology(
                     learned_class = learned_zone.get(SZ_CLASS)
                     if learned_class and SZ_CLASS not in config_zone:
                         config_zone[SZ_CLASS] = learned_class
+                        changed = True
+                    # Sync _name from learned schema (e.g. from 0004 zone_name
+                    # packets) if config doesn't already have one
+                    learned_name = learned_zone.get(SZ_TR_NAME)
+                    if learned_name and not config_zone.get(SZ_TR_NAME):
+                        config_zone[SZ_TR_NAME] = learned_name
                         changed = True
 
             # 1b-post. Sanitize zone assignments — ramses_rf's active discovery
