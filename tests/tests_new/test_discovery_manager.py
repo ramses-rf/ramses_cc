@@ -941,6 +941,111 @@ class TestGenerateSchemaEntryRootEntry:
         assert isinstance(result["32:123456"], dict)
 
 
+class TestGenerateSchemaEntrySetsClass:
+    """Tests that generate_schema_entry sets _class on the root entry.
+
+    The architecture intent (schema_architecture.md: "accept_discovered_device
+    → writes _alias, _class to schema") requires that the scan engine's
+    likely_type is persisted as the _class trait on the device's root entry.
+    Without this, check_missing_class flags every accepted device on the next
+    checkpoint, and the user has to manually add _class in the schema editor.
+    """
+
+    def test_ctl_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("01:145038", "CTL")
+        assert result["01:145038"][SZ_TR_CLASS] == "CTL"
+
+    def test_fan_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("32:123456", "FAN")
+        assert result["32:123456"][SZ_TR_CLASS] == "FAN"
+
+    def test_rem_with_parent_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "37:123456", "REM", bound_to="32:123456"
+        )
+        assert result["37:123456"][SZ_TR_CLASS] == "REM"
+
+    def test_rem_orphan_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("37:123456", "REM")
+        assert result["37:123456"][SZ_TR_CLASS] == "REM"
+
+    def test_co2_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "37:123456", "CO2", bound_to="32:123456"
+        )
+        assert result["37:123456"][SZ_TR_CLASS] == "CO2"
+
+    def test_trv_with_zone_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "04:056053", "TRV", ctl_id="01:145038", zone_idx="02"
+        )
+        assert result["04:056053"][SZ_TR_CLASS] == "TRV"
+
+    def test_trv_orphan_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("04:056053", "TRV")
+        assert result["04:056053"][SZ_TR_CLASS] == "TRV"
+
+    def test_otb_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "10:064873", "OTB", ctl_id="01:145038"
+        )
+        assert result["10:064873"][SZ_TR_CLASS] == "OTB"
+
+    def test_bdr_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "13:123456", "BDR", ctl_id="01:145038", zone_idx="01"
+        )
+        assert result["13:123456"][SZ_TR_CLASS] == "BDR"
+
+    def test_dhw_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "07:123456", "DHW", ctl_id="01:145038"
+        )
+        assert result["07:123456"][SZ_TR_CLASS] == "DHW"
+
+    def test_dis_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("37:123456", "DIS")
+        assert result["37:123456"][SZ_TR_CLASS] == "DIS"
+
+    def test_unknown_type_has_class(self) -> None:
+        """Unknown likely_type is still written as _class (uppercased)."""
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("04:999999", "unknown")
+        assert result["04:999999"][SZ_TR_CLASS] == "UNKNOWN"
+
+    def test_class_is_uppercased(self) -> None:
+        """likely_type is case-insensitive — _class is stored uppercased."""
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "37:333333", "co2", bound_to="32:123456"
+        )
+        assert result["37:333333"][SZ_TR_CLASS] == "CO2"
+
+
 class TestDiscoveredDeviceEntrySerialization:
     """Tests for DiscoveredDeviceEntry.to_dict and scan property."""
 

@@ -964,8 +964,16 @@ class DiscoveryManager:
         # by the user via the schema editor.  Without this, list-based
         # devices (REM/CO2 in remotes[], TRV in zones[], etc.) would have
         # no root entry and _owner could never be set — breaking SSOT.
+        #
+        # Also injects _class on the root entry so the scan engine's
+        # likely_type is persisted as the schema identity trait.  This
+        # matches the architecture intent (accept_discovered_device writes
+        # _class to schema) and prevents check_missing_class from flagging
+        # every accepted device on the next checkpoint.  Uses setdefault so
+        # a caller that already set _class (e.g. add_faked_rem) wins.
         def _merge(fragment: dict[str, Any]) -> dict[str, Any]:
-            fragment.setdefault(device_id, {})
+            root = fragment.setdefault(device_id, {})
+            root.setdefault(SZ_TR_CLASS, lt)
             fragment.update(_list_comment())
             return fragment
 
@@ -973,13 +981,13 @@ class DiscoveryManager:
         if lt == "CTL":
             return {
                 SZ_MAIN_TCS: device_id,
-                device_id: _with_comment({}),
+                device_id: _with_comment({SZ_TR_CLASS: lt}),
             }
 
         # ── FAN: HVAC controller ────────────────────────────────
         if lt == "FAN":
             return {
-                device_id: _with_comment({SZ_REMOTES: []}),
+                device_id: _with_comment({SZ_TR_CLASS: lt, SZ_REMOTES: []}),
             }
 
         # ── REM / CO2: HVAC remote or sensor — add to parent FAN ─────
