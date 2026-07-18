@@ -691,6 +691,10 @@ class DiscoveryManager:
 
     def _send_mismatch_notification(self, counts: dict[str, int]) -> None:
         """Send a persistent notification about schema/discovery mismatches."""
+        _LOGGER.debug(
+            "DiscoveryManager: _send_mismatch_notification called with counts=%s",
+            counts,
+        )
         lines: list[str] = []
 
         class_mm = self.get_mismatched_devices()
