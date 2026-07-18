@@ -1655,6 +1655,13 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     dev_entry = config_schema.get(device_id)
                     if isinstance(dev_entry, dict):
                         dev_entry[SZ_TR_CLASS] = str(entry.device.likely_type)
+                        # Apply per-device owner if provided, else root owner
+                        per_device_owner = (
+                            user_input.get(f"owner_{device_id}", "") or ""
+                        ).strip()
+                        dev_entry[SZ_TR_OWNER] = (
+                            per_device_owner if per_device_owner else root_owner
+                        )
                         changed = True
                         class_updates.append(device_id)
                         _LOGGER.info(
@@ -1667,7 +1674,21 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     meta = coordinator.discovery_manager._metadata.get(device_id)
                     if meta:
                         meta.class_mismatch_dismissed = False
-                # "keep" or "skip" — do nothing, schema stays as-is
+                elif action == "keep":
+                    # Keep existing _class — but still apply owner
+                    dev_entry = config_schema.get(device_id)
+                    if isinstance(dev_entry, dict):
+                        per_device_owner = (
+                            user_input.get(f"owner_{device_id}", "") or ""
+                        ).strip()
+                        if per_device_owner or dev_entry.get(SZ_TR_OWNER) != (
+                            per_device_owner if per_device_owner else root_owner
+                        ):
+                            dev_entry[SZ_TR_OWNER] = (
+                                per_device_owner if per_device_owner else root_owner
+                            )
+                            changed = True
+                # "keep" or "skip" — do nothing to _class, schema stays as-is
                 # Clear the mismatch flag for both "update_class" and "keep"
                 if action in ("update_class", "keep"):
                     meta = coordinator.discovery_manager._metadata.get(device_id)
@@ -1688,6 +1709,13 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     dev_entry = config_schema.get(device_id)
                     if isinstance(dev_entry, dict):
                         dev_entry[SZ_TR_CLASS] = str(entry.device.likely_type)
+                        # Apply per-device owner if provided, else root owner
+                        per_device_owner = (
+                            user_input.get(f"owner_{device_id}", "") or ""
+                        ).strip()
+                        dev_entry[SZ_TR_OWNER] = (
+                            per_device_owner if per_device_owner else root_owner
+                        )
                         changed = True
                         _LOGGER.info(
                             "review_discovered: added _class=%s for %s "
@@ -1771,15 +1799,17 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         # the device info so the user can see what they're accepting.
         form_fields: dict[Any, Any] = {}
 
-        # Owner name field — sets the root _owner in the schema.
-        # Devices accepted get this owner; declined devices get "not-me".
+        # Owner name field — sets the ROOT _owner in the schema.
+        # This is the system-wide owner.  Per-device owner fields below
+        # override it for individual devices.  If no root _owner was set
+        # yet, this fills it in.
         existing_owner = self.options.get(CONF_SCHEMA, {}).get(SZ_OWNER, "")
         form_fields[
             vol.Required(
                 "owner_name",
                 default=existing_owner or "me",
                 description={
-                    "label": "System owner name (your devices will be tagged with this)",
+                    "label": "Root owner name (applies to all devices without a per-device owner below)",
                 },
             )
         ] = selector.TextSelector()
@@ -1839,11 +1869,14 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             form_fields[
                 vol.Optional(
                     f"owner_{device_id}",
-                    description={"label": f"Alias for {device_id} (optional)"},
+                    description={
+                        "label": f"Owner for {device_id} (overrides root owner)"
+                    },
                 )
             ] = selector.TextSelector()
 
         # Add form fields for class mismatch devices
+        config_schema_for_prefill = self.options.get(CONF_SCHEMA, {})
         for entry in mismatched_only:
             d = entry.device
             device_id = d.device_id
@@ -1871,6 +1904,20 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     ],
                 )
             )
+            existing_dev_owner = (
+                config_schema_for_prefill.get(device_id, {}).get(SZ_TR_OWNER, "")
+                if isinstance(config_schema_for_prefill.get(device_id), dict)
+                else ""
+            )
+            form_fields[
+                vol.Optional(
+                    f"owner_{device_id}",
+                    description={
+                        "label": f"Owner for {device_id} (overrides root owner)",
+                        "suggested_value": existing_dev_owner,
+                    },
+                )
+            ] = selector.TextSelector()
 
         # Add form fields for missing_class devices
         for entry in missing_class_only:
@@ -1896,6 +1943,20 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     ],
                 )
             )
+            existing_dev_owner = (
+                config_schema_for_prefill.get(device_id, {}).get(SZ_TR_OWNER, "")
+                if isinstance(config_schema_for_prefill.get(device_id), dict)
+                else ""
+            )
+            form_fields[
+                vol.Optional(
+                    f"owner_{device_id}",
+                    description={
+                        "label": f"Owner for {device_id} (overrides root owner)",
+                        "suggested_value": existing_dev_owner,
+                    },
+                )
+            ] = selector.TextSelector()
 
         return self.async_show_form(
             step_id="review_discovered",

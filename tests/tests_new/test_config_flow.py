@@ -40,6 +40,7 @@ from custom_components.ramses_cc.const import (
     CONF_SCHEMA,
     DEFAULT_HGI_ID,
     DOMAIN,
+    SZ_OWNER,
     SZ_TR_CLASS,
     SZ_TR_COMMANDS,
     SZ_TR_OWNER,
@@ -2166,6 +2167,80 @@ async def test_review_discovered_missing_class_add_class(hass: HomeAssistant) ->
     # Verify _class was set in the saved schema
     saved_schema = config_entry.options.get(CONF_SCHEMA, {})
     assert saved_schema.get("37:154519", {}).get(SZ_TR_CLASS) == "FAN"
+
+
+async def test_review_discovered_missing_class_per_device_owner(
+    hass: HomeAssistant,
+) -> None:
+    """Test per-device owner overrides root owner for missing_class devices.
+
+    The user sets a per-device owner of "not-me" on a missing_class device
+    while keeping the root owner as "me".  The device should get
+    _owner=not-me, not _owner=me.
+    """
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            CONF_SCHEMA: {
+                SZ_OWNER: "me",
+                "37:154519": {"remotes": []},
+            },
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "37:154519"
+    mock_entry.device.likely_type = "FAN"
+    mock_entry.device.confidence = "medium"
+    mock_entry.metadata.missing_class = "discovery=FAN"
+    mock_entry.metadata.class_mismatch = None
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_devices.return_value = []
+    mock_coord.discovery_manager.get_mismatched_devices.return_value = []
+    mock_coord.discovery_manager.get_missing_class_devices.return_value = [mock_entry]
+    mock_coord.discovery_manager._metadata = {
+        "37:154519": mock_entry.metadata,
+    }
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_discovered"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    # Verify the form has a per-device owner field for the missing_class device
+    data_schema = result.get("data_schema")
+    schema_dict = data_schema.schema
+    field_names = {
+        str(k) if hasattr(k, "schema") else k for k, _ in schema_dict.items()
+    }
+    assert "owner_37:154519" in field_names
+
+    # Submit with add_class + per-device owner "not-me"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "missing_class_37:154519": "add_class",
+            "owner_37:154519": "not-me",
+        },
+    )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    saved_schema = config_entry.options.get(CONF_SCHEMA, {})
+    # _class should be set
+    assert saved_schema.get("37:154519", {}).get(SZ_TR_CLASS) == "FAN"
+    # Per-device owner should be "not-me", NOT root owner "me"
+    assert saved_schema.get("37:154519", {}).get(SZ_TR_OWNER) == "not-me"
+    # Root owner should still be "me"
+    assert saved_schema.get(SZ_OWNER) == "me"
 
 
 async def test_review_discovered_missing_class_skip(hass: HomeAssistant) -> None:
