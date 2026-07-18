@@ -464,6 +464,22 @@ class DiscoveryManager:
                 result.append(entry)
         return result
 
+    def get_missing_class_devices(self) -> list[DiscoveredDeviceEntry]:
+        """Get devices that have a missing_class flag set.
+
+        These are ACCEPTED devices whose schema entry has no ``_class``
+        but the scan engine has a ``likely_type``.  The review_discovered
+        step shows them so the user can add ``_class`` from the discovery
+        suggestion.
+
+        :return: List of device entries with missing_class set.
+        """
+        result: list[DiscoveredDeviceEntry] = []
+        for entry in self.get_devices():
+            if entry.metadata.missing_class:
+                result.append(entry)
+        return result
+
     def check_bound_mismatches(self, schema: dict[str, Any]) -> int:
         """Check for _bound mismatches between scan engine and schema.
 

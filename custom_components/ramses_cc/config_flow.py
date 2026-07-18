@@ -1507,20 +1507,27 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         config_schema_check = self.options.get(CONF_SCHEMA, {})
         if isinstance(config_schema_check, dict):
             coordinator.discovery_manager.check_class_mismatches(config_schema_check)
+            coordinator.discovery_manager.check_missing_class(config_schema_check)
 
         new_devices = coordinator.discovery_manager.get_devices(
             status=DiscoveryStatus.NEW
         )
         mismatched_devices = coordinator.discovery_manager.get_mismatched_devices()
-        # Deduplicate: a device could be both NEW and mismatched (unlikely
-        # but safe) — only show it once, in the NEW section.
+        missing_class_devices = (
+            coordinator.discovery_manager.get_missing_class_devices()
+        )
+        # Deduplicate: a device could appear in multiple categories — only
+        # show it once.  Priority: NEW > class_mismatch > missing_class.
+        new_ids = {d.device.device_id for d in new_devices}
         mismatched_only = [
-            e
-            for e in mismatched_devices
-            if e.device.device_id not in {d.device.device_id for d in new_devices}
+            e for e in mismatched_devices if e.device.device_id not in new_ids
+        ]
+        seen_ids = new_ids | {e.device.device_id for e in mismatched_only}
+        missing_class_only = [
+            e for e in missing_class_devices if e.device.device_id not in seen_ids
         ]
         devices = new_devices
-        if not devices and not mismatched_only:
+        if not devices and not mismatched_only and not missing_class_only:
             # If the user already submitted the form, close it.
             # Otherwise show the "no devices" message once.
             if user_input is not None:
@@ -1671,6 +1678,32 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                             # doesn't re-flag this device on the next checkpoint
                             meta.class_mismatch_dismissed = True
 
+            # Process missing_class devices (accepted, no _class in schema,
+            # but discovery has a likely_type).  The user can add _class
+            # from the discovery suggestion or skip.
+            for entry in missing_class_only:
+                device_id = entry.device.device_id
+                action = user_input.get(f"missing_class_{device_id}", "skip")
+                if action == "add_class":
+                    dev_entry = config_schema.get(device_id)
+                    if isinstance(dev_entry, dict):
+                        dev_entry[SZ_TR_CLASS] = str(entry.device.likely_type)
+                        changed = True
+                        _LOGGER.info(
+                            "review_discovered: added _class=%s for %s "
+                            "(was missing, discovery suggestion accepted)",
+                            entry.device.likely_type,
+                            device_id,
+                        )
+                # Clear the missing_class flag for both "add_class" and "skip"
+                # so the notification doesn't re-fire immediately.  For "skip"
+                # the flag will be re-set on the next checkpoint if the schema
+                # still lacks _class — but that's the next review cycle.
+                if action in ("add_class", "skip"):
+                    meta = coordinator.discovery_manager._metadata.get(device_id)
+                    if meta:
+                        meta.missing_class = None
+
             if changed:
                 self.options[CONF_SCHEMA] = order_schema(config_schema)
 
@@ -1715,8 +1748,23 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     f"| `{d.device_id}` | {schema_cls} | {disc_cls} | {d.confidence} |"
                 )
 
+        if missing_class_only:
+            if lines:
+                lines.append("\n")
+            lines.append(
+                f"**{len(missing_class_only)} device(s) with missing _class:**\n"
+            )
+            lines.append("| Device | Discovery suggests | Confidence |")
+            lines.append("|--------|-------------------|------------|")
+            for entry in missing_class_only:
+                d = entry.device
+                # Parse the missing_class desc: "discovery=FAN"
+                mc = entry.metadata.missing_class or ""
+                disc_cls = mc.split("discovery=")[1] if "discovery=" in mc else "?"
+                lines.append(f"| `{d.device_id}` | {disc_cls} | {d.confidence} |")
+
         if not lines:
-            lines.append("No new devices or class mismatches to review.")
+            lines.append("No new devices or mismatches to review.")
         summary = "\n".join(lines)
 
         # Build form with device selectors — each field name includes
@@ -1820,6 +1868,31 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         {"value": "skip", "label": "Skip for now"},
                         {"value": "update_class", "label": f"Update to {disc_cls}"},
                         {"value": "keep", "label": f"Keep {schema_cls}"},
+                    ],
+                )
+            )
+
+        # Add form fields for missing_class devices
+        for entry in missing_class_only:
+            d = entry.device
+            device_id = d.device_id
+            mc = entry.metadata.missing_class or ""
+            disc_cls = mc.split("discovery=")[1] if "discovery=" in mc else "?"
+            field_label = (
+                f"{device_id} | no _class in schema → "
+                f"discovery suggests {disc_cls} (conf={d.confidence})"
+            )
+            form_fields[
+                vol.Required(
+                    f"missing_class_{device_id}",
+                    default="skip",
+                    description={"label": field_label},
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "skip", "label": "Skip for now"},
+                        {"value": "add_class", "label": f"Add _class: {disc_cls}"},
                     ],
                 )
             )

@@ -40,6 +40,7 @@ from custom_components.ramses_cc.const import (
     CONF_SCHEMA,
     DEFAULT_HGI_ID,
     DOMAIN,
+    SZ_TR_CLASS,
     SZ_TR_COMMANDS,
     SZ_TR_OWNER,
 )
@@ -2098,6 +2099,132 @@ async def test_review_discovered_skip_device(hass: HomeAssistant) -> None:
     # Neither accept nor discard should have been called
     mock_coord.discovery_manager.accept_device.assert_not_called()
     mock_coord.discovery_manager.discard_device.assert_not_called()
+
+
+async def test_review_discovered_missing_class_add_class(hass: HomeAssistant) -> None:
+    """Test review_discovered step adding _class to a device that lacks it.
+
+    A device already in the schema (accepted) but without a _class trait
+    should appear in the review form when check_missing_class flags it.
+    Choosing "add_class" sets _class to the discovery suggestion.
+    """
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            CONF_SCHEMA: {
+                "37:154519": {"remotes": []},
+            },
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    # Mock a missing_class device entry (no new devices, no mismatches)
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "37:154519"
+    mock_entry.device.likely_type = "FAN"
+    mock_entry.device.confidence = "medium"
+    mock_entry.metadata.missing_class = "discovery=FAN"
+    mock_entry.metadata.class_mismatch = None
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_devices.return_value = []  # no NEW devices
+    mock_coord.discovery_manager.get_mismatched_devices.return_value = []
+    mock_coord.discovery_manager.get_missing_class_devices.return_value = [mock_entry]
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    # Navigate to review_discovered
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_discovered"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    # Verify the form has the missing_class field
+    data_schema = result.get("data_schema")
+    assert data_schema is not None
+    schema_dict = data_schema.schema
+    field_names = {
+        str(k) if hasattr(k, "schema") else k for k, _ in schema_dict.items()
+    }
+    assert "missing_class_37:154519" in field_names
+    # Verify summary mentions missing _class
+    placeholders = result.get("description_placeholders", {})
+    assert "missing _class" in placeholders.get("message", "")
+
+    # Submit form with add_class action
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={"missing_class_37:154519": "add_class"},
+    )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    # Verify _class was set in the saved schema
+    saved_schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert saved_schema.get("37:154519", {}).get(SZ_TR_CLASS) == "FAN"
+
+
+async def test_review_discovered_missing_class_skip(hass: HomeAssistant) -> None:
+    """Test review_discovered step skipping a missing_class device.
+
+    Skipping should not modify the schema (no _class added) but should
+    clear the missing_class flag so the notification doesn't re-fire
+    immediately.
+    """
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            CONF_SCHEMA: {
+                "37:154519": {"remotes": []},
+            },
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "37:154519"
+    mock_entry.device.likely_type = "FAN"
+    mock_entry.device.confidence = "medium"
+    mock_entry.metadata.missing_class = "discovery=FAN"
+    mock_entry.metadata.class_mismatch = None
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_devices.return_value = []
+    mock_coord.discovery_manager.get_mismatched_devices.return_value = []
+    mock_coord.discovery_manager.get_missing_class_devices.return_value = [mock_entry]
+    # _metadata is accessed directly to clear the missing_class flag
+    mock_coord.discovery_manager._metadata = {
+        "37:154519": mock_entry.metadata,
+    }
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_discovered"}
+    )
+
+    # Submit form with skip action
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={"missing_class_37:154519": "skip"},
+    )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    # _class should NOT be set in the schema
+    saved_schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert SZ_TR_CLASS not in saved_schema.get("37:154519", {})
+    # The missing_class flag should be cleared
+    assert mock_entry.metadata.missing_class is None
 
 
 async def test_review_discovered_bulk_accept_all(hass: HomeAssistant) -> None:
