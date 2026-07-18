@@ -24,6 +24,7 @@ from homeassistant.components.persistent_notification import (
     async_dismiss as async_dismiss_notification,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -88,6 +89,10 @@ class DeviceMetadata:
     # Set when the scan engine has a likely_type but the schema entry
     # has no _class at all.  Cleared when the user adds a _class.
     missing_class: str | None = None
+    # Set when the user explicitly chose "Skip" in the review_discovered
+    # step, dismissing the missing_class suggestion.  Prevents
+    # check_missing_class from re-flagging the same device every cycle.
+    missing_class_dismissed: bool = False
     # Set when a device is in the schema but has not been seen by the
     # scan engine for longer than the orphan threshold.  Cleared when
     # traffic is seen again.
@@ -106,6 +111,7 @@ class DeviceMetadata:
             "class_mismatch_dismissed": self.class_mismatch_dismissed,
             "bound_mismatch": self.bound_mismatch,
             "missing_class": self.missing_class,
+            "missing_class_dismissed": self.missing_class_dismissed,
             "orphaned": self.orphaned,
         }
 
@@ -127,6 +133,7 @@ class DeviceMetadata:
             class_mismatch_dismissed=data.get("class_mismatch_dismissed", False),
             bound_mismatch=data.get("bound_mismatch"),
             missing_class=data.get("missing_class"),
+            missing_class_dismissed=data.get("missing_class_dismissed", False),
             orphaned=data.get("orphaned"),
         )
 
@@ -609,6 +616,11 @@ class DiscoveryManager:
             if not scan_type or scan_type == "DEV":
                 continue  # scan doesn't know either — not actionable
 
+            # Skip if the user already dismissed this missing_class ("Skip")
+            existing_meta = self._metadata.get(device_id)
+            if existing_meta and existing_meta.missing_class_dismissed:
+                continue  # user decided — don't re-flag
+
             meta = self._metadata.get(device_id, DeviceMetadata())
             meta.missing_class = f"discovery={scan_type}"
             self._metadata[device_id] = meta
@@ -654,7 +666,7 @@ class DiscoveryManager:
             threshold_days = self._lost_threshold_days
 
         scan_devices = {d.device_id: d for d in self._scan.get_devices()}
-        now = dt.now()
+        now = dt_util.now()  # tz-aware (HA default timezone)
         threshold = now - td(days=threshold_days)
         orphaned: list[str] = []
 
@@ -681,6 +693,11 @@ class DiscoveryManager:
                 last_seen = dt.fromisoformat(last_seen_str)
             except (ValueError, TypeError):
                 continue
+
+            # Ensure tz-aware for comparison (ramses_rf may store naive
+            # or tz-aware datetimes depending on version/config).
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=dt_util.get_default_time_zone())
 
             if last_seen < threshold:
                 meta = self._metadata.get(device_id, DeviceMetadata())

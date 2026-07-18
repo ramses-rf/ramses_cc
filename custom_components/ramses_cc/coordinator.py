@@ -259,7 +259,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Config = %s", print_options)
 
         self.client: Gateway | None = None
-        self._remotes: dict[str, dict[str, str]] = {}
+        self._remotes: dict[str, dict[str, Any]] = {}
+        # Track device IDs that have _commands in the schema at load time.
+        # Used by _sync_remotes_to_schema to prevent resurrecting
+        # user-deleted _commands from .storage[remotes].
+        self._devices_with_commands: set[str] = set()
 
         self._platform_setup_tasks: dict[str, asyncio.Task[Any]] = {}
         self._entities: dict[str, RamsesEntity] = {}  # domain entities
@@ -417,6 +421,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     "Loaded %d device(s) with _commands from schema",
                     len(remotes_from_schema),
                 )
+            # Track which devices have _commands in the schema at load
+            # time, so _sync_remotes_to_schema can skip them if _commands
+            # is later absent (user deletion → don't resurrect from remotes).
+            self._devices_with_commands = set(remotes_from_schema.keys())
 
         client_state: dict[str, Any] = storage.get(SZ_CLIENT_STATE, {})
 
@@ -1521,7 +1529,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
     @staticmethod
     def _sync_remotes_to_schema(
-        schema: dict[str, Any], remotes: dict[str, dict[str, str]]
+        schema: dict[str, Any],
+        remotes: dict[str, dict[str, Any]],
+        known_command_devices: set[str] | None = None,
     ) -> dict[str, Any]:
         """Copy learned commands from ``remotes`` into schema ``_commands``.
 
@@ -1533,8 +1543,17 @@ class RamsesCoordinator(DataUpdateCoordinator):
         Only copies commands that are NOT already in the schema — schema
         is authoritative, ``remotes`` fills gaps.
 
+        If ``known_command_devices`` is provided, devices in this set that
+        don't have ``_commands`` in their schema entry are skipped — the
+        user previously had ``_commands`` and deleted them, so re-adding
+        from ``remotes`` would resurrect user-deleted commands.  Devices
+        NOT in this set are migrated normally (first-time migration).
+
         :param schema: The schema to enrich.
         :param remotes: The remotes dict from ``.storage`` or in-memory.
+        :param known_command_devices: Device IDs that previously had
+            ``_commands`` in the schema.  Prevents resurrection of
+            user-deleted ``_commands``.
         :return: The schema with ``_commands`` merged in.
         """
         if not remotes or not isinstance(remotes, dict):
@@ -1551,16 +1570,25 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 # Create a root entry for this device if it doesn't exist
                 entry = {}
                 new_schema[device_id] = entry
-            if SZ_TR_COMMANDS not in entry:
-                entry[SZ_TR_COMMANDS] = dict(commands)
-                changed = True
-                migrated_count += 1
-                _LOGGER.info(
-                    "SSOT Phase 3a: copied %d command(s) from remotes to "
-                    "schema _commands for %s",
-                    len(commands),
+            if SZ_TR_COMMANDS in entry:
+                continue  # already has _commands — schema is authoritative
+            # Skip if the user previously had _commands and deleted them
+            if known_command_devices is not None and device_id in known_command_devices:
+                _LOGGER.debug(
+                    "SSOT Phase 3a: skipping %s — _commands was previously "
+                    "in schema but is now absent (user deletion)",
                     device_id,
                 )
+                continue
+            entry[SZ_TR_COMMANDS] = dict(commands)
+            changed = True
+            migrated_count += 1
+            _LOGGER.info(
+                "SSOT Phase 3a: copied %d command(s) from remotes to "
+                "schema _commands for %s",
+                len(commands),
+                device_id,
+            )
 
         if changed:
             _LOGGER.info(
@@ -2152,7 +2180,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
                             self.options.get(SZ_KNOWN_LIST, {}),
                             reason="ssot_phase3a",
                         )
-                    enriched = self._sync_remotes_to_schema(enriched, self._remotes)
+                    enriched = self._sync_remotes_to_schema(
+                        enriched, self._remotes, self._devices_with_commands
+                    )
                 # Phase 3b: migrate REM _commands (packet strings) to FAN
                 # _commands (dict templates).  REM entries are kept for
                 # backward compatibility (downgrade path).
@@ -2214,7 +2244,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 # .storage[remotes] or known_list[commands] are migrated to
                 # schema _commands on every save cycle.
                 config_schema = self._sync_remotes_to_schema(
-                    config_schema, self._remotes
+                    config_schema, self._remotes, self._devices_with_commands
                 )
                 # Phase 3b: also migrate REM → FAN dict templates
                 config_schema = self._migrate_rem_commands_to_fan(config_schema)
@@ -2233,7 +2263,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 # topology matches the config.
                 if self._remotes:
                     migrated_schema = self._sync_remotes_to_schema(
-                        config_schema, self._remotes
+                        config_schema, self._remotes, self._devices_with_commands
                     )
                     # Phase 3b: also migrate REM → FAN dict templates
                     migrated_schema = self._migrate_rem_commands_to_fan(migrated_schema)
@@ -2262,6 +2292,18 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # from the dying coordinator is stale topology that the user may
             # have just cleared — it must not survive in the cache.
             schema = self.options.get(CONF_SCHEMA, {})
+
+        # Update _devices_with_commands to reflect the current schema state.
+        # This tracks which devices have _commands so that on the next save
+        # cycle, _sync_remotes_to_schema can skip devices that previously
+        # had _commands but no longer do (user deletion → no resurrection).
+        current_schema = self.options.get(CONF_SCHEMA, {})
+        if isinstance(current_schema, dict):
+            self._devices_with_commands = {
+                dev_id
+                for dev_id, entry in current_schema.items()
+                if isinstance(entry, dict) and SZ_TR_COMMANDS in entry
+            }
 
         # Explicitly declare intermediate dict to solve Pylance 'Never is not iterable'
         # Use _commands_for_save (includes _comment metadata) instead of
