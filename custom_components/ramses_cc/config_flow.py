@@ -1601,8 +1601,16 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         if isinstance(dev_entry, dict):
                             dev_entry.pop(SZ_TR_SKIPPED, None)
                             dev_entry.pop("_comment", None)
-                            # Set owner to root owner (accepted = ours)
-                            dev_entry[SZ_TR_OWNER] = root_owner
+                            # Use per-device owner if provided, otherwise root
+                            # owner.  This lets the user accept a device (create
+                            # entities) while tagging it as foreign (e.g. a
+                            # neighbour's FAN you want to monitor but not own).
+                            per_device_owner = (
+                                user_input.get(f"owner_{device_id}", "") or ""
+                            ).strip()
+                            dev_entry[SZ_TR_OWNER] = (
+                                per_device_owner if per_device_owner else root_owner
+                            )
                         changed = True
                 elif action == "decline":
                     # Decline — mark as foreign owner so it goes to block_list

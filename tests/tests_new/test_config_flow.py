@@ -41,6 +41,7 @@ from custom_components.ramses_cc.const import (
     DEFAULT_HGI_ID,
     DOMAIN,
     SZ_TR_COMMANDS,
+    SZ_TR_OWNER,
 )
 from ramses_tx.schemas import (
     SZ_ENFORCE_KNOWN_LIST,
@@ -1956,10 +1957,14 @@ async def test_review_discovered_accept_device(hass: HomeAssistant) -> None:
     mock_entry.device.src_count = 3
     mock_entry.device.dst_count = 0
 
-    # Mock accept_device to return an entry with a schema_entry
+    # Mock accept_device to return an entry with a schema_entry.
+    # Include a root-level entry for the device so the config flow can
+    # set traits (_owner, etc.) on it — generate_schema_entry always
+    # ensures one via _merge().
     accepted_entry = MagicMock()
     accepted_entry.metadata.schema_entry = {
-        "01:145038": {"zones": {"02": {"sensor": "04:056053"}}}
+        "04:056053": {},
+        "01:145038": {"zones": {"02": {"sensor": "04:056053"}}},
     }
     mock_coord = MagicMock()
     mock_coord.discovery_manager = MagicMock()
@@ -1979,7 +1984,7 @@ async def test_review_discovered_accept_device(hass: HomeAssistant) -> None:
     )
     assert result.get("type") == FlowResultType.FORM
 
-    # Submit form with accept action
+    # Submit form with accept action and a per-device owner
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         user_input={
@@ -1992,6 +1997,11 @@ async def test_review_discovered_accept_device(hass: HomeAssistant) -> None:
     mock_coord.discovery_manager.accept_device.assert_called_once_with(
         "04:056053", owner="henk", ctl_id=None
     )
+    # Per-device owner must be written to the schema entry, not overridden
+    # by the root owner (regression: owner was silently replaced with
+    # root_owner "me" — see issue with 37:154519 accept + owner: not-me).
+    saved_schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert saved_schema.get("04:056053", {}).get(SZ_TR_OWNER) == "henk"
 
 
 async def test_review_discovered_decline_device(hass: HomeAssistant) -> None:
