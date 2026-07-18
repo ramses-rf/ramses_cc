@@ -3023,6 +3023,110 @@ async def test_apply_schema_entry_does_not_overwrite_zone_sensor(
     # This is expected — the old device's orphan status is handled by ramses_rf's topology
 
 
+async def test_apply_schema_entry_preserves_existing_root_entry(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _apply_schema_entry does NOT overwrite an existing root entry.
+
+    If a device already has a root entry in the schema (e.g. added manually
+    via the schema editor with _class, remotes, _commands), accepting it
+    via discovery should NOT overwrite those user-configured keys.
+
+    Regression test for the bug where accept_discovered_device overwrote
+    a manually-configured FAN entry (remotes: ["37:170000"], _commands: {...})
+    with the auto-generated fragment (remotes: [], _class: "FAN").
+    """
+    handler = RamsesServiceHandler(mock_coordinator)
+    mock_client = MagicMock()
+    mock_engine = MagicMock()
+    mock_engine._include = []
+    mock_client._engine = mock_engine
+    mock_dev_filter = MagicMock()
+    mock_dev_filter._include = []
+    mock_client._device_filter = mock_dev_filter
+    mock_coordinator.client = mock_client
+
+    # FAN already in schema with user-configured remotes and _commands
+    mock_coordinator.options = {
+        CONF_SCHEMA: {
+            "32:150000": {
+                "_class": "FAN",
+                "remotes": ["37:170000"],
+                "_commands": {
+                    "boost": {"code": "22F1", "payload": "000607", "verb": "I"}
+                },
+            },
+        }
+    }
+
+    # Auto-generated fragment for FAN — has remotes: [] and _class: "FAN"
+    # which would overwrite the user's remotes and _commands if merged
+    # with fragment as src
+    fragment = {
+        "32:150000": {
+            "_class": "FAN",
+            "remotes": [],
+        }
+    }
+    handler._apply_schema_entry(fragment, "32:150000")
+
+    schema = mock_coordinator.options[CONF_SCHEMA]
+    fan_entry = schema["32:150000"]
+    # _class should be preserved (fragment has same value, but the point is
+    # the user's value wins)
+    assert fan_entry["_class"] == "FAN"
+    # remotes should NOT be overwritten with []
+    assert fan_entry["remotes"] == ["37:170000"]
+    # _commands should be preserved (fragment doesn't have it, but we're
+    # verifying the existing entry isn't touched)
+    assert "_commands" in fan_entry
+    assert fan_entry["_commands"]["boost"]["payload"] == "000607"
+
+
+async def test_apply_schema_entry_preserves_existing_rem_root(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _apply_schema_entry preserves an existing REM root entry.
+
+    A REM with a user-configured root entry (_class, _owner) should keep
+    those traits when the REM is re-accepted via discovery.  The fragment
+    only adds the placement (remotes[] under the FAN), not the root entry.
+    """
+    handler = RamsesServiceHandler(mock_coordinator)
+    mock_client = MagicMock()
+    mock_engine = MagicMock()
+    mock_engine._include = []
+    mock_client._engine = mock_engine
+    mock_dev_filter = MagicMock()
+    mock_dev_filter._include = []
+    mock_client._device_filter = mock_dev_filter
+    mock_coordinator.client = mock_client
+
+    mock_coordinator.options = {
+        CONF_SCHEMA: {
+            "32:150000": {"_class": "FAN", "remotes": []},
+            "37:170000": {"_class": "REM", "_owner": "not-me"},
+        }
+    }
+
+    # Fragment for REM bound to FAN — has remotes: ["37:170000"] under FAN
+    # and a root entry with _class: "REM" which would overwrite _owner
+    fragment = {
+        "32:150000": {"remotes": ["37:170000"]},
+        "37:170000": {"_class": "REM"},
+    }
+    handler._apply_schema_entry(fragment, "37:170000")
+
+    schema = mock_coordinator.options[CONF_SCHEMA]
+    rem_entry = schema["37:170000"]
+    # _class should be REM (same in both)
+    assert rem_entry["_class"] == "REM"
+    # _owner should be preserved — NOT overwritten by the fragment
+    assert rem_entry["_owner"] == "not-me"
+    # REM should be placed under the FAN's remotes
+    assert "37:170000" in schema["32:150000"].get("remotes", [])
+
+
 async def test_discard_discovered_device_no_manager(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
