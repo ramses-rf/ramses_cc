@@ -224,12 +224,15 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
     def is_on(self) -> bool | None:
         """Return the state of the binary sensor.
 
-        :return: True if faults are active, None if unknown.
+        ``active_faults`` returns ``None`` when the fault log is empty or not
+        yet loaded — both mean 'no active faults', so report ``False`` (off)
+        rather than ``unknown`` (issue 841).
+
+        :return: True if faults are active, False otherwise.
         :rtype: bool | None
         """
         faults = resolve_async_attr(self, self._device, "active_faults")
-        if faults is not None:
-            self._last_known_state = bool(faults)
+        self._last_known_state = bool(faults)
         return self._last_known_state
 
 
