@@ -277,6 +277,15 @@ async def test_logbook_binary_sensor_state(
     # Assert
     assert final_state is True
 
+    # Act (is_on = False, issue 841)
+    # 3. Test is_on = False when active_faults is None (empty/unloaded log)
+    #    must report off, not unknown (regression vs 0.54.3)
+    mock_resolve_async_attr.return_value = None
+    none_state = sensor.is_on
+
+    # Assert
+    assert none_state is False
+
 
 async def test_system_binary_sensor_availability(
     mock_coordinator: MagicMock,
