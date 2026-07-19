@@ -1108,6 +1108,25 @@ class RamsesServiceHandler:
                 main_tcs = config_schema.get("main_tcs")
                 if isinstance(main_tcs, str):
                     ctl_id = main_tcs
+        # Fall back to the runtime client's main TCS (issue 834:
+        # main_tcs may not be in the config entry options yet if
+        # sync_topology hasn't run since the last profile reload —
+        # the coordinator only writes main_tcs to the config entry
+        # during async_save_client_state → sync_learned_topology).
+        if not ctl_id and self._coordinator.client:
+            tcs = getattr(self._coordinator.client, "tcs", None)
+            if tcs and isinstance(getattr(tcs, "id", None), str):
+                ctl_id = tcs.id
+        _LOGGER.debug(
+            "accept_discovered_device: device_id=%s, ctl_id=%s, "
+            "client=%s, config_main_tcs=%s",
+            device_id,
+            ctl_id,
+            self._coordinator.client is not None,
+            self._coordinator.options.get(CONF_SCHEMA, {}).get("main_tcs")
+            if isinstance(self._coordinator.options.get(CONF_SCHEMA, {}), dict)
+            else None,
+        )
 
         try:
             entry = self._coordinator.discovery_manager.accept_device(

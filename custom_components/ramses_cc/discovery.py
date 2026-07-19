@@ -921,7 +921,8 @@ class DiscoveryManager:
         """Build a descriptive comment from scan engine data.
 
         Includes: likely type, confidence, ambiguity notes, binding info,
-        packet codes seen, and battery/RSSI if available.
+        domain_id (appliance_control), packet codes seen, and battery/RSSI
+        if available.
         """
         parts: list[str] = []
 
@@ -942,6 +943,11 @@ class DiscoveryManager:
             parts.append(f"bound to {bound_to}")
         if zone_idx:
             parts.append(f"zone {zone_idx}")
+
+        # Domain ID (FC = appliance_control, issue 834)
+        domain_id = getattr(dev, "domain_id", None) if dev else None
+        if domain_id == "FC":
+            parts.append("domain FC (appliance_control)")
 
         # Packet codes seen
         codes = getattr(dev, "codes_seen", None) if dev else None
@@ -969,6 +975,7 @@ class DiscoveryManager:
         zone_idx: str | None = None,
         ctl_id: str | None = None,
         comment: str | None = None,
+        domain_id: str | None = None,
     ) -> dict[str, Any]:
         """Generate a schema fragment for a discovered device.
 
@@ -993,6 +1000,7 @@ class DiscoveryManager:
         :param zone_idx: Optional zone index (for TRV/THM in a TCS).
         :param ctl_id: Optional CTL device ID (for placing devices in a TCS).
         :param comment: Optional human-readable comment for the ``_comment`` trait.
+        :param domain_id: Optional domain ID (FC=appliance_control, see issue 834).
         :return: A dict that can be deep-merged into the global schema.
         """
         from ramses_rf.schemas import (
@@ -1088,7 +1096,7 @@ class DiscoveryManager:
                 )
             return _merge({SZ_ORPHANS_HEAT: [device_id]})
 
-        # ── BDR: relay — DHW valve or zone actuator ─────────────────
+        # ── BDR: relay — appliance_control, DHW valve, or zone actuator
         if lt == "BDR":
             if ctl_id and zone_idx:
                 return _merge(
@@ -1100,8 +1108,16 @@ class DiscoveryManager:
                         },
                     }
                 )
+            # domain_id=FC means the BDR broadcasts 3B00/3EF0 (TPI loop) —
+            # it's the boiler relay, not a DHW valve.  See issue 834.
+            if ctl_id and domain_id == "FC":
+                return _merge(
+                    {
+                        ctl_id: {SZ_SYSTEM: {SZ_APPLIANCE_CONTROL: device_id}},
+                    }
+                )
             if ctl_id:
-                # No zone — put in DHW as htg_valve
+                # No zone, no FC domain — assume DHW valve (htg_valve)
                 return _merge(
                     {
                         ctl_id: {SZ_DHW_SYSTEM: {SZ_DHW_VALVE: device_id}},
@@ -1198,6 +1214,7 @@ class DiscoveryManager:
             likely_type = dev.likely_type if dev else "unknown"
             bound_to = dev.bound_to if dev else None
             zone_idx = dev.zone_idx if dev else None
+            domain_id = getattr(dev, "domain_id", None) if dev else None
 
             # Build a descriptive comment from scan engine data so the user
             # can see what the scan engine found and any ambiguity.
@@ -1216,6 +1233,7 @@ class DiscoveryManager:
                 zone_idx=zone_idx,
                 ctl_id=ctl_id,
                 comment=comment,
+                domain_id=domain_id,
             )
 
         self._metadata[device_id] = meta
