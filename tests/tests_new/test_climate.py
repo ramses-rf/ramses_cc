@@ -1484,6 +1484,180 @@ async def test_hvac_set_fan_mode_rem_not_found_sends(
 
 
 # ---------------------------------------------------------------------------
+# Phase 3d.6: _commands override vs native CQRS builder precedence tests
+# ---------------------------------------------------------------------------
+
+
+async def test_set_fan_mode_with_fan_commands_override(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """FAN's _commands (dict template) wins over native set_fan_mode.
+
+    Precedence: FAN _commands > REM _commands > known_list > native.
+    """
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem.return_value = "37:111111"
+    mock_device._gwy = MagicMock()
+    mock_device._gwy.async_send_cmd = AsyncMock()
+    mock_device.set_fan_mode = AsyncMock()
+
+    # FAN has _commands as dict template (Phase 3b format)
+    mock_coordinator._remotes = {
+        "30:123456": {"boost": {"verb": "W", "code": "22F1", "payload": "000706"}},
+        # REM also has a command for "boost" — FAN should win
+        "37:111111": {"boost": "W 37:111111 30:123456 22F1 000999"},
+    }
+    mock_coordinator.options = {SZ_KNOWN_LIST: {}}
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.async_write_ha_state = MagicMock()
+    hvac._bound_rem = "37:111111"
+
+    # Mock Command to capture the packet string without parsing
+    # (the FAN template path uses Command() which doesn't parse CLI shorthand)
+    captured_packets: list[str] = []
+
+    def mock_cmd_init(frame: str) -> MagicMock:
+        captured_packets.append(frame)
+        return MagicMock()
+
+    with patch(
+        "custom_components.ramses_cc.climate.Command", side_effect=mock_cmd_init
+    ):
+        await hvac.async_set_fan_mode("boost")
+
+    # Should have sent via async_send_cmd (FAN template), NOT native
+    mock_device._gwy.async_send_cmd.assert_awaited_once()
+    assert any("000706" in p for p in captured_packets), "Should use FAN template"
+    mock_device.set_fan_mode.assert_not_called()
+
+
+async def test_set_fan_mode_with_rem_commands_override(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """REM's _commands (packet string) wins over native set_fan_mode.
+
+    When FAN has no _commands but bound REM does, REM command is used.
+    """
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem.return_value = "37:111111"
+    mock_device._gwy = MagicMock()
+    mock_device._gwy.async_send_cmd = AsyncMock()
+    mock_device.set_fan_mode = AsyncMock()
+
+    # FAN has no _commands; REM has packet string
+    mock_coordinator._remotes = {
+        "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"},
+    }
+    mock_coordinator.options = {SZ_KNOWN_LIST: {}}
+
+    # REM is faked
+    rem_dev = MagicMock()
+    rem_dev.is_faked = True
+    mock_coordinator._get_device = MagicMock(return_value=rem_dev)
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.async_write_ha_state = MagicMock()
+    hvac._bound_rem = "37:111111"
+
+    await hvac.async_set_fan_mode("low")
+
+    # Should have sent via async_send_cmd (REM packet string), NOT native
+    mock_device._gwy.async_send_cmd.assert_awaited_once()
+    sent_cmd = mock_device._gwy.async_send_cmd.call_args[0][0]
+    assert "000406" in str(sent_cmd), "Should use REM command"
+    mock_device.set_fan_mode.assert_not_called()
+
+
+async def test_set_fan_mode_native_fallback(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """No _commands on FAN or REM → native set_fan_mode is called.
+
+    This is the lowest priority fallback (ramses_rf's own method,
+    which internally uses CQRS build_set_fan_mode in 0.58.3).
+    """
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem.return_value = "37:111111"
+    mock_device.set_fan_mode = AsyncMock()
+
+    # No _commands anywhere
+    mock_coordinator._remotes = {}
+    mock_coordinator.options = {SZ_KNOWN_LIST: {}}
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.async_write_ha_state = MagicMock()
+
+    await hvac.async_set_fan_mode("auto")
+
+    # Should have called native set_fan_mode, NOT async_send_cmd
+    mock_device.set_fan_mode.assert_awaited_once_with("auto")
+
+
+async def test_set_fan_mode_fan_commands_wins_over_rem_and_native(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """Full precedence: FAN _commands > REM _commands > native.
+
+    All three sources have a command for the same mode — FAN wins.
+    """
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem.return_value = "37:111111"
+    mock_device._gwy = MagicMock()
+    mock_device._gwy.async_send_cmd = AsyncMock()
+    mock_device.set_fan_mode = AsyncMock()
+
+    mock_coordinator._remotes = {
+        # FAN dict template (Phase 3b)
+        "30:123456": {"low": {"verb": "W", "code": "22F1", "payload": "000406"}},
+        # REM packet string (Phase 3a) — different payload
+        "37:111111": {"low": "W 37:111111 30:123456 22F1 000999"},
+    }
+    mock_coordinator.options = {
+        SZ_KNOWN_LIST: {
+            # known_list legacy — yet another different payload
+            "37:111111": {CONF_COMMANDS: {"low": "W 37:111111 30:123456 22F1 000888"}}
+        }
+    }
+
+    # REM is faked (so REM path would work if FAN didn't have the command)
+    rem_dev = MagicMock()
+    rem_dev.is_faked = True
+    mock_coordinator._get_device = MagicMock(return_value=rem_dev)
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.async_write_ha_state = MagicMock()
+    hvac._bound_rem = "37:111111"
+
+    # Mock Command to capture the packet string without parsing
+    captured_packets: list[str] = []
+
+    def mock_cmd_init(frame: str) -> MagicMock:
+        captured_packets.append(frame)
+        return MagicMock()
+
+    with patch(
+        "custom_components.ramses_cc.climate.Command", side_effect=mock_cmd_init
+    ):
+        await hvac.async_set_fan_mode("low")
+
+    # FAN template should win (payload 000406)
+    mock_device._gwy.async_send_cmd.assert_awaited_once()
+    assert any("000406" in p for p in captured_packets), "FAN template should win"
+    assert not any("000999" in p for p in captured_packets), (
+        "REM command should not be used"
+    )
+    assert not any("000888" in p for p in captured_packets), (
+        "known_list should not be used"
+    )
+    mock_device.set_fan_mode.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Phase 3a: fan_modes property tests
 # ---------------------------------------------------------------------------
 
