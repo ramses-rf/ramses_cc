@@ -1166,7 +1166,15 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                     fan_mode,
                     packet_str,
                 )
-                cmd = Command(packet_str)
+
+                # Users might enter a CLI shorthand OR a raw frame string;
+                # _build_packet_from_template returns a full packet frame
+                # (W --- src dst --:------ code len payload) which
+                # Command.from_cli() parses, but Command() does not.
+                try:
+                    cmd = Command.from_cli(packet_str)
+                except (ValueError, RamsesException):
+                    cmd = Command(packet_str)
                 await self._device._gwy.async_send_cmd(
                     cmd, num_repeats=2, priority=Priority.HIGH
                 )

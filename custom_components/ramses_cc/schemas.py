@@ -12,7 +12,10 @@ import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers import config_validation as cv
 
-from ramses_rf.config import sch_global_traits_dict_factory
+from ramses_rf.config import (
+    sch_global_traits_dict_factory,
+    strip_traits as _strip_traits_rf,
+)
 from ramses_rf.helpers import deep_merge, is_subset, shrink
 from ramses_rf.schemas import (
     SCH_GATEWAY_CONFIG,
@@ -91,6 +94,7 @@ from .const import (
     CONF_UNKNOWN_CODES,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
+    SZ_TR_DISABLED,
     SZ_TR_NAME,
     SZ_TR_OWNER,
     SZ_TR_SKIPPED,
@@ -101,6 +105,27 @@ from .const import (
 _SchemaT = dict[str, Any]
 
 _LOGGER = logging.getLogger(__name__)
+
+# Device ID regex (hex, case-insensitive — matches ramses_rf/coordinator).
+_DEVICE_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9A-F]{2}:[0-9A-F]{6}$", re.I)
+
+# Heat-side prefixes (CH/DHW domain) — devices with these prefixes are NOT
+# treated as VCS at root level (they don't need remotes/sensors).  Any
+# non-heat device at root level without remotes/sensors is moved to
+# orphans_hvac.  See schema_architecture.md, "Device ID prefixes for HVAC".
+_HEAT_PREFIXES: Final[frozenset[str]] = frozenset(
+    ("01:", "04:", "07:", "08:", "10:", "13:", "22:", "34:")
+)
+
+# TCS-level orphan prefixes — ramses_rf's PARENT_RULES only allows
+# BdrSwitch (13:), OtbGateway (10:) and UfhController (02:) as actuators
+# under an Evohome parent.
+_TCS_ORPHAN_PREFIXES: Final[frozenset[str]] = frozenset(("02:", "10:", "13:"))
+
+# ramses_cc-only schema extension keys (stripped before ramses_rf sees them).
+_SCHEMA_EXTENSION_KEYS: Final[frozenset[str]] = frozenset(
+    {SZ_DEVICE_COMMENTS, SZ_OWNER}
+)
 
 # send_command service action
 DEFAULT_NUM_REPEATS: Final[int] = 3  # override ramses_rf DEFAULT_NUM_REPEATS
@@ -220,50 +245,71 @@ def normalise_config(config: _SchemaT) -> tuple[str, _SchemaT, _SchemaT]:
     )
 
 
-def strip_traits_for_validation(schema: _SchemaT) -> _SchemaT:
-    """Strip ``_`` prefixed keys and trait-only entries for schema validation.
+def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
+    """Shared stage-1 + stage-3 schema stripping.
 
-    ramses_rf's ``SCH_GLOBAL_SCHEMAS`` validator rejects ``_`` prefixed keys
-    (user-authored traits like ``_disabled``, ``_name``, ``_alias``) and
-    trait-only top-level entries (e.g. ``{"04:111111": {"_disabled": True}}``).
+    This is the single canonical implementation used by both
+    ``strip_traits_for_validation()`` (for config_flow validation) and
+    ``RamsesCoordinator._strip_schema_extensions()`` (for feeding the
+    Gateway).  It ensures the validation-passing schema matches what the
+    gateway actually receives.
 
-    This function recursively removes all ``_`` prefixed keys from the schema
-    and removes top-level device-ID keys whose value would be empty after
-    stripping (i.e. trait-only entries).  The result is safe to pass to
-    ``SCH_GLOBAL_SCHEMAS`` for validation.
+    Stage 1 (strip ``_`` keys) is delegated to ramses_rf's
+    ``strip_traits`` — no duplicate logic.  Stage 2 (mapping
+    ``_bound``→``bound``, etc.) is done separately in
+    ``_derive_known_list_from_schema`` via ``strip_and_map_traits``.
 
-    :param schema: The full schema dict (with traits).
-    :return: A cleaned schema dict without ``_`` keys, safe for validation.
+    Stage 3 (orchestration, this function):
+    - Skip root-level ``_`` prefixed keys (root ``_owner``, etc.)
+    - Skip ``_SCHEMA_EXTENSION_KEYS`` (``device_comments``, ``owner``)
+      and ``None`` values (ramses_rf's validator rejects ``null``)
+    - Drop HGI (``18:``) entries — they are gateways, not devices
+    - Filter ``_disabled``/``_skipped``/foreign-owner devices from
+      orphan lists
+    - Move non-heat root-level devices without remotes/sensors to
+      ``orphans_hvac`` (ramses_rf treats them as VCS otherwise)
+    - Drop trait-only entries (had ``_`` keys, now empty after stripping)
+    - Drop empty device entries (add to orphans so ramses_rf creates them)
+    - Skip foreign-owner devices (they go to ``block_list``, not schema)
+    - Add un-disabled trait-only devices to orphans
+    - Safety net: move invalid devices from TCS-level ``orphans`` to
+      root-level ``orphans_heat``/``orphans_hvac``
+
+    The ``placed_in_lists`` check prevents duplicates: if a device is
+    already in a parent's ``remotes``/``sensors``/``actuators`` list,
+    its root entry is dropped (not moved to orphans).
     """
-    import re
-
-    _DEVICE_ID_RE = re.compile(r"^[0-9]{2}:[0-9]{6}$")
-    # Heat-side prefixes that should never be treated as VCS at root level.
-    # Any non-01: device NOT in this set is assumed to be HVAC.  Rather than
-    # injecting remotes: [] (which creates a fake VCS entry), we move such
-    # devices to orphans_hvac where they belong until we know more.
-    # See schema_architecture.md, "Device ID prefixes for HVAC".
-    _HEAT_PREFIXES = frozenset(("01:", "04:", "07:", "08:", "10:", "13:", "22:", "34:"))
-
-    def _strip_traits(obj: Any) -> Any:
-        """Recursively strip _ prefixed keys from dicts."""
-        if isinstance(obj, dict):
-            return {
-                k: _strip_traits(v)
-                for k, v in obj.items()
-                if not str(k).startswith("_")
-            }
-        return obj
-
-    # Collect HVAC device IDs that need to be moved to orphans_hvac
-    # (non-heat devices at root level without remotes/sensors — ramses_rf's
-    # SCH_GLOBAL_SCHEMAS would reject them as invalid VCS entries).
-    hvac_to_orphan: set[str] = set()
+    # First pass: collect _disabled/_skipped/foreign device IDs so we can
+    # remove them from orphan lists, and collect un-disabled trait-only
+    # devices so we can add them to orphans (so ramses_rf creates them).
+    ctl_id = schema.get(SZ_MAIN_TCS)
+    root_owner = schema.get(SZ_OWNER)
+    disabled_ids: set[str] = set()
+    skipped_ids: set[str] = set()
+    foreign_ids: set[str] = set()
+    undisabled_ids: set[str] = set()
+    for k, v in schema.items():
+        if isinstance(v, dict) and _DEVICE_ID_RE.match(str(k)) and str(k) != ctl_id:
+            if v.get(SZ_TR_DISABLED) is True:
+                disabled_ids.add(str(k))
+            elif v.get(SZ_TR_SKIPPED) is True:
+                skipped_ids.add(str(k))
+            elif v.get(SZ_TR_DISABLED) is False or v.get(SZ_TR_SKIPPED) is False:
+                # Explicitly un-disabled or un-skipped — needs to be in
+                # orphans so ramses_rf creates it
+                undisabled_ids.add(str(k))
+            # Check ownership: foreign devices go to block_list, not orphans
+            if (
+                root_owner
+                and isinstance(v.get(SZ_TR_OWNER), str)
+                and v[SZ_TR_OWNER] != root_owner
+            ):
+                foreign_ids.add(str(k))
 
     # Collect device IDs that already appear in remotes/sensors/actuators
     # lists inside other device entries.  A root entry for such a device
-    # should NOT be moved to orphans_hvac — it's already placed in its
-    # parent's list, and moving it would create a duplicate.
+    # should NOT be moved to orphans — it's already placed in its parent's
+    # list, and moving it would create a duplicate.
     placed_in_lists: set[str] = set()
     for _k, _v in schema.items():
         if not isinstance(_v, dict):
@@ -272,63 +318,164 @@ def strip_traits_for_validation(schema: _SchemaT) -> _SchemaT:
             if _list_key in _v and isinstance(_v[_list_key], list):
                 placed_in_lists.update(_v[_list_key])
 
-    cleaned: _SchemaT = {}
-    for key, value in schema.items():
-        # Skip top-level _ prefixed keys (root _owner, etc.) — ramses_rf
-        # doesn't understand them and they'd fail validation.
-        if str(key).startswith("_"):
+    result: dict[str, Any] = {}
+    for k, v in schema.items():
+        # Skip all root-level _ prefixed keys (root _owner, _bound, _class,
+        # _faked, etc.) — these are ramses_cc-only traits that ramses_rf's
+        # schema validator would reject.
+        if isinstance(k, str) and k.startswith("_"):
             continue
+        if k in _SCHEMA_EXTENSION_KEYS or v is None:
+            continue
+        # Drop HGI (18:) entries — they are gateways, not heating devices.
+        # ramses_rf doesn't need them in the schema (the HGI is the gateway
+        # itself, not a controlled device).  Keeping them here would cause
+        # ramses_rf to try loading them as TCS/VCS entries.
+        if isinstance(k, str) and k.startswith("18:"):
+            continue
+        # Remove _disabled, _skipped, and foreign-owner devices from orphan lists
+        if k in (SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC) and isinstance(v, list):
+            v = [
+                d
+                for d in v
+                if d not in disabled_ids
+                and d not in skipped_ids
+                and d not in foreign_ids
+            ]
         # Track if the original had _ keys before stripping
-        had_traits = isinstance(value, dict) and any(
-            str(k).startswith("_") for k in value
-        )
-        # Strip _ keys from the value
-        stripped = _strip_traits(value)
-
-        # Non-heat device at root level without remotes/sensors — move to
-        # orphans_hvac instead of keeping it as an invalid VCS entry.
-        # ramses_rf's SCH_GLOBAL_SCHEMAS treats root-level non-CTL devices
-        # as VCS, requiring remotes or sensors.  We don't know enough about
-        # the device yet (prefix is ambiguous: 29:/37:/32: can be FAN/REM/
-        # CO2/HUM), so orphans_hvac is the safe place.
-        # This check comes before the trait-only drop so that trait-only
-        # HVAC devices (e.g. {"_alias": "HRU"}) are also moved, not dropped.
+        had_traits = isinstance(v, dict) and any(str(k2).startswith("_") for k2 in v)
+        # Stage 1: delegate to ramses_rf's strip_traits
+        # (recursive — strips all _ keys, no mapping)
+        # Mapping (_bound→bound, etc.) is done separately in
+        # _derive_known_list_from_schema via strip_and_map_traits.
+        if isinstance(v, dict):
+            v = _strip_traits_rf(v)
+        # Non-heat device at root level without remotes/sensors — move
+        # to orphans_hvac instead of keeping as an invalid VCS entry.
+        # ramses_rf's SCH_GLOBAL_SCHEMAS treats root-level non-CTL
+        # devices as VCS, requiring remotes or sensors.  We don't know
+        # enough about the device yet (prefix is ambiguous: 29:/37:/32:
+        # can be FAN/REM/CO2/HUM), so orphans_hvac is the safe place.
+        # Skip disabled/skipped/foreign devices (they'll be dropped below).
         # EXCEPTION: if the device is already in a remotes/sensors/actuators
         # list inside another entry, don't move it to orphans — that would
         # create a duplicate.  Just drop the root entry instead.
+        # TODO: proper HVAC prefix classification — see
+        # schema_architecture.md, "Device ID prefixes for HVAC".
         if (
-            isinstance(value, dict)
-            and _DEVICE_ID_RE.match(str(key))
-            and str(key)[:3] not in _HEAT_PREFIXES
-            and "remotes" not in stripped
-            and "sensors" not in stripped
+            isinstance(v, dict)
+            and _DEVICE_ID_RE.match(str(k))
+            and str(k)[:3] not in _HEAT_PREFIXES
+            and str(k) not in disabled_ids
+            and str(k) not in skipped_ids
+            and str(k) not in foreign_ids
+            and "remotes" not in v
+            and "sensors" not in v
         ):
-            if str(key) in placed_in_lists:
+            if str(k) in placed_in_lists:
                 # Already placed in a parent's list — drop root entry,
                 # don't move to orphans (would duplicate)
                 continue
-            hvac_to_orphan.add(str(key))
+            undisabled_ids.add(str(k))
             continue
-
-        # If this is a device-ID key that had traits and is now empty
-        # after stripping, it was a trait-only entry — drop it
+        # Drop trait-only entries (had _ keys, now empty after stripping)
+        if had_traits and isinstance(v, dict) and _DEVICE_ID_RE.match(str(k)) and not v:
+            # Un-disabled trait-only entry: add to orphans instead
+            # (ramses_rf would reject the empty dict)
+            continue
+        # Drop empty device entries (no traits, no topology) —
+        # ramses_rf rejects empty dicts for device IDs.  Add to orphans
+        # instead so the device is still created.
         if (
-            had_traits
-            and isinstance(value, dict)
-            and _DEVICE_ID_RE.match(str(key))
-            and not stripped
+            not had_traits
+            and isinstance(v, dict)
+            and _DEVICE_ID_RE.match(str(k))
+            and str(k) != ctl_id
+            and not v
+            and str(k) not in disabled_ids
+            and str(k) not in skipped_ids
         ):
+            undisabled_ids.add(str(k))
             continue
+        # Skip foreign-owner devices — they go to block_list, not the schema
+        if str(k) in foreign_ids:
+            continue
+        result[k] = v
 
-        cleaned[key] = stripped
+    # Add un-disabled trait-only devices to orphans so ramses_rf creates them.
+    # When a user changes _disabled from true to false, the device entry
+    # becomes trait-only (no topology keys).  Without this, the device would
+    # be dropped entirely and ramses_rf would not create it.
+    if undisabled_ids:
+        heat_orphans = set(result.get(SZ_ORPHANS_HEAT, []))
+        hvac_orphans = set(result.get(SZ_ORPHANS_HVAC, []))
+        for dev_id in undisabled_ids:
+            # Skip HGI gateways — they are not heating or HVAC devices
+            # and should not be in any orphan list.
+            if dev_id.startswith("18:"):
+                continue
+            if dev_id[:3] not in _HEAT_PREFIXES:
+                hvac_orphans.add(dev_id)
+                heat_orphans.discard(dev_id)  # avoid heat+hvac duplicates
+            else:
+                heat_orphans.add(dev_id)
+        if heat_orphans:
+            result[SZ_ORPHANS_HEAT] = sorted(heat_orphans)
+        if hvac_orphans:
+            result[SZ_ORPHANS_HVAC] = sorted(hvac_orphans)
 
-    # Add moved devices to orphans_hvac
-    if hvac_to_orphan:
-        existing = set(cleaned.get(SZ_ORPHANS_HVAC, []))
-        existing |= hvac_to_orphan
-        cleaned[SZ_ORPHANS_HVAC] = sorted(existing)
+    # Safety net: move invalid devices out of TCS-level ``orphans`` lists.
+    # ramses_rf's PARENT_RULES only allows BdrSwitch (13:), OtbGateway
+    # (10:) and UfhController (02:) as actuators under an Evohome parent,
+    # so any TRV (04:), THM (22:), RND (34:) or other heat device placed
+    # in a TCS ``orphans`` list raises SchemaInconsistentError at setup
+    # time (see issue 813).  This handles schemas that were saved with
+    # the old (buggy) discovery logic before the fix in discovery.py.
+    moved_heat: set[str] = set()
+    moved_hvac: set[str] = set()
+    for tcs_key, tcs_val in list(result.items()):
+        if not isinstance(tcs_val, dict) or tcs_key == SZ_MAIN_TCS:
+            continue
+        tcs_orphans = tcs_val.get(SZ_ORPHANS)
+        if not isinstance(tcs_orphans, list) or not tcs_orphans:
+            continue
+        keep: list[str] = []
+        for dev_id in tcs_orphans:
+            if dev_id[:3] in _TCS_ORPHAN_PREFIXES:
+                keep.append(dev_id)
+            elif dev_id[:3] in _HEAT_PREFIXES:
+                moved_heat.add(dev_id)
+            else:
+                moved_hvac.add(dev_id)
+        if keep:
+            tcs_val[SZ_ORPHANS] = keep
+        else:
+            tcs_val.pop(SZ_ORPHANS, None)
+    if moved_heat or moved_hvac:
+        heat_set = set(result.get(SZ_ORPHANS_HEAT, [])) | moved_heat
+        hvac_set = set(result.get(SZ_ORPHANS_HVAC, [])) | moved_hvac
+        result[SZ_ORPHANS_HEAT] = sorted(heat_set)
+        result[SZ_ORPHANS_HVAC] = sorted(hvac_set)
 
-    return cleaned
+    return result
+
+
+def strip_traits_for_validation(schema: _SchemaT) -> _SchemaT:
+    """Strip ``_`` prefixed keys and trait-only entries for schema validation.
+
+    Thin wrapper around ``_strip_and_orchestrate()`` — the shared
+    stage-1 + stage-3 stripping logic used by both validation (config_flow)
+    and gateway feeding (coordinator).  This ensures the validation-passing
+    schema matches what the gateway actually receives.
+
+    ramses_rf's ``SCH_GLOBAL_SCHEMAS`` validator rejects ``_`` prefixed keys
+    (user-authored traits like ``_disabled``, ``_name``, ``_alias``) and
+    trait-only top-level entries (e.g. ``{"04:111111": {"_disabled": True}}``).
+
+    :param schema: The full schema dict (with traits).
+    :return: A cleaned schema dict without ``_`` keys, safe for validation.
+    """
+    return _strip_and_orchestrate(schema)
 
 
 # Heat-side prefixes (CH/DHW domain)
