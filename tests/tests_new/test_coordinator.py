@@ -2694,14 +2694,12 @@ class TestDeriveKnownListFromSchema:
         assert result["32:153289"]["bound"] == "37:168270"
         assert result["32:153289"]["class"] == "FAN"
 
-    def test_bound_without_class_not_passed_to_ramserf(self) -> None:
-        """_bound on a FAN without _class is NOT passed to ramses_rf.
+    def test_bound_without_class_kept_for_hvac(self) -> None:
+        """_bound on an HVAC device without _class IS passed to ramses_rf.
 
-        ramses_rf's SCH_TRAITS only accepts 'bound' for HVAC devices with
-        an explicit class.  Without _class, SCH_TRAITS_HEAT rejects bound
-        (PREVENT_EXTRA) and SCH_TRAITS_HVAC also fails.  The _bound trait
-        on a FAN is a ramses_cc concept (used by fan_handler for 2411
-        routing) — ramses_rf doesn't need it.
+        ramses_rf 0.58.2+ SCH_TRAITS_HVAC defaults class to 'HVC', so bound
+        is valid even without explicit _class.  The sanitizer only removes
+        bound from heat devices (SCH_TRAITS_HEAT doesn't accept it).
         """
         schema = {
             "main_tcs": "01:145038",
@@ -2712,9 +2710,59 @@ class TestDeriveKnownListFromSchema:
             },
         }
         result = RamsesCoordinator._derive_known_list_from_schema(schema)
-        # FAN should be in known_list but without bound (no _class)
+        # FAN should be in known_list WITH bound (HVAC, class defaults to HVC)
         assert "32:153289" in result
-        assert "bound" not in result["32:153289"]
+        assert result["32:153289"]["bound"] == "37:168270"
+
+    def test_bound_without_class_removed_for_heat(self) -> None:
+        """_bound on a heat device without _class is NOT passed to ramses_rf.
+
+        SCH_TRAITS_HEAT doesn't accept 'bound' (PREVENT_EXTRA).  The sanitizer
+        removes it for heat devices (prefix in _HEAT_PREFIXES).
+        """
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {},
+            "04:111111": {
+                "_bound": "01:145038",
+            },
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        # TRV should be in known_list but without bound (heat, no _class)
+        assert "04:111111" in result
+        assert "bound" not in result["04:111111"]
+
+    def test_bound_list_passed_to_ramserf(self) -> None:
+        """_bound as list[str] (multi-REM FAN) is passed through to ramses_rf.
+
+        ramses_rf 0.58.2+ SCH_TRAITS_HVAC accepts bound as str | list[str].
+        """
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {},
+            "32:153289": {
+                "_bound": ["37:170000", "37:170001"],
+                "_class": "FAN",
+                "remotes": ["37:170000", "37:170001"],
+            },
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        assert result["32:153289"]["bound"] == ["37:170000", "37:170001"]
+        assert result["32:153289"]["class"] == "FAN"
+
+    def test_bound_str_still_works(self) -> None:
+        """_bound as str (single REM/DIS) still works — regression test."""
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {},
+            "37:168270": {
+                "_bound": "32:153289",
+                "_class": "REM",
+            },
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        assert result["37:168270"]["bound"] == "32:153289"
+        assert result["37:168270"]["class"] == "REM"
 
     def test_scheme_trait_extracted(self) -> None:
         """_scheme on a FAN is extracted into known_list as scheme=<name>."""

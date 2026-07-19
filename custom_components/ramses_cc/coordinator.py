@@ -1138,16 +1138,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 if mapped.get("faked") is True:
                     traits["faked"] = True
                 if mapped.get("bound"):
-                    # ramses_rf's SCH_TRAITS only accepts 'bound' as a
-                    # string (single device ID) for REM/DIS devices.  The
-                    # _bound trait on a FAN is a ramses_cc concept (used by
-                    # fan_handler to route 2411 commands) and may be a list
-                    # for multi-REM binding — ramses_rf doesn't need it.
-                    # Only pass bound to ramses_rf if it's a string (REM/DIS
-                    # pointing to their FAN), not if it's a list (FAN
-                    # pointing to its REMs).
-                    if isinstance(mapped["bound"], str):
-                        traits["bound"] = mapped["bound"]
+                    # ramses_rf 0.58.2+ accepts 'bound' as str | list[str]
+                    # (verified config.py:89-93).  str is for REM/DIS pointing
+                    # to their FAN; list is for FAN pointing to its REMs
+                    # (multi-REM binding).  Both are passed through.
+                    traits["bound"] = mapped["bound"]
                 if mapped.get("scheme"):
                     traits["scheme"] = mapped["scheme"]
             known_list[device_id] = traits
@@ -1187,14 +1182,16 @@ class RamsesCoordinator(DataUpdateCoordinator):
             if isinstance(traits, dict) and isinstance(traits.get("class"), str):
                 traits["class"] = _normalize_class_slug(traits["class"])
 
-        # Sanitize: ramses_rf's SCH_TRAITS only accepts 'bound' for HVAC
-        # devices with an explicit class.  Remove 'bound' from entries that
-        # don't have 'class' to prevent validation errors.
+        # Sanitize: ramses_rf's SCH_TRAITS_HEAT does not accept 'bound'
+        # (only SCH_TRAITS_HVAC has it).  Remove 'bound' from heat devices
+        # that don't have an explicit class.  HVAC devices without class are
+        # fine — SCH_TRAITS_HVAC defaults class to 'HVC' (ramses_rf 0.58.2+).
         for _device_id, traits in known_list.items():
             if (
                 isinstance(traits, dict)
                 and "bound" in traits
                 and not traits.get("class")
+                and _device_id[:3] in _HEAT_PREFIXES
             ):
                 traits.pop("bound", None)
 
