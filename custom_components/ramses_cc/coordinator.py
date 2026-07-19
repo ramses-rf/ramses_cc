@@ -32,6 +32,10 @@ from homeassistant.helpers.event import async_call_later, async_track_time_inter
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
+from ramses_rf.config import (
+    strip_and_map_traits as _strip_and_map_traits,
+    strip_traits as _strip_traits_rf,
+)
 from ramses_rf.devices import (
     _CLASS_BY_SLUG,
     DEV_TYPE_MAP,
@@ -60,52 +64,6 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.systems import Evohome, System, Zone
 from ramses_rf.topology import Child
-
-try:
-    from ramses_rf.config import (
-        strip_and_map_traits as _strip_and_map_traits,
-        strip_traits as _strip_traits_rf,
-    )
-except ImportError:  # ramses_rf < 0.59.0 — fallback inline implementation
-    _STRIP_MAP: dict[str, str] = {
-        "_bound": "bound",
-        "_scheme": "scheme",
-        "_alias": "alias",
-        "_faked": "faked",
-        "_class": "class",
-    }
-
-    def _strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
-        """Fallback: strip _ keys, map known ones to native trait names."""
-        result: dict[str, Any] = {}
-        for key, value in traits.items():
-            if not isinstance(key, str) or not key.startswith("_"):
-                if isinstance(value, dict):
-                    result[key] = _strip_and_map_traits(value)
-                else:
-                    result[key] = value
-                continue
-            native_key = _STRIP_MAP.get(key)
-            if native_key is not None and native_key not in result:
-                if isinstance(value, dict):
-                    result[native_key] = _strip_and_map_traits(value)
-                else:
-                    result[native_key] = value
-        return result
-
-    def _strip_traits_rf(traits: dict[str, Any]) -> dict[str, Any]:
-        """Fallback: recursively strip all _ prefixed keys (no mapping)."""
-        result: dict[str, Any] = {}
-        for key, value in traits.items():
-            if isinstance(key, str) and key.startswith("_"):
-                continue
-            if isinstance(value, dict):
-                result[key] = _strip_traits_rf(value)
-            else:
-                result[key] = value
-        return result
-
-
 from ramses_tx import exceptions as exc
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_ACTIVE_HGI, Code

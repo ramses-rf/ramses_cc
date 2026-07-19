@@ -12,7 +12,10 @@ import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers import config_validation as cv
 
-from ramses_rf.config import sch_global_traits_dict_factory
+from ramses_rf.config import (
+    sch_global_traits_dict_factory,
+    strip_traits as _strip_traits_rf,
+)
 from ramses_rf.helpers import deep_merge, is_subset, shrink
 from ramses_rf.schemas import (
     SCH_GATEWAY_CONFIG,
@@ -235,8 +238,6 @@ def strip_traits_for_validation(schema: _SchemaT) -> _SchemaT:
     :param schema: The full schema dict (with traits).
     :return: A cleaned schema dict without ``_`` keys, safe for validation.
     """
-    import re
-
     _DEVICE_ID_RE = re.compile(r"^[0-9]{2}:[0-9]{6}$")
     # Heat-side prefixes that should never be treated as VCS at root level.
     # Any non-01: device NOT in this set is assumed to be HVAC.  Rather than
@@ -244,16 +245,6 @@ def strip_traits_for_validation(schema: _SchemaT) -> _SchemaT:
     # devices to orphans_hvac where they belong until we know more.
     # See schema_architecture.md, "Device ID prefixes for HVAC".
     _HEAT_PREFIXES = frozenset(("01:", "04:", "07:", "08:", "10:", "13:", "22:", "34:"))
-
-    def _strip_traits(obj: Any) -> Any:
-        """Recursively strip _ prefixed keys from dicts."""
-        if isinstance(obj, dict):
-            return {
-                k: _strip_traits(v)
-                for k, v in obj.items()
-                if not str(k).startswith("_")
-            }
-        return obj
 
     # Collect HVAC device IDs that need to be moved to orphans_hvac
     # (non-heat devices at root level without remotes/sensors — ramses_rf's
@@ -282,8 +273,10 @@ def strip_traits_for_validation(schema: _SchemaT) -> _SchemaT:
         had_traits = isinstance(value, dict) and any(
             str(k).startswith("_") for k in value
         )
-        # Strip _ keys from the value
-        stripped = _strip_traits(value)
+        # Stage 1: delegate to ramses_rf's strip_traits (recursive,
+        # no mapping — mapped trait names like 'bound'/'class' are
+        # rejected by SCH_GLOBAL_SCHEMAS, they belong in known_list).
+        stripped = _strip_traits_rf(value) if isinstance(value, dict) else value
 
         # Non-heat device at root level without remotes/sensors — move to
         # orphans_hvac instead of keeping it as an invalid VCS entry.
