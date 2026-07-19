@@ -1184,7 +1184,28 @@ class RamsesServiceHandler:
         #    _class, etc.) stay because the fragment doesn't contain them.
         current_options = dict(self._coordinator.options)
         current_schema: dict[str, Any] = dict(current_options.get(CONF_SCHEMA, {}))
+
+        # Safeguard: if the device already has a root entry in the schema
+        # (e.g. added manually via the schema editor), do NOT let the
+        # auto-generated fragment overwrite user-configured keys like
+        # _class, remotes, _commands, etc.  The fragment is only needed
+        # to place the device in the right location (orphans, remotes[],
+        # zones, etc.) — the root entry is already correct.
+        existing_root = current_schema.get(device_id)
+        has_existing_root = isinstance(existing_root, dict) and bool(existing_root)
+
         cleaned = remove_device_from_schema(current_schema, device_id)
+
+        if has_existing_root:
+            # Strip the device's root entry from the fragment so deep_merge
+            # doesn't overwrite it.  The fragment still has placement keys
+            # (orphans_hvac, remotes[], etc.) which are merged normally.
+            fragment = {k: v for k, v in fragment.items() if k != device_id}
+            # Ensure the existing root entry is preserved in cleaned
+            # (remove_device_from_schema keeps it, but be explicit)
+            if device_id not in cleaned:
+                cleaned[device_id] = existing_root
+
         merged = deep_merge(fragment, cleaned)
 
         # 1b. Clear _skipped flag — the device is being accepted, so it

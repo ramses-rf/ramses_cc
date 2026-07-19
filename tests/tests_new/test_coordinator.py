@@ -397,6 +397,38 @@ async def test_create_client_strips_commands_from_known_list(
 
 
 @pytest.mark.asyncio
+async def test_create_client_foreign_hgi_not_in_block_list(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Foreign HGIs (18:) must not be put in the block_list.
+
+    A foreign HGI communicates with our controller and the controller's
+    responses (e.g. 0004 zone names) are addressed to the foreign HGI.
+    Blocking the foreign HGI would prevent the active gateway from
+    eavesdropping on those responses (issue 822).
+    """
+    mock_coordinator.options[SZ_SERIAL_PORT] = {SZ_PORT_NAME: "/dev/ttyUSB0"}
+
+    schema = {
+        "_owner": "me",
+        "main_tcs": "01:216136",
+        "01:216136": {"_owner": "me"},
+        "04:111111": {"_owner": "neighbour"},  # foreign non-HGI → block
+        "18:072981": {"_owner": "not-me"},  # foreign HGI → do NOT block
+    }
+
+    with patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy:
+        mock_coordinator._create_client(schema)
+
+        _, kwargs = cast(Any, mock_gwy).call_args
+        gwy_config = kwargs["config"]
+
+        block_list = dict(gwy_config.block_list or {})
+        assert "04:111111" in block_list  # foreign non-HGI is blocked
+        assert "18:072981" not in block_list  # foreign HGI is NOT blocked
+
+
+@pytest.mark.asyncio
 async def test_async_start_with_packet_handler(
     mock_coordinator: RamsesCoordinator, mock_client
 ):

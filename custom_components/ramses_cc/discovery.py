@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta as td
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final
 
@@ -82,6 +82,16 @@ class DeviceMetadata:
     # step, dismissing the mismatch.  Prevents check_class_mismatches
     # from re-flagging the same device every checkpoint cycle.
     class_mismatch_dismissed: bool = False
+    # Set when the scan engine's bound_to differs from the schema's
+    # _bound.  Cleared when the mismatch is resolved.
+    bound_mismatch: str | None = None
+    # Set when the scan engine has a likely_type but the schema entry
+    # has no _class at all.  Cleared when the user adds a _class.
+    missing_class: str | None = None
+    # Set when a device is in the schema but has not been seen by the
+    # scan engine for longer than the orphan threshold.  Cleared when
+    # traffic is seen again.
+    orphaned: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict for JSON storage."""
@@ -94,6 +104,9 @@ class DeviceMetadata:
             "schema_entry": self.schema_entry,
             "class_mismatch": self.class_mismatch,
             "class_mismatch_dismissed": self.class_mismatch_dismissed,
+            "bound_mismatch": self.bound_mismatch,
+            "missing_class": self.missing_class,
+            "orphaned": self.orphaned,
         }
 
     @classmethod
@@ -112,6 +125,9 @@ class DeviceMetadata:
             schema_entry=data.get("schema_entry"),
             class_mismatch=data.get("class_mismatch"),
             class_mismatch_dismissed=data.get("class_mismatch_dismissed", False),
+            bound_mismatch=data.get("bound_mismatch"),
+            missing_class=data.get("missing_class"),
+            orphaned=data.get("orphaned"),
         )
 
 
@@ -173,6 +189,8 @@ class DiscoveryManager:
 
         # Notification ID for the "new devices" notification
         self._notification_id = f"{DOMAIN}_discovery"
+        # Notification ID for the "schema mismatches" notification
+        self._mismatch_notification_id = f"{DOMAIN}_discovery_mismatches"
 
         self._scan.start()
         _LOGGER.info("DiscoveryManager: started (passive scan running)")
@@ -318,6 +336,21 @@ class DiscoveryManager:
                     "DiscoveryManager: device %s not in schema, marked as REMOVED",
                     device_id,
                 )
+            elif device_id in schema_device_ids and meta.status == DiscoveryStatus.NEW:
+                # Device is in the schema (e.g. added manually via the schema
+                # editor) but discovery status is still NEW.  Mark it as
+                # ACCEPTED so it doesn't appear in the "new devices" section
+                # of the review form — it's already in the schema.  If there's
+                # a class mismatch, the review form will show it in the
+                # mismatch section where the user can resolve it.
+                meta.status = DiscoveryStatus.ACCEPTED
+                meta.enabled = True
+                self._metadata[device_id] = meta
+                _LOGGER.info(
+                    "DiscoveryManager: device %s is in schema but had NEW "
+                    "status, marked as ACCEPTED",
+                    device_id,
+                )
 
         # Second, add devices from the scan that aren't in discovery metadata
         # (e.g., devices seen by the system but not yet in discovery)
@@ -445,6 +478,305 @@ class DiscoveryManager:
             if entry.metadata.class_mismatch:
                 result.append(entry)
         return result
+
+    def get_missing_class_devices(self) -> list[DiscoveredDeviceEntry]:
+        """Get devices that have a missing_class flag set.
+
+        These are ACCEPTED devices whose schema entry has no ``_class``
+        but the scan engine has a ``likely_type``.  The review_discovered
+        step shows them so the user can add ``_class`` from the discovery
+        suggestion.
+
+        :return: List of device entries with missing_class set.
+        """
+        result: list[DiscoveredDeviceEntry] = []
+        for entry in self.get_devices():
+            if entry.metadata.missing_class:
+                result.append(entry)
+        return result
+
+    def check_bound_mismatches(self, schema: dict[str, Any]) -> int:
+        """Check for _bound mismatches between scan engine and schema.
+
+        For each device that is in both the scan engine and the schema,
+        compares the scan's ``bound_to`` with the schema's ``_bound``.
+        If they differ, sets ``bound_mismatch`` on the device's metadata.
+
+        The schema is authoritative — this method does NOT modify the
+        schema.  It only warns the user that discovery suggests a
+        different binding.
+
+        :param schema: The current config entry schema (with _ traits).
+        :return: Number of mismatches found.
+        """
+        scan_devices = {d.device_id: d for d in self._scan.get_devices()}
+        mismatches: list[tuple[str, str, str]] = []
+
+        for device_id, dev in scan_devices.items():
+            if device_id.startswith("18:"):
+                continue
+
+            schema_entry = schema.get(device_id)
+            if not isinstance(schema_entry, dict):
+                continue
+
+            schema_bound = schema_entry.get(SZ_TR_BOUND)
+            if not isinstance(schema_bound, str) or not schema_bound:
+                continue  # no _bound in schema — nothing to compare
+
+            scan_bound = dev.bound_to or ""
+            if not scan_bound:
+                continue  # scan doesn't know — not a meaningful mismatch
+
+            # Normalize for comparison (case-insensitive)
+            if scan_bound.upper() != schema_bound.upper():
+                meta = self._metadata.get(device_id, DeviceMetadata())
+                meta.bound_mismatch = f"schema={schema_bound}, discovery={scan_bound}"
+                self._metadata[device_id] = meta
+                mismatches.append((device_id, schema_bound, scan_bound))
+                _LOGGER.debug(
+                    "DiscoveryManager: bound mismatch for %s — "
+                    "schema has _bound=%s but discovery suggests %s",
+                    device_id,
+                    schema_bound,
+                    scan_bound,
+                )
+            else:
+                # Mismatch resolved — clear the flag
+                existing_meta = self._metadata.get(device_id)
+                if existing_meta and existing_meta.bound_mismatch:
+                    existing_meta.bound_mismatch = None
+                    self._metadata[device_id] = existing_meta
+
+        if mismatches:
+            _LOGGER.warning(
+                "DiscoveryManager: %d device(s) have bound mismatches "
+                "between discovery and schema: %s",
+                len(mismatches),
+                ", ".join(f"{d} ({s}→{t})" for d, s, t in mismatches),
+            )
+
+        return len(mismatches)
+
+    def check_missing_class(self, schema: dict[str, Any]) -> int:
+        """Check for schema devices that have no _class but discovery has one.
+
+        For each device that is in both the scan engine and the schema,
+        if the scan engine has a ``likely_type`` but the schema entry has
+        no ``_class``, sets ``missing_class`` on the device's metadata.
+
+        :param schema: The current config entry schema (with _ traits).
+        :return: Number of missing-class flags set.
+        """
+        scan_devices = {d.device_id: d for d in self._scan.get_devices()}
+        missing: list[str] = []
+
+        for device_id, dev in scan_devices.items():
+            if device_id.startswith("18:"):
+                continue
+
+            schema_entry = schema.get(device_id)
+            if not isinstance(schema_entry, dict):
+                continue
+
+            schema_class = schema_entry.get(SZ_TR_CLASS)
+            if isinstance(schema_class, str) and schema_class:
+                # Has _class — clear any previous missing_class flag
+                existing_meta = self._metadata.get(device_id)
+                if existing_meta and existing_meta.missing_class:
+                    existing_meta.missing_class = None
+                    self._metadata[device_id] = existing_meta
+                continue
+
+            scan_type = str(dev.likely_type) if dev.likely_type else ""
+            if not scan_type or scan_type == "DEV":
+                continue  # scan doesn't know either — not actionable
+
+            meta = self._metadata.get(device_id, DeviceMetadata())
+            meta.missing_class = f"discovery={scan_type}"
+            self._metadata[device_id] = meta
+            missing.append(device_id)
+            _LOGGER.debug(
+                "DiscoveryManager: missing _class for %s — "
+                "discovery suggests %s but schema has no _class",
+                device_id,
+                scan_type,
+            )
+
+        if missing:
+            _LOGGER.info(
+                "DiscoveryManager: %d device(s) in schema have no _class "
+                "but discovery has a suggestion: %s",
+                len(missing),
+                ", ".join(missing),
+            )
+
+        return len(missing)
+
+    def check_orphaned_devices(
+        self, schema: dict[str, Any], *, threshold_days: int | None = None
+    ) -> int:
+        """Check for schema devices not seen by discovery for a long time.
+
+        For each device that is in the schema AND in the scan engine's
+        device list, checks ``last_seen``.  If the device hasn't been
+        seen for longer than the threshold, sets ``orphaned`` on the
+        device's metadata.
+
+        Devices that are in the schema but NOT in the scan engine are
+        skipped — the scan may simply not have seen them yet, so
+        flagging them would be a false positive.  This mirrors the
+        behaviour of ``check_for_lost_devices``.
+
+        :param schema: The current config entry schema (with _ traits).
+        :param threshold_days: Days without traffic before flagging.
+            Defaults to ``self._lost_threshold_days``.
+        :return: Number of orphaned flags set.
+        """
+        if threshold_days is None:
+            threshold_days = self._lost_threshold_days
+
+        scan_devices = {d.device_id: d for d in self._scan.get_devices()}
+        now = dt.now()
+        threshold = now - td(days=threshold_days)
+        orphaned: list[str] = []
+
+        for device_id, schema_entry in schema.items():
+            if not isinstance(schema_entry, dict):
+                continue
+            if device_id.startswith("18:"):
+                continue  # HGI — not a real device
+            # Skip structural keys (main_tcs, _owner, etc.)
+            if device_id.startswith("_") or device_id in ("main_tcs",):
+                continue
+
+            dev = scan_devices.get(device_id)
+            if dev is None:
+                # Not in scan — skip (scan may not have seen it yet).
+                # Same logic as check_for_lost_devices.
+                continue
+
+            # In scan — check last_seen
+            last_seen_str = getattr(dev, "last_seen", None)
+            if not last_seen_str:
+                continue
+            try:
+                last_seen = dt.fromisoformat(last_seen_str)
+            except (ValueError, TypeError):
+                continue
+
+            if last_seen < threshold:
+                meta = self._metadata.get(device_id, DeviceMetadata())
+                meta.orphaned = f"last seen {last_seen_str} (>{threshold_days} days)"
+                self._metadata[device_id] = meta
+                orphaned.append(device_id)
+                _LOGGER.debug(
+                    "DiscoveryManager: orphaned device %s — last seen %s",
+                    device_id,
+                    last_seen_str,
+                )
+            else:
+                # Seen recently — clear orphaned flag
+                existing_meta = self._metadata.get(device_id)
+                if existing_meta and existing_meta.orphaned:
+                    existing_meta.orphaned = None
+                    self._metadata[device_id] = existing_meta
+
+        if orphaned:
+            _LOGGER.info(
+                "DiscoveryManager: %d device(s) in schema appear orphaned "
+                "(not seen > %d days): %s",
+                len(orphaned),
+                threshold_days,
+                ", ".join(orphaned),
+            )
+
+        return len(orphaned)
+
+    def check_all_mismatches(self, schema: dict[str, Any]) -> dict[str, int]:
+        """Run all mismatch checks and send a persistent notification if needed.
+
+        Convenience method that calls all four checks:
+        - check_class_mismatches
+        - check_bound_mismatches
+        - check_missing_class
+        - check_orphaned_devices
+
+        :param schema: The current config entry schema (with _ traits).
+        :return: Dict with counts per check type.
+        """
+        counts = {
+            "class_mismatch": self.check_class_mismatches(schema),
+            "bound_mismatch": self.check_bound_mismatches(schema),
+            "missing_class": self.check_missing_class(schema),
+            "orphaned": self.check_orphaned_devices(schema),
+        }
+        total = sum(counts.values())
+        if total > 0:
+            self._send_mismatch_notification(counts)
+        else:
+            # All clear — dismiss any existing mismatch notification
+            async_dismiss_notification(self._hass, self._mismatch_notification_id)
+
+        return counts
+
+    def _send_mismatch_notification(self, counts: dict[str, int]) -> None:
+        """Send a persistent notification about schema/discovery mismatches."""
+        _LOGGER.debug(
+            "DiscoveryManager: _send_mismatch_notification called with counts=%s",
+            counts,
+        )
+        lines: list[str] = []
+
+        class_mm = self.get_mismatched_devices()
+        if counts["class_mismatch"] and class_mm:
+            lines.append(f"**{counts['class_mismatch']} class mismatch(es):**\n")
+            for entry in class_mm:
+                mm = entry.metadata.class_mismatch or ""
+                lines.append(f"- `{entry.device.device_id}` — {mm}")
+            lines.append("")
+
+        bound_mm = [e for e in self.get_devices() if e.metadata.bound_mismatch]
+        if counts["bound_mismatch"] and bound_mm:
+            lines.append(f"**{counts['bound_mismatch']} bound mismatch(es):**\n")
+            for entry in bound_mm:
+                lines.append(
+                    f"- `{entry.device.device_id}` — {entry.metadata.bound_mismatch}"
+                )
+            lines.append("")
+
+        missing_cls = [e for e in self.get_devices() if e.metadata.missing_class]
+        if counts["missing_class"] and missing_cls:
+            lines.append(f"**{counts['missing_class']} missing _class:**\n")
+            for entry in missing_cls:
+                lines.append(
+                    f"- `{entry.device.device_id}` — {entry.metadata.missing_class}"
+                )
+            lines.append("")
+
+        orphaned = [e for e in self.get_devices() if e.metadata.orphaned]
+        if counts["orphaned"] and orphaned:
+            lines.append(f"**{counts['orphaned']} orphaned device(s):**\n")
+            for entry in orphaned:
+                lines.append(
+                    f"- `{entry.device.device_id}` — {entry.metadata.orphaned}"
+                )
+            lines.append("")
+
+        if not lines:
+            return
+
+        lines.append(
+            "[Review discovered devices](/config/integrations/integration/ramses_cc)"
+            " — open **Configure → Review discovered devices** to resolve."
+        )
+
+        async_create_notification(
+            self._hass,
+            message="\n".join(lines),
+            title="RAMSES CC: Schema mismatches detected",
+            notification_id=self._mismatch_notification_id,
+        )
 
     def export_state(self) -> dict[str, Any]:
         """Export full state for persistence.
@@ -663,8 +995,16 @@ class DiscoveryManager:
         # by the user via the schema editor.  Without this, list-based
         # devices (REM/CO2 in remotes[], TRV in zones[], etc.) would have
         # no root entry and _owner could never be set — breaking SSOT.
+        #
+        # Also injects _class on the root entry so the scan engine's
+        # likely_type is persisted as the schema identity trait.  This
+        # matches the architecture intent (accept_discovered_device writes
+        # _class to schema) and prevents check_missing_class from flagging
+        # every accepted device on the next checkpoint.  Uses setdefault so
+        # a caller that already set _class (e.g. add_faked_rem) wins.
         def _merge(fragment: dict[str, Any]) -> dict[str, Any]:
-            fragment.setdefault(device_id, {})
+            root = fragment.setdefault(device_id, {})
+            root.setdefault(SZ_TR_CLASS, lt)
             fragment.update(_list_comment())
             return fragment
 
@@ -672,13 +1012,13 @@ class DiscoveryManager:
         if lt == "CTL":
             return {
                 SZ_MAIN_TCS: device_id,
-                device_id: _with_comment({}),
+                device_id: _with_comment({SZ_TR_CLASS: lt}),
             }
 
         # ── FAN: HVAC controller ────────────────────────────────
         if lt == "FAN":
             return {
-                device_id: _with_comment({SZ_REMOTES: []}),
+                device_id: _with_comment({SZ_TR_CLASS: lt, SZ_REMOTES: []}),
             }
 
         # ── REM / CO2: HVAC remote or sensor — add to parent FAN ─────
@@ -1080,6 +1420,7 @@ class DiscoveryManager:
         """Stop the scan engine and dismiss notifications."""
         self._scan.stop()
         async_dismiss_notification(self._hass, self._notification_id)
+        async_dismiss_notification(self._hass, self._mismatch_notification_id)
         _LOGGER.info("DiscoveryManager: stopped")
 
     def _send_notification(self, new_ids: list[str]) -> None:

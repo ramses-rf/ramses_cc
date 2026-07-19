@@ -119,6 +119,21 @@ class RamsesEntity(CoordinatorEntity):
                     # Safely resolve callable/async attributes
                     attrs[k] = resolve_async_attr(self, self._device, v)
 
+        # Surface discovery mismatch flags (Phase 3c) so they're visible
+        # in Developer Tools without opening the config flow review step.
+        discovery_mgr = getattr(self.coordinator, "discovery_manager", None)
+        if discovery_mgr is not None:
+            meta = discovery_mgr._metadata.get(self._device.id)
+            if meta is not None:
+                for flag_key, flag_val in (
+                    ("class_mismatch", meta.class_mismatch),
+                    ("bound_mismatch", meta.bound_mismatch),
+                    ("missing_class", meta.missing_class),
+                    ("orphaned", meta.orphaned),
+                ):
+                    if isinstance(flag_val, str) and flag_val:
+                        attrs[flag_key] = flag_val
+
         return attrs
 
     async def async_added_to_hass(self) -> None:

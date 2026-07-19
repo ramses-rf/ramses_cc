@@ -14,6 +14,7 @@ from custom_components.ramses_cc.const import (
     CONF_RAMSES_RF,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
+    SZ_TR_NAME,
 )
 from custom_components.ramses_cc.schemas import (
     extract_hvac_schema,
@@ -644,6 +645,53 @@ def test_sync_learned_topology_preserves_existing_zone_class() -> None:
     }
     result = sync_learned_topology(config, learned)
     assert result is None  # No changes — user's class stays
+
+
+def test_sync_learned_topology_adds_zone_name() -> None:
+    """Adds _name from learned schema (e.g. from 0004 zone_name packets)."""
+    config: dict[str, Any] = {
+        "main_tcs": "01:123456",
+        "01:123456": {
+            SZ_ZONES: {"03": {SZ_SENSOR: "22:111111"}},
+        },
+        "22:111111": {},  # root entry exists — no backfill needed
+    }
+    learned: dict[str, Any] = {
+        "main_tcs": "01:123456",
+        "01:123456": {
+            SZ_ZONES: {
+                "03": {SZ_SENSOR: "22:111111", SZ_TR_NAME: "Bedroom"},
+            },
+        },
+        SZ_ORPHANS_HEAT: [],
+        SZ_ORPHANS_HVAC: [],
+    }
+    result = sync_learned_topology(config, learned)
+    assert result is not None
+    assert result["01:123456"][SZ_ZONES]["03"][SZ_TR_NAME] == "Bedroom"
+
+
+def test_sync_learned_topology_preserves_existing_zone_name() -> None:
+    """Does not overwrite _name the user already set."""
+    config: dict[str, Any] = {
+        "main_tcs": "01:123456",
+        "01:123456": {
+            SZ_ZONES: {"03": {SZ_SENSOR: "22:111111", SZ_TR_NAME: "My Name"}},
+        },
+        "22:111111": {},  # root entry exists — no backfill needed
+    }
+    learned: dict[str, Any] = {
+        "main_tcs": "01:123456",
+        "01:123456": {
+            SZ_ZONES: {
+                "03": {SZ_SENSOR: "22:111111", SZ_TR_NAME: "Learned Name"},
+            },
+        },
+        SZ_ORPHANS_HEAT: [],
+        SZ_ORPHANS_HVAC: [],
+    }
+    result = sync_learned_topology(config, learned)
+    assert result is None  # No changes — user's name stays
 
 
 def test_sync_learned_topology_dhw_sensor() -> None:

@@ -798,10 +798,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
         stripped_schema = self._strip_schema_extensions(schema)
         schema_device_ids = self._extract_device_ids_from_stripped(stripped_schema)
         self.discovery_manager.sync_with_schema(schema_device_ids)
-        # Check for class mismatches between discovery and schema
-        # (schema is authoritative — this only logs warnings)
+        # Check for mismatches between discovery and schema
+        # (schema is authoritative — this only logs warnings + notification)
         if isinstance(schema, dict):
-            self.discovery_manager.check_class_mismatches(schema)
+            self.discovery_manager.check_all_mismatches(schema)
         self.discovery_manager.check_for_new_devices()
         self.discovery_manager.check_for_lost_devices()
         await self.async_save_client_state()
@@ -1795,6 +1795,13 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # instead of known_list.  This prevents DeviceNotFoundError log spam
         # for neighbour's / other-RF-library devices — ramses_rf silently
         # drops their packets at the filter level.
+        #
+        # HGI devices (18:) are exempt: foreign HGIs communicate with our
+        # controller and the controller's responses (e.g. 0004 zone names,
+        # 2349 zone modes) are addressed to the foreign HGI.  Blocking them
+        # would prevent the active gateway from eavesdropping on those
+        # responses (issue 822).  ramses_rf's protocol filter already warns
+        # about foreign HGIs but lets their packets through for receiving.
         root_owner = schema.get(SZ_OWNER)
         block_list: dict[str, Any] = {}
         if root_owner:
@@ -1804,6 +1811,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     and _DEVICE_ID_RE.match(str(k))
                     and isinstance(v.get(SZ_TR_OWNER), str)
                     and v[SZ_TR_OWNER] != root_owner
+                    and str(k)[:2] != "18"  # don't block foreign HGIs
                 ):
                     block_list[str(k)] = {}
         # Also add _skipped devices to block_list (deferred decision — still
@@ -2623,10 +2631,19 @@ class RamsesCoordinator(DataUpdateCoordinator):
         runs every 5 minutes (SAVE_STATE_INTERVAL), so users don't have to
         wait after ramses_rf has learned new topology (e.g. from 000C).
 
+        Also runs the discovery mismatch checks (Phase 3c) so mismatches
+        are detected immediately rather than waiting for the 30-minute
+        checkpoint.
+
         :param _: Unused service call argument.
         """
         _LOGGER.info("Manual topology sync requested (sync_topology service)")
         await self.async_save_client_state()
+        # Run mismatch checks immediately (Phase 3c)
+        if self.discovery_manager:
+            schema = self.options.get(CONF_SCHEMA, {})
+            if isinstance(schema, dict):
+                self.discovery_manager.check_all_mismatches(schema)
 
     async def async_send_packet(self, call: ServiceCall) -> None:
         """Delegate to Service Handler.

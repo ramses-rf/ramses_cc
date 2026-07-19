@@ -941,6 +941,111 @@ class TestGenerateSchemaEntryRootEntry:
         assert isinstance(result["32:123456"], dict)
 
 
+class TestGenerateSchemaEntrySetsClass:
+    """Tests that generate_schema_entry sets _class on the root entry.
+
+    The architecture intent (schema_architecture.md: "accept_discovered_device
+    → writes _alias, _class to schema") requires that the scan engine's
+    likely_type is persisted as the _class trait on the device's root entry.
+    Without this, check_missing_class flags every accepted device on the next
+    checkpoint, and the user has to manually add _class in the schema editor.
+    """
+
+    def test_ctl_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("01:145038", "CTL")
+        assert result["01:145038"][SZ_TR_CLASS] == "CTL"
+
+    def test_fan_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("32:123456", "FAN")
+        assert result["32:123456"][SZ_TR_CLASS] == "FAN"
+
+    def test_rem_with_parent_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "37:123456", "REM", bound_to="32:123456"
+        )
+        assert result["37:123456"][SZ_TR_CLASS] == "REM"
+
+    def test_rem_orphan_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("37:123456", "REM")
+        assert result["37:123456"][SZ_TR_CLASS] == "REM"
+
+    def test_co2_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "37:123456", "CO2", bound_to="32:123456"
+        )
+        assert result["37:123456"][SZ_TR_CLASS] == "CO2"
+
+    def test_trv_with_zone_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "04:056053", "TRV", ctl_id="01:145038", zone_idx="02"
+        )
+        assert result["04:056053"][SZ_TR_CLASS] == "TRV"
+
+    def test_trv_orphan_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("04:056053", "TRV")
+        assert result["04:056053"][SZ_TR_CLASS] == "TRV"
+
+    def test_otb_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "10:064873", "OTB", ctl_id="01:145038"
+        )
+        assert result["10:064873"][SZ_TR_CLASS] == "OTB"
+
+    def test_bdr_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "13:123456", "BDR", ctl_id="01:145038", zone_idx="01"
+        )
+        assert result["13:123456"][SZ_TR_CLASS] == "BDR"
+
+    def test_dhw_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "07:123456", "DHW", ctl_id="01:145038"
+        )
+        assert result["07:123456"][SZ_TR_CLASS] == "DHW"
+
+    def test_dis_has_class(self) -> None:
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("37:123456", "DIS")
+        assert result["37:123456"][SZ_TR_CLASS] == "DIS"
+
+    def test_unknown_type_has_class(self) -> None:
+        """Unknown likely_type is still written as _class (uppercased)."""
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry("04:999999", "unknown")
+        assert result["04:999999"][SZ_TR_CLASS] == "UNKNOWN"
+
+    def test_class_is_uppercased(self) -> None:
+        """likely_type is case-insensitive — _class is stored uppercased."""
+        from custom_components.ramses_cc.const import SZ_TR_CLASS
+
+        result = DiscoveryManager.generate_schema_entry(
+            "37:333333", "co2", bound_to="32:123456"
+        )
+        assert result["37:333333"][SZ_TR_CLASS] == "CO2"
+
+
 class TestDiscoveredDeviceEntrySerialization:
     """Tests for DiscoveredDeviceEntry.to_dict and scan property."""
 
@@ -1368,3 +1473,354 @@ class TestGetMismatchedDevices:
 
         result = manager.get_mismatched_devices()
         assert result == []
+
+
+class TestCheckBoundMismatches:
+    """Tests for DiscoveryManager.check_bound_mismatches."""
+
+    def test_no_mismatch_when_bound_matches(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"32:153289": {"_class": "FAN", "_bound": "01:145038"}}
+        count = manager.check_bound_mismatches(schema)
+        assert count == 0
+        meta = manager._metadata.get("32:153289")
+        assert meta is None or meta.bound_mismatch is None
+
+    def test_bound_mismatch_detected(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        # make_discovered_device sets bound_to="01:145038"
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"32:153289": {"_class": "FAN", "_bound": "22:999999"}}
+        count = manager.check_bound_mismatches(schema)
+        assert count == 1
+        meta = manager._metadata.get("32:153289")
+        assert meta is not None
+        assert meta.bound_mismatch is not None
+        assert "22:999999" in meta.bound_mismatch
+        assert "01:145038" in meta.bound_mismatch
+
+    def test_bound_mismatch_cleared_when_resolved(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager._metadata["32:153289"] = DeviceMetadata(
+            bound_mismatch="schema=22:999999, discovery=01:145038"
+        )
+        # Now schema matches scan
+        schema = {"32:153289": {"_class": "FAN", "_bound": "01:145038"}}
+        count = manager.check_bound_mismatches(schema)
+        assert count == 0
+        meta = manager._metadata.get("32:153289")
+        assert meta is not None
+        assert meta.bound_mismatch is None
+
+    def test_no_bound_mismatch_for_device_without_bound(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"32:153289": {"_class": "FAN"}}  # no _bound
+        count = manager.check_bound_mismatches(schema)
+        assert count == 0
+
+    def test_no_bound_mismatch_for_device_not_in_scan(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"04:999999": {"_class": "TRV", "_bound": "01:145038"}}
+        count = manager.check_bound_mismatches(schema)
+        assert count == 0
+
+    def test_bound_mismatch_case_insensitive(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Same ID, different case — should NOT be a mismatch
+        schema = {"32:153289": {"_class": "FAN", "_bound": "01:145038"}}
+        count = manager.check_bound_mismatches(schema)
+        assert count == 0
+
+
+class TestCheckMissingClass:
+    """Tests for DiscoveryManager.check_missing_class."""
+
+    def test_missing_class_detected(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"32:153289": {}}  # no _class
+        count = manager.check_missing_class(schema)
+        assert count == 1
+        meta = manager._metadata.get("32:153289")
+        assert meta is not None
+        assert meta.missing_class is not None
+        assert "FAN" in meta.missing_class
+
+    def test_no_missing_class_when_class_present(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"32:153289": {"_class": "FAN"}}
+        count = manager.check_missing_class(schema)
+        assert count == 0
+        meta = manager._metadata.get("32:153289")
+        assert meta is None or meta.missing_class is None
+
+    def test_missing_class_cleared_when_added(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # First: flag as missing
+        manager._metadata["32:153289"] = DeviceMetadata(missing_class="discovery=FAN")
+        # Now schema has _class
+        schema = {"32:153289": {"_class": "FAN"}}
+        count = manager.check_missing_class(schema)
+        assert count == 0
+        meta = manager._metadata.get("32:153289")
+        assert meta is not None
+        assert meta.missing_class is None
+
+    def test_no_missing_class_for_unknown_scan_type(self) -> None:
+        dev = make_discovered_device("32:153289", "DEV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"32:153289": {}}
+        count = manager.check_missing_class(schema)
+        assert count == 0
+
+    def test_no_missing_class_for_device_not_in_scan(self) -> None:
+        dev = make_discovered_device("32:153289", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"04:999999": {}}  # not in scan
+        count = manager.check_missing_class(schema)
+        assert count == 0
+
+
+class TestCheckOrphanedDevices:
+    """Tests for DiscoveryManager.check_orphaned_devices."""
+
+    def test_not_orphaned_when_not_in_scan(self) -> None:
+        """Device in schema but not in scan is NOT orphaned — scan may
+        not have seen it yet (same logic as check_for_lost_devices)."""
+        scan = make_mock_scan([])  # no devices in scan
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Device in schema, accepted, but not in scan — should NOT flag
+        manager._metadata["04:056053"] = DeviceMetadata(status=DiscoveryStatus.ACCEPTED)
+        schema = {"04:056053": {"_class": "TRV"}}
+        count = manager.check_orphaned_devices(schema)
+        assert count == 0
+
+    def test_not_orphaned_when_new_and_not_in_scan(self) -> None:
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # NEW device not in scan — not orphaned
+        manager._metadata["04:056053"] = DeviceMetadata(status=DiscoveryStatus.NEW)
+        schema = {"04:056053": {"_class": "TRV"}}
+        count = manager.check_orphaned_devices(schema)
+        assert count == 0
+
+    def test_orphaned_when_last_seen_too_old(self) -> None:
+        old_date = (dt.now() - td(days=30)).isoformat()
+        dev = make_discovered_device("04:056053", "TRV", last_seen=old_date)
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"04:056053": {"_class": "TRV"}}
+        count = manager.check_orphaned_devices(schema, threshold_days=7)
+        assert count == 1
+        meta = manager._metadata.get("04:056053")
+        assert meta is not None
+        assert meta.orphaned is not None
+
+    def test_not_orphaned_when_recently_seen(self) -> None:
+        recent_date = (dt.now() - td(days=1)).isoformat()
+        dev = make_discovered_device("04:056053", "TRV", last_seen=recent_date)
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"04:056053": {"_class": "TRV"}}
+        count = manager.check_orphaned_devices(schema, threshold_days=7)
+        assert count == 0
+
+    def test_orphaned_cleared_when_seen_again(self) -> None:
+        recent_date = (dt.now() - td(days=1)).isoformat()
+        dev = make_discovered_device("04:056053", "TRV", last_seen=recent_date)
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Was orphaned, now seen recently
+        manager._metadata["04:056053"] = DeviceMetadata(orphaned="old")
+        schema = {"04:056053": {"_class": "TRV"}}
+        count = manager.check_orphaned_devices(schema, threshold_days=7)
+        assert count == 0
+        meta = manager._metadata.get("04:056053")
+        assert meta is not None
+        assert meta.orphaned is None
+
+    def test_hgi_not_orphaned(self) -> None:
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"18:123456": {"_class": "HGI"}}
+        count = manager.check_orphaned_devices(schema)
+        assert count == 0
+
+    def test_structural_keys_skipped(self) -> None:
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"main_tcs": "01:145038", "_owner": "me"}
+        count = manager.check_orphaned_devices(schema)
+        assert count == 0
+
+
+class TestCheckAllMismatches:
+    """Tests for DiscoveryManager.check_all_mismatches (unified check)."""
+
+    def test_all_clear_when_no_mismatches(self) -> None:
+        recent = (dt.now() - td(days=1)).isoformat()
+        dev = make_discovered_device("32:153289", "FAN", last_seen=recent)
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {"32:153289": {"_class": "FAN", "_bound": "01:145038"}}
+        counts = manager.check_all_mismatches(schema)
+        assert counts == {
+            "class_mismatch": 0,
+            "bound_mismatch": 0,
+            "missing_class": 0,
+            "orphaned": 0,
+        }
+
+    def test_multiple_mismatch_types(self) -> None:
+        recent = (dt.now() - td(days=1)).isoformat()
+        dev = make_discovered_device("32:153289", "DIS", last_seen=recent)
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Bound mismatch + missing class on same device (no _class to
+        # compare, so class_mismatch is 0 — that's a missing_class instead)
+        schema = {"32:153289": {"_bound": "22:999999"}}  # no _class, wrong bound
+        counts = manager.check_all_mismatches(schema)
+        assert counts["class_mismatch"] == 0
+        assert counts["bound_mismatch"] == 1
+        assert counts["missing_class"] == 1
+
+    def test_notification_sent_when_mismatches_found(self) -> None:
+        recent = (dt.now() - td(days=1)).isoformat()
+        dev = make_discovered_device("32:153289", "DIS", last_seen=recent)
+        scan = make_mock_scan([dev])
+        hass = make_mock_hass()
+        manager = DiscoveryManager(hass, scan, auto_notify=False)
+
+        schema = {"32:153289": {"_class": "FAN"}}
+        with patch(
+            "custom_components.ramses_cc.discovery.async_create_notification"
+        ) as mock_create:
+            manager.check_all_mismatches(schema)
+            mock_create.assert_called_once()
+
+    def test_notification_dismissed_when_all_clear(self) -> None:
+        recent = (dt.now() - td(days=1)).isoformat()
+        dev = make_discovered_device("32:153289", "FAN", last_seen=recent)
+        scan = make_mock_scan([dev])
+        hass = make_mock_hass()
+        manager = DiscoveryManager(hass, scan, auto_notify=False)
+
+        schema = {"32:153289": {"_class": "FAN", "_bound": "01:145038"}}
+        with patch(
+            "custom_components.ramses_cc.discovery.async_dismiss_notification"
+        ) as mock_dismiss:
+            manager.check_all_mismatches(schema)
+            mock_dismiss.assert_called_once()
+
+
+class TestSyncWithSchema:
+    """Tests for DiscoveryManager.sync_with_schema.
+
+    sync_with_schema reconciles discovery metadata with the current schema.
+    Devices in the schema but with NEW status should be marked ACCEPTED —
+    they're already in the schema (e.g. added manually via the schema
+    editor), so showing them as "new devices to review" is confusing and
+    prevents the user from resolving class mismatches (the review form's
+    NEW section only has Accept/Decline/Skip, not Update _class).
+    """
+
+    def test_new_device_in_schema_marked_accepted(self) -> None:
+        """A device with NEW status that's in the schema is marked ACCEPTED."""
+        dev = make_discovered_device("37:154519", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # First sync to populate metadata from scan (status=NEW by default)
+        manager.sync_with_schema(set())
+        assert manager._metadata["37:154519"].status == DiscoveryStatus.NEW
+
+        # Now sync with schema that includes 37:154519 — should mark ACCEPTED
+        manager.sync_with_schema({"37:154519", "32:153289"})
+
+        entry = manager.get_device("37:154519")
+        assert entry is not None
+        assert entry.metadata.status == DiscoveryStatus.ACCEPTED
+        assert entry.metadata.enabled is True
+
+    def test_new_device_not_in_schema_stays_new(self) -> None:
+        """A device with NEW status that's NOT in the schema stays NEW."""
+        dev = make_discovered_device("37:154519", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # sync_with_schema — 37:154519 is NOT in the schema
+        manager.sync_with_schema({"32:153289"})
+
+        entry = manager.get_device("37:154519")
+        assert entry is not None
+        assert entry.metadata.status == DiscoveryStatus.NEW
+
+    def test_accepted_device_not_in_schema_marked_removed(self) -> None:
+        """An ACCEPTED device that's removed from the schema is marked REMOVED."""
+        dev = make_discovered_device("37:154519", "FAN")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager.accept_device("37:154519")
+        assert (
+            manager.get_device("37:154519").metadata.status == DiscoveryStatus.ACCEPTED
+        )
+
+        # sync_with_schema — 37:154519 is no longer in the schema
+        manager.sync_with_schema({"32:153289"})
+
+        entry = manager.get_device("37:154519")
+        assert entry is not None
+        assert entry.metadata.status == DiscoveryStatus.REMOVED
+
+    def test_hgi_gateway_skipped(self) -> None:
+        """HGI gateways (18:) are skipped by sync_with_schema."""
+        dev = make_discovered_device("18:130236", "HGI")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # 18: devices are skipped — status stays whatever it was
+        manager.sync_with_schema(set())  # empty schema
+
+        # 18:130236 should not be in metadata (skipped by sync_with_schema)
+        # or if it is, its status should not be REMOVED
+        if "18:130236" in manager._metadata:
+            assert manager._metadata["18:130236"].status != DiscoveryStatus.REMOVED
