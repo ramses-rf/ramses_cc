@@ -36,6 +36,7 @@ from ramses_rf.devices import HvacVentilator
 from ramses_rf.models import TemperatureState
 from ramses_rf.systems.tcs import Evohome
 from ramses_rf.systems.zones import Zone
+from ramses_tx import Command
 from ramses_tx.const import SZ_MODE, SZ_SETPOINT, SZ_SYSTEM_MODE
 from ramses_tx.exceptions import ProtocolSendFailed, TransportError
 
@@ -1514,17 +1515,16 @@ async def test_set_fan_mode_with_fan_commands_override(
     hvac.async_write_ha_state = MagicMock()
     hvac._bound_rem = "37:111111"
 
-    # Mock Command to capture the packet string without parsing
-    # (the FAN template path uses Command() which doesn't parse CLI shorthand)
+    # Mock Command.from_cli to capture the packet string without parsing.
+    # The FAN template path uses Command.from_cli() first (which parses the
+    # full packet format), then falls back to Command().
     captured_packets: list[str] = []
 
-    def mock_cmd_init(frame: str) -> MagicMock:
+    def mock_from_cli(frame: str) -> MagicMock:
         captured_packets.append(frame)
         return MagicMock()
 
-    with patch(
-        "custom_components.ramses_cc.climate.Command", side_effect=mock_cmd_init
-    ):
+    with patch.object(Command, "from_cli", side_effect=mock_from_cli):
         await hvac.async_set_fan_mode("boost")
 
     # Should have sent via async_send_cmd (FAN template), NOT native
@@ -1633,16 +1633,14 @@ async def test_set_fan_mode_fan_commands_wins_over_rem_and_native(
     hvac.async_write_ha_state = MagicMock()
     hvac._bound_rem = "37:111111"
 
-    # Mock Command to capture the packet string without parsing
+    # Mock Command.from_cli to capture the packet string without parsing
     captured_packets: list[str] = []
 
-    def mock_cmd_init(frame: str) -> MagicMock:
+    def mock_from_cli(frame: str) -> MagicMock:
         captured_packets.append(frame)
         return MagicMock()
 
-    with patch(
-        "custom_components.ramses_cc.climate.Command", side_effect=mock_cmd_init
-    ):
+    with patch.object(Command, "from_cli", side_effect=mock_from_cli):
         await hvac.async_set_fan_mode("low")
 
     # FAN template should win (payload 000406)

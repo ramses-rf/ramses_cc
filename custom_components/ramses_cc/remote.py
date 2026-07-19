@@ -27,7 +27,12 @@ from ramses_rf.devices import HvacRemote, HvacVentilator
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_tx.command import Command
 from ramses_tx.const import DEFAULT_GAP_DURATION, Priority
-from ramses_tx.exceptions import ProtocolError, ProtocolSendFailed, ProtocolTimeoutError
+from ramses_tx.exceptions import (
+    ProtocolError,
+    ProtocolSendFailed,
+    ProtocolTimeoutError,
+    RamsesException,
+)
 
 from .const import ATTR_DEVICE_ID, CONF_SCHEMA, DOMAIN
 from .coordinator import RamsesCoordinator
@@ -160,9 +165,7 @@ def _build_packet_from_template(
         )
 
     dst = fan_device.id
-    brd = "--:------"
-    length = f"{len(payload) // 2:03d}"
-    return f"{verb} --- {src} {dst} {brd} {code} {length} {payload}"
+    return f"{verb} {src} {dst} {code} {payload}"
 
 
 def _parse_packet_to_template(packet: str) -> dict[str, str]:
@@ -586,7 +589,14 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
                     f"{self._device.id} is not configured for faking"
                 )
 
-        cmd = Command(packet_str)
+        # Users might enter a CLI shorthand OR a raw frame string;
+        # _build_packet_from_template returns CLI shorthand (W src dst code
+        # payload) which Command.from_cli() parses.  For REM packet strings,
+        # users might enter either format — try from_cli first, then Command.
+        try:
+            cmd = Command.from_cli(packet_str)
+        except (ValueError, RamsesException):
+            cmd = Command(packet_str)
 
         if not self.coordinator.client:
             raise HomeAssistantError(

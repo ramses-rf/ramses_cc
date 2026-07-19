@@ -1155,7 +1155,7 @@ async def test_send_command_sends_custom_command_packet(
     custom_pkt = "RQ --- 30:123456 18:111111 --:------ 22F1 003 000030"
     remote_entity._commands = {"my_custom": custom_pkt}
 
-    with patch("custom_components.ramses_cc.remote.Command", side_effect=lambda x: x):
+    with patch.object(Command, "from_cli", side_effect=lambda x: x):
         await remote_entity.async_send_command("my_custom")
 
     mock_coordinator.client.async_send_cmd.assert_awaited_once()
@@ -1241,7 +1241,7 @@ def test_is_command_dict_false_for_incomplete_dict() -> None:
 
 
 def test_build_packet_from_template() -> None:
-    """_build_packet_from_template builds a full packet from dict."""
+    """_build_packet_from_template builds CLI shorthand from dict."""
     fan = MagicMock(spec=HvacVentilator)
     fan.id = FAN_ID
     fan.get_bound_rem = MagicMock(return_value=BOUND_REM_ID)
@@ -1251,7 +1251,7 @@ def test_build_packet_from_template() -> None:
 
     cmd_def = {"verb": "W", "code": "22F7", "payload": "0000EF"}
     result = _build_packet_from_template(cmd_def, fan, coordinator)
-    assert result == "W --- 32:153001 30:160000 --:------ 22F7 003 0000EF"
+    assert result == "W 32:153001 30:160000 22F7 0000EF"
 
 
 def test_build_packet_from_template_explicit_src() -> None:
@@ -1308,7 +1308,7 @@ def test_build_packet_from_template_no_src_raises() -> None:
 
 
 def test_build_packet_length_calculated() -> None:
-    """_build_packet_from_template calculates length from payload."""
+    """_build_packet_from_template includes payload (length calculated by from_cli)."""
     fan = MagicMock(spec=HvacVentilator)
     fan.id = FAN_ID
     fan.get_bound_rem = MagicMock(return_value=BOUND_REM_ID)
@@ -1316,15 +1316,15 @@ def test_build_packet_length_calculated() -> None:
     coordinator = MagicMock()
     coordinator.client = MagicMock()
 
-    # 6 hex chars = 3 bytes → "003"
+    # 6 hex chars = 3 bytes → payload included
     cmd_def = {"verb": "W", "code": "22F7", "payload": "0000EF"}
     result = _build_packet_from_template(cmd_def, fan, coordinator)
-    assert " 003 " in result
+    assert "0000EF" in result
 
-    # 4 hex chars = 2 bytes → "002"
+    # 4 hex chars = 2 bytes → payload included
     cmd_def2 = {"verb": "W", "code": "22B0", "payload": "0005"}
     result2 = _build_packet_from_template(cmd_def2, fan, coordinator)
-    assert " 002 " in result2
+    assert "0005" in result2
 
 
 @pytest.fixture
@@ -1446,7 +1446,7 @@ async def test_fan_send_command_dict_template(
     fan_coordinator: MagicMock,
 ) -> None:
     """FAN entity send_command builds packet from dict template."""
-    with patch("custom_components.ramses_cc.remote.Command", side_effect=lambda x: x):
+    with patch.object(Command, "from_cli", side_effect=lambda x: x):
         await fan_remote_entity.async_send_command("bypass_on")
     # Verify async_send_cmd was called with the built packet string
     fan_coordinator.client.async_send_cmd.assert_called_once()
@@ -1462,7 +1462,7 @@ async def test_fan_send_command_rem_string_fallback(
 ) -> None:
     """FAN entity send_command uses REM packet string for fallback commands."""
     # "boost" is a REM command (packet string), not a FAN dict template
-    with patch("custom_components.ramses_cc.remote.Command", side_effect=lambda x: x):
+    with patch.object(Command, "from_cli", side_effect=lambda x: x):
         await fan_remote_entity.async_send_command("boost")
     fan_coordinator.client.async_send_cmd.assert_called_once()
     cmd = fan_coordinator.client.async_send_cmd.call_args.args[0]
