@@ -776,6 +776,43 @@ class TestGenerateSchemaEntryEdgeCases:
         )
         assert result["01:111111"][SZ_DHW_SYSTEM][SZ_DHW_VALVE] == "08:333333"
 
+    def test_bdr_with_ctl_and_fc_domain_is_appliance_control(self) -> None:
+        """BDR with ctl_id and domain_id=FC is the appliance_control (issue 834).
+
+        A BDR broadcasting 3B00/3EF0 (TPI loop) is the boiler relay, not a
+        DHW valve.  The scan engine sets domain_id=FC; generate_schema_entry
+        must place it under system.appliance_control, not stored_hotwater.
+        """
+        from ramses_rf.schemas import SZ_APPLIANCE_CONTROL, SZ_SYSTEM
+
+        result = DiscoveryManager.generate_schema_entry(
+            "13:121025", "BDR", ctl_id="01:046100", domain_id="FC"
+        )
+        assert result["01:046100"][SZ_SYSTEM][SZ_APPLIANCE_CONTROL] == "13:121025"
+
+    def test_bdr_with_fc_domain_no_ctl_goes_to_orphans(self) -> None:
+        """BDR with domain_id=FC but no ctl_id goes to orphans_heat."""
+        from ramses_rf.schemas import SZ_ORPHANS_HEAT
+
+        result = DiscoveryManager.generate_schema_entry(
+            "13:121025", "BDR", domain_id="FC"
+        )
+        assert "13:121025" in result[SZ_ORPHANS_HEAT]
+
+    def test_bdr_with_zone_takes_priority_over_fc_domain(self) -> None:
+        """BDR with both zone_idx and domain_id=FC is a zone actuator.
+
+        zone_idx is a stronger signal (explicit zone binding) than the FC
+        domain (TPI loop).  A BDR could theoretically be both, but zone
+        binding wins.
+        """
+        from ramses_rf.schemas import SZ_ACTUATORS, SZ_ZONES
+
+        result = DiscoveryManager.generate_schema_entry(
+            "13:121025", "BDR", ctl_id="01:046100", zone_idx="02", domain_id="FC"
+        )
+        assert "13:121025" in result["01:046100"][SZ_ZONES]["02"][SZ_ACTUATORS]
+
     def test_bdr_no_ctl(self) -> None:
         """BDR without ctl_id goes to heat orphans."""
         from ramses_rf.schemas import SZ_ORPHANS_HEAT
