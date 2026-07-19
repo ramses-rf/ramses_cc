@@ -3067,9 +3067,11 @@ class TestStripSchemaExtensions:
         assert "_bound" not in result["32:153289"]
         assert "_scheme" not in result["32:153289"]
         assert "remotes" in result["32:153289"]  # non-trait key kept
-        # _ traits stripped from REM (entry becomes empty → dropped, in orphans)
+        # _ traits stripped from REM (entry becomes empty → dropped).
+        # REM is already in FAN's remotes[] list, so it is NOT moved to
+        # orphans_hvac (placed_in_lists check prevents duplicate).
         assert "37:168270" not in result
-        assert "37:168270" in result.get("orphans_hvac", [])
+        assert "37:168270" not in result.get("orphans_hvac", [])
 
 
 # ───────────────────────────────────────────────────────────────────────
