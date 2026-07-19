@@ -24,6 +24,7 @@ from homeassistant.components.persistent_notification import (
     async_dismiss as async_dismiss_notification,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -88,6 +89,10 @@ class DeviceMetadata:
     # Set when the scan engine has a likely_type but the schema entry
     # has no _class at all.  Cleared when the user adds a _class.
     missing_class: str | None = None
+    # Set when the user explicitly chose "Skip" in the review_discovered
+    # step, dismissing the missing_class suggestion.  Prevents
+    # check_missing_class from re-flagging the same device every cycle.
+    missing_class_dismissed: bool = False
     # Set when a device is in the schema but has not been seen by the
     # scan engine for longer than the orphan threshold.  Cleared when
     # traffic is seen again.
@@ -106,6 +111,7 @@ class DeviceMetadata:
             "class_mismatch_dismissed": self.class_mismatch_dismissed,
             "bound_mismatch": self.bound_mismatch,
             "missing_class": self.missing_class,
+            "missing_class_dismissed": self.missing_class_dismissed,
             "orphaned": self.orphaned,
         }
 
@@ -127,6 +133,7 @@ class DeviceMetadata:
             class_mismatch_dismissed=data.get("class_mismatch_dismissed", False),
             bound_mismatch=data.get("bound_mismatch"),
             missing_class=data.get("missing_class"),
+            missing_class_dismissed=data.get("missing_class_dismissed", False),
             orphaned=data.get("orphaned"),
         )
 
@@ -520,20 +527,37 @@ class DiscoveryManager:
             if not isinstance(schema_entry, dict):
                 continue
 
+            # _bound is str (REM/DIS → their FAN) or list[str] (FAN →
+            # its bound REMs, Phase 3b multi-REM format)
             schema_bound = schema_entry.get(SZ_TR_BOUND)
-            if not isinstance(schema_bound, str) or not schema_bound:
+            if isinstance(schema_bound, str):
+                schema_bound_ids = [schema_bound] if schema_bound else []
+            elif isinstance(schema_bound, list):
+                schema_bound_ids = [b for b in schema_bound if isinstance(b, str) and b]
+            else:
+                schema_bound_ids = []
+            if not schema_bound_ids:
                 continue  # no _bound in schema — nothing to compare
 
             scan_bound = dev.bound_to or ""
             if not scan_bound:
                 continue  # scan doesn't know — not a meaningful mismatch
 
-            # Normalize for comparison (case-insensitive)
-            if scan_bound.upper() != schema_bound.upper():
+            # Normalize for comparison (case-insensitive).  For a list,
+            # the scan's single bound_to must be one of the schema's
+            # bound IDs — otherwise it's a mismatch.
+            schema_bound_str = (
+                schema_bound
+                if isinstance(schema_bound, str)
+                else ", ".join(schema_bound_ids)
+            )
+            if scan_bound.upper() not in {b.upper() for b in schema_bound_ids}:
                 meta = self._metadata.get(device_id, DeviceMetadata())
-                meta.bound_mismatch = f"schema={schema_bound}, discovery={scan_bound}"
+                meta.bound_mismatch = (
+                    f"schema={schema_bound_str}, discovery={scan_bound}"
+                )
                 self._metadata[device_id] = meta
-                mismatches.append((device_id, schema_bound, scan_bound))
+                mismatches.append((device_id, schema_bound_str, scan_bound))
                 _LOGGER.debug(
                     "DiscoveryManager: bound mismatch for %s — "
                     "schema has _bound=%s but discovery suggests %s",
@@ -592,6 +616,11 @@ class DiscoveryManager:
             if not scan_type or scan_type == "DEV":
                 continue  # scan doesn't know either — not actionable
 
+            # Skip if the user already dismissed this missing_class ("Skip")
+            existing_meta = self._metadata.get(device_id)
+            if existing_meta and existing_meta.missing_class_dismissed:
+                continue  # user decided — don't re-flag
+
             meta = self._metadata.get(device_id, DeviceMetadata())
             meta.missing_class = f"discovery={scan_type}"
             self._metadata[device_id] = meta
@@ -637,7 +666,7 @@ class DiscoveryManager:
             threshold_days = self._lost_threshold_days
 
         scan_devices = {d.device_id: d for d in self._scan.get_devices()}
-        now = dt.now()
+        now = dt_util.now()  # tz-aware (HA default timezone)
         threshold = now - td(days=threshold_days)
         orphaned: list[str] = []
 
@@ -664,6 +693,11 @@ class DiscoveryManager:
                 last_seen = dt.fromisoformat(last_seen_str)
             except (ValueError, TypeError):
                 continue
+
+            # Ensure tz-aware for comparison (ramses_rf may store naive
+            # or tz-aware datetimes depending on version/config).
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=dt_util.get_default_time_zone())
 
             if last_seen < threshold:
                 meta = self._metadata.get(device_id, DeviceMetadata())

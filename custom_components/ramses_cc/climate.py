@@ -1060,8 +1060,13 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                     base_modes.append(cmd_name)
 
         # Phase 3a: bound REM's _commands (packet strings, fallback)
+        # Only offer REM commands if the REM is faked — sending as a
+        # non-faked REM would collide with the physical remote's transmissions.
         bound_rem = self._bound_rem or self._device.get_bound_rem()
         if bound_rem:
+            rem_dev = self.coordinator._get_device(str(bound_rem))
+            if rem_dev is not None and not rem_dev.is_faked:
+                return base_modes  # REM not faked — don't offer its commands
             rem_commands = remotes.get(str(bound_rem), {})
             if isinstance(rem_commands, dict):
                 cmds, _ = _split_commands(rem_commands)
@@ -1170,6 +1175,18 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
 
             # Check REM packet strings (Phase 3a fallback)
             if fan_mode in rem_commands:
+                # Verify the bound REM is faked — we're sending a packet
+                # as if it came from that REM, which only makes sense if
+                # the REM is configured for faking.  This mirrors the
+                # check in remote.py's async_send_command.
+                if bound_rem:
+                    rem_dev = self.coordinator._get_device(str(bound_rem))
+                    if rem_dev is not None and not rem_dev.is_faked:
+                        raise HomeAssistantError(
+                            f"Bound REM {bound_rem} is not configured for "
+                            f"faking — cannot send custom command"
+                        )
+
                 cmd_str = rem_commands[fan_mode]
                 _LOGGER.info(
                     "Intercepted fan_mode '%s'; sending custom command: %s",

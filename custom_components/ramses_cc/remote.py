@@ -29,7 +29,7 @@ from ramses_tx.command import Command
 from ramses_tx.const import DEFAULT_GAP_DURATION, Priority
 from ramses_tx.exceptions import ProtocolError, ProtocolSendFailed, ProtocolTimeoutError
 
-from .const import ATTR_DEVICE_ID, DOMAIN
+from .const import ATTR_DEVICE_ID, CONF_SCHEMA, DOMAIN
 from .coordinator import RamsesCoordinator
 from .entity import RamsesEntity, RamsesEntityDescription
 from .schemas import DEFAULT_NUM_REPEATS, DEFAULT_TIMEOUT
@@ -312,7 +312,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         """
         if not self.is_fan_entity:
             return []
-        schema = self.coordinator.options.get("schema", {})
+        schema = self.coordinator.options.get(CONF_SCHEMA, {})
         entry = schema.get(self._device.id, {})
         if not isinstance(entry, dict):
             return []

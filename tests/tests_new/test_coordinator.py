@@ -4600,7 +4600,7 @@ class TestSyncRemotesToSchema:
     """Tests for RamsesCoordinator._sync_remotes_to_schema (Phase 3a)."""
 
     def test_remotes_copied_to_schema(self) -> None:
-        """Commands from remotes are copied to schema _commands."""
+        """Commands from remotes are copied to schema _commands (first-time)."""
         schema: dict[str, Any] = {"32:153001": {"_class": "REM"}}
         remotes = {"32:153001": {"turn_on": "I --- 22F1 003 000030"}}
         result = RamsesCoordinator._sync_remotes_to_schema(schema, remotes)
@@ -4609,6 +4609,35 @@ class TestSyncRemotesToSchema:
         }
         # Existing _class preserved
         assert result["32:153001"]["_class"] == "REM"
+
+    def test_remotes_not_resurrected_for_known_command_device(self) -> None:
+        """Commands are NOT re-added if device previously had _commands.
+
+        If known_command_devices includes a device, and that device's
+        schema entry no longer has _commands (user deleted it), the
+        commands are NOT resurrected from remotes.
+        """
+        schema: dict[str, Any] = {"32:153001": {"_class": "REM"}}
+        remotes = {"32:153001": {"turn_on": "I --- 22F1 003 000030"}}
+        # Device previously had _commands — user deleted them
+        known = {"32:153001"}
+        result = RamsesCoordinator._sync_remotes_to_schema(schema, remotes, known)
+        assert SZ_TR_COMMANDS not in result["32:153001"]
+        assert result["32:153001"]["_class"] == "REM"
+
+    def test_remotes_migrated_for_unknown_command_device(self) -> None:
+        """Commands ARE migrated for devices not in known_command_devices.
+
+        If known_command_devices is provided but the device is NOT in it,
+        the commands are migrated normally (first-time migration).
+        """
+        schema: dict[str, Any] = {"32:153001": {"_class": "REM"}}
+        remotes = {"32:153001": {"turn_on": "I --- 22F1 003 000030"}}
+        known: set[str] = set()  # device not known → migrate
+        result = RamsesCoordinator._sync_remotes_to_schema(schema, remotes, known)
+        assert result["32:153001"][SZ_TR_COMMANDS] == {
+            "turn_on": "I --- 22F1 003 000030"
+        }
 
     def test_schema_commands_not_overwritten(self) -> None:
         """Schema _commands is authoritative — remotes don't overwrite."""
@@ -4798,6 +4827,9 @@ async def test_async_save_client_state_else_branch_syncs_remotes(
     When learned topology is NOT richer than config (enriched is None) and
     no comments are refreshed, the else branch still runs
     _sync_remotes_to_schema to migrate commands from .storage[remotes].
+
+    The REM is in the config schema but has no _commands yet (first-time
+    migration).  _devices_with_commands is empty, so migration proceeds.
     """
     assert mock_coordinator.client is not None
 
@@ -4810,6 +4842,7 @@ async def test_async_save_client_state_else_branch_syncs_remotes(
 
     # Remotes has commands that need migrating
     mock_coordinator._remotes = {rem_id: commands}
+    mock_coordinator._devices_with_commands = set()  # first-time migration
     mock_coordinator._entities = {}
     mock_coordinator._skip_topology_sync = False
 
@@ -4838,6 +4871,54 @@ async def test_async_save_client_state_else_branch_syncs_remotes(
     assert saved_options[CONF_SCHEMA][rem_id][SZ_TR_COMMANDS] == commands
 
 
+async def test_async_save_client_state_no_resurrection_of_deleted_commands(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Save cycle does not resurrect user-deleted _commands from remotes.
+
+    If a device previously had _commands in the schema and the user deleted
+    them, _sync_remotes_to_schema should NOT re-add them from .storage[remotes].
+    """
+    assert mock_coordinator.client is not None
+
+    rem_id = "37:170000"
+    commands = {"boost": "I --- 37:170000 30:160000 --:------ 22F1 003 000030"}
+
+    # Config schema has the REM but _commands was deleted by the user
+    config_schema: dict[str, Any] = {rem_id: {"_class": "REM"}}
+    mock_coordinator.options = {CONF_SCHEMA: config_schema, SZ_KNOWN_LIST: {}}
+
+    # Remotes still has the old commands (from .storage)
+    mock_coordinator._remotes = {rem_id: commands}
+    # Device previously had _commands — should NOT be resurrected
+    mock_coordinator._devices_with_commands = {rem_id}
+    mock_coordinator._entities = {}
+    mock_coordinator._skip_topology_sync = False
+
+    # Learned schema is same as config (no enrichment)
+    learned_schema = dict(config_schema)
+    cast(Any, mock_coordinator.client).get_state = MagicMock(
+        return_value=(learned_schema, {})
+    )
+
+    mock_save = AsyncMock()
+    cast(Any, mock_coordinator.store).async_save = mock_save
+
+    # Patch sync_learned_topology to return None (no enrichment)
+    with (
+        patch(
+            "custom_components.ramses_cc.coordinator.sync_learned_topology",
+            return_value=None,
+        ),
+        patch.object(mock_coordinator, "discovery_manager", None),
+    ):
+        await mock_coordinator.async_save_client_state()
+
+    # _commands should NOT be in the schema (user deleted, not resurrected)
+    saved_schema = mock_coordinator.options[CONF_SCHEMA]
+    assert SZ_TR_COMMANDS not in saved_schema.get(rem_id, {})
+
+
 async def test_async_save_client_state_backup_before_migration(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -4858,6 +4939,7 @@ async def test_async_save_client_state_backup_before_migration(
 
     # Remotes has commands that need migrating
     mock_coordinator._remotes = {rem_id: commands}
+    mock_coordinator._devices_with_commands = set()  # first-time migration
     mock_coordinator._entities = {}
     mock_coordinator._skip_topology_sync = False
 
@@ -4940,6 +5022,61 @@ async def test_async_save_client_state_no_backup_when_already_migrated(
 
     # No backup should be created (already migrated)
     mock_backup.assert_not_awaited()
+
+
+async def test_async_save_client_state_survives_validation_failure(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Save cycle skips topology sync when _validate_schema_for_ramserf raises.
+
+    If the enriched schema fails validation, the save cycle should log the
+    error and skip the config entry update — NOT abort with an unhandled
+    ValueError, and NOT overwrite the config entry with an invalid schema.
+    The rest of the save (packets, remotes to .storage) should still happen.
+    """
+    assert mock_coordinator.client is not None
+
+    rem_id = "37:170000"
+    commands = {"boost": "I --- 37:170000 30:160000 --:------ 22F1 003 000030"}
+
+    config_schema: dict[str, Any] = {rem_id: {"_class": "REM"}}
+    original_options = {CONF_SCHEMA: config_schema, SZ_KNOWN_LIST: {}}
+    mock_coordinator.options = dict(original_options)
+
+    mock_coordinator._remotes = {rem_id: commands}
+    mock_coordinator._entities = {}
+    mock_coordinator._skip_topology_sync = False
+
+    # Enriched schema that will fail validation
+    enriched_schema = {rem_id: {"_class": "REM"}, "main_tcs": "01:123456"}
+    cast(Any, mock_coordinator.client).get_state = MagicMock(
+        return_value=(enriched_schema, {})
+    )
+
+    mock_save = AsyncMock()
+    cast(Any, mock_coordinator.store).async_save = mock_save
+    mock_backup = AsyncMock()
+    cast(Any, mock_coordinator.store).async_save_backup = mock_backup
+
+    with (
+        patch(
+            "custom_components.ramses_cc.coordinator.sync_learned_topology",
+            return_value=enriched_schema,
+        ),
+        patch.object(mock_coordinator, "discovery_manager", None),
+        patch.object(
+            mock_coordinator,
+            "_validate_schema_for_ramserf",
+            side_effect=ValueError("Schema validation failed: bad key"),
+        ),
+    ):
+        # Should NOT raise — the ValueError is caught
+        await mock_coordinator.async_save_client_state()
+
+    # Config entry options should NOT be updated with the invalid schema
+    assert mock_coordinator.options[CONF_SCHEMA] == config_schema
+    # The save to .storage should still happen (packets, remotes)
+    mock_save.assert_awaited()
 
 
 # ---------------------------------------------------------------------------

@@ -1725,12 +1725,19 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         )
                 # Clear the missing_class flag for both "add_class" and "skip"
                 # so the notification doesn't re-fire immediately.  For "skip"
-                # the flag will be re-set on the next checkpoint if the schema
-                # still lacks _class — but that's the next review cycle.
+                # also set missing_class_dismissed to prevent check_missing_class
+                # from re-flagging the same device on the next checkpoint.
                 if action in ("add_class", "skip"):
                     meta = coordinator.discovery_manager._metadata.get(device_id)
                     if meta:
                         meta.missing_class = None
+                        if action == "skip":
+                            # Persist the dismissal so check_missing_class
+                            # doesn't re-flag this device on the next checkpoint
+                            meta.missing_class_dismissed = True
+                        elif action == "add_class":
+                            # User added a class — clear any prior dismissal
+                            meta.missing_class_dismissed = False
 
             if changed:
                 self.options[CONF_SCHEMA] = order_schema(config_schema)

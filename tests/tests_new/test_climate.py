@@ -1388,6 +1388,101 @@ async def test_hvac_set_fan_mode_falls_back_to_known_list(
     mock_device.set_fan_mode.assert_not_called()
 
 
+async def test_hvac_set_fan_mode_rem_not_faked_raises(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """async_set_fan_mode REM fallback raises if bound REM is not faked."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem.return_value = "37:111111"
+    mock_device._gwy = MagicMock()
+    mock_device._gwy.async_send_cmd = AsyncMock()
+
+    mock_coordinator._remotes = {
+        "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"}
+    }
+    mock_coordinator.options = {SZ_KNOWN_LIST: {}}
+
+    # Bound REM device exists but is NOT faked
+    rem_dev = MagicMock()
+    rem_dev.is_faked = False
+    mock_coordinator._get_device = MagicMock(return_value=rem_dev)
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.async_write_ha_state = MagicMock()
+    hvac._bound_rem = "37:111111"
+
+    with pytest.raises(HomeAssistantError, match="not configured for faking"):
+        await hvac.async_set_fan_mode("low")
+
+    # Should NOT have sent the command
+    mock_device._gwy.async_send_cmd.assert_not_awaited()
+
+
+async def test_hvac_set_fan_mode_rem_faked_sends(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """async_set_fan_mode REM fallback sends when bound REM IS faked."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem.return_value = "37:111111"
+    mock_device._gwy = MagicMock()
+    mock_device._gwy.async_send_cmd = AsyncMock()
+
+    mock_coordinator._remotes = {
+        "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"}
+    }
+    mock_coordinator.options = {SZ_KNOWN_LIST: {}}
+
+    # Bound REM device exists and IS faked
+    rem_dev = MagicMock()
+    rem_dev.is_faked = True
+    mock_coordinator._get_device = MagicMock(return_value=rem_dev)
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.async_write_ha_state = MagicMock()
+    hvac._bound_rem = "37:111111"
+
+    await hvac.async_set_fan_mode("low")
+
+    # Should have sent the command
+    mock_device._gwy.async_send_cmd.assert_awaited_once()
+    mock_device.set_fan_mode.assert_not_called()
+
+
+async def test_hvac_set_fan_mode_rem_not_found_sends(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """async_set_fan_mode REM fallback sends when bound REM device not found.
+
+    If _get_device returns None (device not in registry), we can't check
+    is_faked — fall through to sending, matching the remote.py behaviour
+    where the check is only done when the device object is available.
+    """
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem.return_value = "37:111111"
+    mock_device._gwy = MagicMock()
+    mock_device._gwy.async_send_cmd = AsyncMock()
+
+    mock_coordinator._remotes = {
+        "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"}
+    }
+    mock_coordinator.options = {SZ_KNOWN_LIST: {}}
+
+    # Bound REM device not found in registry
+    mock_coordinator._get_device = MagicMock(return_value=None)
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.async_write_ha_state = MagicMock()
+    hvac._bound_rem = "37:111111"
+
+    await hvac.async_set_fan_mode("low")
+
+    # Should have sent the command (no is_faked check possible)
+    mock_device._gwy.async_send_cmd.assert_awaited_once()
+
+
 # ---------------------------------------------------------------------------
 # Phase 3a: fan_modes property tests
 # ---------------------------------------------------------------------------
