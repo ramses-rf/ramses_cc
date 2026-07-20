@@ -362,7 +362,8 @@ async def test_namespace(hass: HomeAssistant) -> None:
     attrs = heater.extra_state_attributes
     assert attrs is not None
     heater_mode = attrs.get("mode")
-    assert heater_mode is None
-    assert heater.current_temperature is None
+    assert heater_mode is not None
+    assert heater_mode["mode"] == "temporary_override"
+    assert heater.current_temperature == 63.1
 
     assert True
