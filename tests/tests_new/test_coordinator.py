@@ -132,6 +132,8 @@ def mock_coordinator(mock_hass: MagicMock, mock_entry: MagicMock) -> RamsesCoord
     coordinator = RamsesCoordinator(mock_hass, mock_entry)
     coordinator.client = MagicMock()
     cast(Any, coordinator.client).async_send_cmd = AsyncMock()
+    cast(Any, coordinator.client).dispatcher = MagicMock()
+    cast(Any, coordinator.client).dispatcher.send = AsyncMock()
     coordinator._device_info = {}
     coordinator.platforms = {}
     coordinator._devices = []
@@ -1551,14 +1553,13 @@ async def test_coordinator_get_fan_param(
         mock_dev.id = FAN_ID
         mock_get_dev.return_value = mock_dev
 
-        cast(Any, mock_coordinator.client).async_send_cmd = mock_send
+        cast(Any, mock_coordinator.client).dispatcher.send = mock_send
 
         await mock_coordinator.async_get_fan_param(call_data)
 
         assert cast(Any, mock_send).called
-        cmd = mock_send.call_args[0][0]
-        # Check command attributes if possible, or just that it was sent
-        assert cmd is not None
+        intent = mock_send.call_args[0][0]
+        assert intent.action.name == "GET_FAN_PARAM"
 
 
 async def test_coordinator_set_fan_param(
@@ -1585,7 +1586,7 @@ async def test_coordinator_set_fan_param(
         mock_dev.id = FAN_ID
         mock_get_dev.return_value = mock_dev
 
-        cast(Any, mock_coordinator.client).async_send_cmd = mock_send
+        cast(Any, mock_coordinator.client).dispatcher.send = mock_send
 
         await mock_coordinator.async_set_fan_param(call_data)
 
@@ -1632,7 +1633,7 @@ async def test_coordinator_set_fan_param_no_binding(
     cast(Any, mock_fan_device).get_bound_rem = MagicMock(return_value=None)
     mock_send = AsyncMock()
 
-    cast(Any, mock_coordinator.client).async_send_cmd = mock_send
+    cast(Any, mock_coordinator.client).dispatcher.send = mock_send
 
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX, "value": 21.5}
 
@@ -1668,7 +1669,7 @@ async def test_get_fan_param_fallback_hgi(
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX}
 
     cast(Any, mock_coordinator.client).hgi = MagicMock(id=hgi_id)
-    cast(Any, mock_coordinator.client).async_send_cmd = mock_send
+    cast(Any, mock_coordinator.client).dispatcher.send = mock_send
 
     # 4. Run with log capture to verify the debug logic
     with caplog.at_level(logging.DEBUG):
@@ -1681,10 +1682,10 @@ async def test_get_fan_param_fallback_hgi(
         in caplog.text
     )
 
-    # Check the command was actually sent with the HGI ID as the source
+    # Check the intent was actually sent via the dispatcher with HGI as source
     assert cast(Any, mock_send).called
-    mock_send.call_args[0][0]
-    # removed cmd.src.id assert
+    intent = mock_send.call_args[0][0]
+    assert intent.src.id == hgi_id
 
 
 # --- Tests migrated from test_fan_param.py ---
@@ -1709,7 +1710,7 @@ class TestFanParameterGet:
         This fixture runs before each test method and sets up:
         - A real RamsesCoordinator instance
         - A mock client with an HGI device
-        - Patches for build_dto
+        - A mock CQRS dispatcher (dispatcher.send replaces build_dto + async_send_cmd)
         - Test command objects for GET operations
 
         Args:
@@ -1741,17 +1742,12 @@ class TestFanParameterGet:
         self.mock_device.id = TEST_DEVICE_ID
         cast(Any, self.mock_device).get_bound_rem.return_value = None
 
-        # Patch build_dto to control command creation
-        self.patcher = patch("custom_components.ramses_cc.services.build_dto")
-        self.mock_get_fan_param = self.patcher.start()
-
-        # Create a test command that will be returned by the patched method
-        self.mock_cmd = MagicMock()
-        self.mock_cmd.code = "2411"
-        self.mock_cmd.verb = "RQ"
-        self.mock_cmd.src = MagicMock(id=TEST_FROM_ID)
-        self.mock_cmd.dst = MagicMock(id=TEST_DEVICE_ID)
-        cast(Any, self.mock_get_fan_param).return_value = self.mock_cmd
+        # Mock the CQRS dispatcher — fan_param services call
+        # client.dispatcher.send(intent) instead of build_dto + async_send_cmd.
+        # See ramses_cc issue 851.
+        self.mock_dispatcher_send = AsyncMock()
+        cast(Any, self.coordinator.client).dispatcher = MagicMock()
+        cast(Any, self.coordinator.client).dispatcher.send = self.mock_dispatcher_send
 
         cast(Any, self.coordinator.client).hgi = MagicMock(id=TEST_FROM_ID)
         cast(Any, self.coordinator.client.device_registry).device_by_id = {
@@ -1760,17 +1756,13 @@ class TestFanParameterGet:
 
         yield  # Test runs here
 
-        # Cleanup - stop all patches
-        self.patcher.stop()
-
     @pytest.mark.asyncio
     async def test_basic_fan_param_request(self, hass: HomeAssistant) -> None:
         """Test basic fan parameter request.
 
         Verifies that:
-        1. The command is constructed with correct parameters
-        2. The command is sent via the client
-        3. No errors are raised
+        1. The intent is sent via the CQRS dispatcher
+        2. No errors are raised
         """
         # Setup service call data with all required parameters
         service_data = {
@@ -1783,13 +1775,10 @@ class TestFanParameterGet:
         # Act - Call the method under test
         await self.coordinator.async_get_fan_param(call)
 
-        # Assert - Verify command construction
-        self.mock_get_fan_param.assert_called_once()
-
-        # Verify command was sent via the client
-        cast(Any, self.mock_client.async_send_cmd).assert_awaited_once_with(
-            self.mock_cmd
-        )
+        # Assert - Verify intent was sent via the CQRS dispatcher
+        self.mock_dispatcher_send.assert_awaited_once()
+        intent = self.mock_dispatcher_send.call_args[0][0]
+        assert intent.action.name == "GET_FAN_PARAM"
 
     @pytest.mark.asyncio
     async def test_missing_required_param_id(
@@ -1814,7 +1803,7 @@ class TestFanParameterGet:
             await self.coordinator.async_get_fan_param(call)
 
         # Verify no command was sent
-        cast(Any, self.mock_client.async_send_cmd).assert_not_called()
+        self.mock_dispatcher_send.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_custom_fan_id(self, hass: HomeAssistant) -> None:
@@ -1836,11 +1825,8 @@ class TestFanParameterGet:
         # Act - Call the method under test
         await self.coordinator.async_get_fan_param(call)
 
-        # Assert - Verify command was constructed with custom fan_id
-        self.mock_get_fan_param.assert_called_once()
-
-        # Verify command was sent
-        cast(Any, self.mock_client.async_send_cmd).assert_awaited_once()
+        # Assert - Verify intent was sent via the CQRS dispatcher
+        self.mock_dispatcher_send.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_get_fan_param_with_ha_device_selector_resolves_device_id(
@@ -1865,7 +1851,7 @@ class TestFanParameterGet:
 
         await self.coordinator.async_get_fan_param(call)
 
-        self.mock_get_fan_param.assert_called_once()
+        self.mock_dispatcher_send.assert_awaited_once()
 
 
 async def test_get_fan_param_service_schema_accepts_ha_device_selector(
@@ -1906,7 +1892,7 @@ class TestFanParameterSet:
 
     Safety measures in place:
     - build_dto is patched with mock
-    - Client.async_send_cmd is mocked
+    - Client.dispatcher.send is mocked (CQRS path)
     - Coordinator uses mock client, not real hardware
     - All assertions verify mock behaviour only
     - No real hardware communication can occur
@@ -1923,7 +1909,7 @@ class TestFanParameterSet:
         This fixture runs before each test method and sets up:
         - A real RamsesCoordinator instance
         - A mock client with an HGI device
-        - Patches for build_dto
+        - A mock CQRS dispatcher (dispatcher.send replaces build_dto + async_send_cmd)
         - Test command objects for SET operations
 
         Args:
@@ -1953,17 +1939,12 @@ class TestFanParameterSet:
         self.mock_device.id = TEST_DEVICE_ID
         cast(Any, self.mock_device).get_bound_rem.return_value = None
 
-        # Patch build_dto to control command creation
-        self.patcher = patch("custom_components.ramses_cc.services.build_dto")
-        self.mock_set_fan_param = self.patcher.start()
-
-        # Create a test command that will be returned by the patched method
-        self.mock_cmd = MagicMock()
-        self.mock_cmd.code = "2411"
-        self.mock_cmd.verb = "W"
-        self.mock_cmd.src = MagicMock(id=TEST_FROM_ID)
-        self.mock_cmd.dst = MagicMock(id=TEST_DEVICE_ID)
-        cast(Any, self.mock_set_fan_param).return_value = self.mock_cmd
+        # Mock the CQRS dispatcher — fan_param services call
+        # client.dispatcher.send(intent) instead of build_dto + async_send_cmd.
+        # See ramses_cc issue 851.
+        self.mock_dispatcher_send = AsyncMock()
+        cast(Any, self.coordinator.client).dispatcher = MagicMock()
+        cast(Any, self.coordinator.client).dispatcher.send = self.mock_dispatcher_send
 
         # PERFORMANCE OPTIMIZATION:
         # Patch asyncio.sleep to be instant for set operations which use sleep
@@ -1978,7 +1959,6 @@ class TestFanParameterSet:
         yield  # Test runs here
 
         # Cleanup - stop all patches
-        self.patcher.stop()
         self.sleep_patcher.stop()
 
     @pytest.mark.asyncio
@@ -1986,9 +1966,8 @@ class TestFanParameterSet:
         """Test basic fan parameter set with all required parameters.
 
         Verifies that:
-        1. The command is constructed with correct parameters
-        2. The command is sent via the client
-        3. No errors are raised
+        1. The intent is sent via the CQRS dispatcher
+        2. No errors are raised
         """
         # Setup service call data with all required parameters
         service_data = {
@@ -2002,13 +1981,10 @@ class TestFanParameterSet:
         # Act - Call the method under test
         await self.coordinator.async_set_fan_param(call)
 
-        # Assert - Verify command construction
-        self.mock_set_fan_param.assert_called_once()
-
-        # Verify command was sent via the client
-        cast(Any, self.mock_client.async_send_cmd).assert_awaited_once_with(
-            self.mock_cmd
-        )
+        # Assert - Verify intent was sent via the CQRS dispatcher
+        self.mock_dispatcher_send.assert_awaited_once()
+        intent = self.mock_dispatcher_send.call_args[0][0]
+        assert intent.action.name == "SET_FAN_PARAM"
 
     @pytest.mark.asyncio
     async def test_set_fan_param_with_ha_device_selector(
@@ -2034,10 +2010,8 @@ class TestFanParameterSet:
 
         await self.coordinator.async_set_fan_param(call)
 
-        self.mock_set_fan_param.assert_called_once()
-
-        # Verify command was sent
-        cast(Any, self.mock_client.async_send_cmd).assert_awaited_once()
+        # Verify intent was sent via the CQRS dispatcher
+        self.mock_dispatcher_send.assert_awaited_once()
 
 
 class TestFanParameterUpdate:
@@ -2054,7 +2028,7 @@ class TestFanParameterUpdate:
         This fixture runs before each test method and sets up:
         - A real RamsesCoordinator instance
         - A mock client with an HGI device
-        - Patches for build_dto
+        - A mock CQRS dispatcher (dispatcher.send replaces build_dto + async_send_cmd)
         - Test command objects for UPDATE operations
 
         Args:
@@ -2084,17 +2058,12 @@ class TestFanParameterUpdate:
         self.mock_device.id = TEST_DEVICE_ID
         cast(Any, self.mock_device).get_bound_rem.return_value = None
 
-        # Patch build_dto to control command creation
-        self.patcher = patch("custom_components.ramses_cc.services.build_dto")
-        self.mock_get_fan_param = self.patcher.start()
-
-        # Create a test command that will be returned by the patched method
-        self.mock_cmd = MagicMock()
-        self.mock_cmd.code = "2411"
-        self.mock_cmd.verb = "RQ"
-        self.mock_cmd.src = MagicMock(id=TEST_FROM_ID)
-        self.mock_cmd.dst = MagicMock(id=TEST_DEVICE_ID)
-        cast(Any, self.mock_get_fan_param).return_value = self.mock_cmd
+        # Mock the CQRS dispatcher — fan_param services call
+        # client.dispatcher.send(intent) instead of build_dto + async_send_cmd.
+        # See ramses_cc issue 851.
+        self.mock_dispatcher_send = AsyncMock()
+        cast(Any, self.coordinator.client).dispatcher = MagicMock()
+        cast(Any, self.coordinator.client).dispatcher.send = self.mock_dispatcher_send
 
         # PERFORMANCE OPTIMIZATION:
         # Patch asyncio.sleep to be instant for set operations which use sleep
@@ -2109,7 +2078,6 @@ class TestFanParameterUpdate:
         yield  # Test runs here
 
         # Cleanup - stop all patches
-        self.patcher.stop()
         self.sleep_patcher.stop()
 
     @pytest.mark.asyncio
@@ -2117,8 +2085,8 @@ class TestFanParameterUpdate:
         """Test basic fan parameter update with all required parameters.
 
         Verifies that:
-        1. Commands are constructed for all parameters in the schema
-        2. All commands are sent via the client
+        1. Intents are sent for all parameters in the schema
+        2. All intents are sent via the CQRS dispatcher
         3. No errors are raised
         """
         # Setup service call data with all required parameters
@@ -2131,14 +2099,9 @@ class TestFanParameterUpdate:
         # Act - Call the method under test
         await self.coordinator.service_handler._async_run_fan_param_sequence(call)
 
-        # Verify all parameters in the schema were requested
-        assert cast(Any, self.mock_get_fan_param).call_count > 0, (
+        # Verify all parameters in the schema were requested via the dispatcher
+        assert self.mock_dispatcher_send.call_count > 0, (
             "Expected multiple parameter requests"
-        )
-
-        # Verify commands were sent via the client
-        assert cast(Any, self.mock_client.async_send_cmd).call_count > 0, (
-            "Expected multiple commands sent"
         )
 
 
