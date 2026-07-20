@@ -23,6 +23,13 @@ from typing import Any
 # --- DEVELOPMENT HOOK ---
 # If a local copy of ramses_rf exists, use it instead of the system installed version.
 # This allows for testing changes without rebuilding the container.
+#
+# TODO: The dev hook below is superseded by the PYTHONPATH approach — see the
+# "Testing with a local ramses_rf" section in ramses_extras/docs/HA_SIM_TEST_TOOL.md.
+# The PYTHONPATH approach is simpler (no ramses_cc modification, no /config/deps
+# copy needed) and works with any docker-compose that bind-mounts the ramses_rf
+# source tree.  The dev hook is kept for backward compatibility but should not
+# be needed for new development.
 
 ENABLE_DEV_HOOK = False  # Set to true to enable the dev hook
 DEV_LIB_PATH = "/config/deps/ramses_rf/src"
