@@ -17,7 +17,7 @@
 
 # used for development (linting)
     prek == 0.4.9                                # HA core 2026.6.2 uses ?
-    ruff >= 0.15.21                              # See also: pre-commit-config.yaml
+    ruff >= 0.15.22                              # See also: pre-commit-config.yaml
 
 # used for development (typing)
     mypy >= 2.3.0                                # latest: 2.1.0
