@@ -747,9 +747,11 @@ async def test_fan_param_methods(
 ) -> None:
     """Test fan parameter methods for bound and unbound scenarios.
 
-    This test consolidates bound, unbound, set, get, and update
-    verifications, including the recent thread-safety fix for
-    async_update_fan_rem_params.
+    This test consolidates bound, unbound, set, and get verifications.
+    async_update_fan_rem_params was removed (it was never registered in
+    SVCS_RAMSES_REMOTE, so it was unreachable dead code); the bulk-read
+    use case is covered by the domain 'update_fan_params' service.  See
+    ramses_cc issue 851.
     """
     entity_id = "remote.test_remote"
     device_id = "12:123456"
@@ -789,39 +791,13 @@ async def test_fan_param_methods(
     await remote.async_set_fan_rem_param(**kwargs)
     mock_coordinator.async_set_fan_param.assert_awaited()
 
-    # --- Test 3: Update Params (Bound + Thread Safety Check) ---
-    # Create a completed Future to simulate the return value of
-    # async_add_executor_job if it were improperly used. We assert
-    # that it is NOT used.
-    future: asyncio.Future[None] = asyncio.Future()
-    future.set_result(None)
-
-    with patch.object(hass, "async_add_executor_job", return_value=future) as mock_exec:
-        await remote.async_update_fan_rem_params(**kwargs)
-
-        # VERIFICATION: Ensure async_add_executor_job was NOT called.
-        # The method should now run directly on the event loop.
-        mock_exec.assert_not_called()
-
-        # Check that coordinator.get_all_fan_params was called directly
-        expected_kwargs = {
-            "key": "value",
-            "device_id": fan_id,
-            "from_id": device_id,
-        }
-        mock_coordinator.get_all_fan_params.assert_called_with(expected_kwargs)
-
-    # --- Test 4: Unbound Scenarios ---
+    # --- Test 3: Unbound Scenarios ---
     mock_coordinator.fan_handler._fan_bound_to_remote = {}
     mock_coordinator.get_all_fan_params.reset_mock()
     mock_coordinator.async_get_fan_param.reset_mock()
     mock_coordinator.async_set_fan_param.reset_mock()
 
     with caplog.at_level(logging.WARNING):
-        # Update
-        await remote.async_update_fan_rem_params(**kwargs)
-        assert f"REM {device_id} not bound to a FAN" in caplog.text
-
         # Get
         await remote.async_get_fan_rem_param(**kwargs)
         # Set

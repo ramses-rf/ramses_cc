@@ -739,26 +739,11 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         else:
             _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
 
-    async def async_update_fan_rem_params(self, **kwargs: Any) -> None:
-        """Handle 'update_fan_params' service call.
-
-        :param kwargs: Arbitrary keyword arguments.
-        """
-        _LOGGER.info(
-            "Fan read all params via remote entity %s (%s)",
-            self.entity_id,
-            self.__class__.__name__,
-        )
-        parent = self.coordinator.fan_handler._fan_bound_to_remote.get(self._device.id)
-        if parent:
-            kwargs[ATTR_DEVICE_ID] = parent
-            kwargs["from_id"] = self._device.id  # replaces manual from_id entry
-            # Call coordinator method directly on the loop.
-            # coordinator.get_all_fan_params internally calls loop.create_task().
-            # It is NOT blocking and must NOT be run in an executor.
-            self.coordinator.get_all_fan_params(kwargs)
-        else:
-            _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
+    # NOTE: async_update_fan_rem_params was removed.  It was never registered
+    # in SVCS_RAMSES_REMOTE (only get_fan_rem_param / set_fan_rem_param are),
+    # so it was unreachable dead code.  The domain 'update_fan_params' service
+    # covers the bulk-read use case (with an explicit from_id for the bound
+    # REM if needed).  See ramses_cc issue 851.
 
 
 @dataclass(frozen=True, kw_only=True)

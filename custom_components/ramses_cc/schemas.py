@@ -2602,7 +2602,14 @@ SCH_SET_FAN_PARAM_DOMAIN = vol.Schema(
     },
     extra=vol.PREVENT_EXTRA,
 )
-SCH_UPDATE_FAN_PARAMS_DOMAIN = SCH_UPDATE_FAN_PARAMS
+SCH_UPDATE_FAN_PARAMS_DOMAIN = vol.Schema(
+    {
+        vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
+        vol.Optional("device_id"): vol.Any(None, cv.string),
+        vol.Optional("from_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
 
 
 # services without their own schema
@@ -2625,7 +2632,13 @@ SVCS_RAMSES_CLIMATE = {
     SVC_GET_SYSTEM_FAULTS: SCH_GET_SYSTEM_FAULTS,
     SVC_GET_FAN_CLIM_PARAM: SCH_GET_FAN_PARAM,  # UI fan_param actions
     SVC_SET_FAN_CLIM_PARAM: SCH_SET_FAN_PARAM,
-    SVC_UPDATE_FAN_PARAMS: SCH_UPDATE_FAN_PARAMS,
+    # NOTE: SVC_UPDATE_FAN_PARAMS is intentionally NOT registered here as a
+    # climate entity service.  It is registered once as a domain service in
+    # async_register_domain_services (with SCH_UPDATE_FAN_PARAMS_DOMAIN, which
+    # accepts both a target entity selector and an explicit device_id).  The
+    # previous duplicate entity-service registration was overwritten by the
+    # domain service anyway, and keeping both caused confusion about which
+    # handler + schema was authoritative.  See ramses_cc issue 851.
 }
 
 # services for water_heater platform

@@ -179,6 +179,11 @@ update_fan_params:
           - climate
 
   fields:
+    device_id:
+      example: '"32:153289"'
+      required: false
+      selector:
+        text:
     from_id:
       example: '"18:123456"'
       required: false
