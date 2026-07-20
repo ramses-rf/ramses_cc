@@ -5,7 +5,7 @@
 # - pip list | grep -E 'ramses|serial'
 
   aiousbwatcher         >= 1.1.2                 # as per: manifest.json latest: 1.1.2
-  aioesphomeapi         >= 45.6.0                # required by config_flow > homeassistant.components.usb
+  aioesphomeapi         >= 45.6.2                # required by config_flow > homeassistant.components.usb
   pyserial-asyncio-fast >= 0.16                  # as per: manifest.json latest: 0.16
   ramses-rf             == 0.58.4                # as per: manifest.json latest:
   # pycares               == 5.0.1               # ha_cc 2026.2: aiodns 4.0.0: pycares==5.0.1=latest
@@ -16,8 +16,8 @@
 # - pip list | grep -E 'prek|ruff|mypy|types-|voluptuous'
 
 # used for development (linting)
-    prek == 0.4.9                                # HA core 2026.6.2 uses ?
-    ruff >= 0.15.21                              # See also: pre-commit-config.yaml
+    prek == 0.4.10                                # HA core 2026.6.2 uses ?
+    ruff >= 0.15.22                              # See also: pre-commit-config.yaml
 
 # used for development (typing)
     mypy >= 2.3.0                                # latest: 2.1.0
@@ -26,4 +26,4 @@
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest
   # coverage >= ... included in next item
-  pytest_homeassistant_custom_component >= 0.13.345
+  pytest_homeassistant_custom_component >= 0.13.346

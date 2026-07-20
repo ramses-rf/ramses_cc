@@ -774,11 +774,10 @@ async def test_hvac_services(
         {"param": "p1", "value": 1, ATTR_DEVICE_ID: mock_device.id}
     )
 
-    # async_update_fan_params
-    await hvac.async_update_fan_params()
-    mock_coordinator.get_all_fan_params.assert_called_with(
-        {ATTR_DEVICE_ID: mock_device.id}
-    )
+    # NOTE: async_update_fan_params was removed from the climate entity (it
+    # was a duplicate of the domain service).  The domain service
+    # 'update_fan_params' resolves device_id from the target/entity selector
+    # or an explicit device_id field.  See ramses_cc issue 851.
 
 
 async def test_error_handling(
@@ -1105,22 +1104,6 @@ async def test_zone_immediate_update_on_commands(
     mock_device.set_schedule.assert_awaited()
     zone.async_write_ha_state.assert_called()
     zone.async_write_ha_state.reset_mock()
-
-
-async def test_hvac_update_fan_params_coverage(
-    mock_coordinator: MagicMock, mock_description: MagicMock
-) -> None:
-    """Test update_fan_params specifically to guarantee coverage of args."""
-    mock_device = MagicMock(spec=HvacVentilator)
-    mock_device.id = "30:COVERAGE"
-    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
-
-    # Pass specific kwargs to trace the flow through lines 557-558
-    await hvac.async_update_fan_params(explicit_arg=True)
-
-    mock_coordinator.get_all_fan_params.assert_called_with(
-        {"explicit_arg": True, ATTR_DEVICE_ID: "30:COVERAGE"}
-    )
 
 
 async def test_zone_set_hvac_mode_error(

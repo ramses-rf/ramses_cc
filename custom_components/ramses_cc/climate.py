@@ -1342,21 +1342,11 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         ) as err:
             raise HomeAssistantError(f"Failed to set fan param: {err}") from err
 
-    @callback
-    async def async_update_fan_params(self, **kwargs: Any) -> None:
-        """Handle 'update_fan_params' service call.
-
-        :param kwargs: Service arguments.
-        """
-        _LOGGER.info(
-            "Fan read all params from climate entity %s (%s)",
-            self.entity_id,
-            self.__class__.__name__,
-        )
-        kwargs[ATTR_DEVICE_ID] = self._device.id
-        # Note: This spawns a task and is not awaited, so simple try/except
-        # here won't catch exceptions from the task.
-        self.coordinator.get_all_fan_params(kwargs)  # don't await
+    # NOTE: async_update_fan_params was removed.  The 'update_fan_params'
+    # service is registered once as a domain service (see schemas.py
+    # SVCS_RAMSES_CLIMATE comment) and resolves the FAN device_id from either
+    # an explicit device_id field or a target entity selector.  See
+    # ramses_cc issue 851.
 
 
 @dataclass(frozen=True, kw_only=True)

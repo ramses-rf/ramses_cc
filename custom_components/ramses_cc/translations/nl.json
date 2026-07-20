@@ -493,11 +493,15 @@
 
         "update_fan_params": {
             "name": "Fan-parameters bijwerken",
-            "description": "Vraag alle beschikbare instellingen (2411) op van een FAN. Werkt alle parameter entiteiten bij voor het apparaat.",
+            "description": "Vraag alle beschikbare instellingen (2411) op van een FAN. Werkt alle parameter entiteiten bij voor het apparaat. Selecteer de FAN climate-entiteit als doel, of geef een RAMSES device_id (XX:XXXXXX) op.",
             "fields": {
+                "device_id": {
+                    "name": "Doelapparaat-ID",
+                    "description": "Optioneel: RAMSES apparaat-ID van de FAN (XX:XXXXXX). Laat leeg en selecteer de FAN climate-entiteit als doel."
+                },
                 "from_id": {
                     "name": "Bronapparaat-ID",
-                    "description": "Optioneel: bronapparaat-ID voor het verzoek (laat leeg voor 'bound' REM). Vul een apparaat-ID in als XX:XXXXXX"
+                    "description": "Optioneel: bronapparaat-ID voor het verzoek (standaard de 'bound' REM, anders de gateway). Vul een apparaat-ID in als XX:XXXXXX"
                 }
             }
         },
