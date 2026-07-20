@@ -14,7 +14,6 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.event import async_call_later
 
 from ramses_rf.address import Address
-from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.devices import Fakeable
 from ramses_rf.enums import Action
@@ -362,11 +361,14 @@ class RamsesServiceHandler:
                 action=Action.GET_FAN_PARAM,
                 data={"param_id": param_id},
             )
-            cmd = build_dto(intent)
-            _LOGGER.debug("Sending command: %s", cmd)
-
-            # Send the command directly using the gateway
-            await self._coordinator.client.async_send_cmd(cmd)
+            # Use the CQRS CommandDispatcher, which translates the intent
+            # to a CommandDTO and shims it back to a legacy Command that
+            # async_send_cmd accepts.  Calling build_dto() + async_send_cmd()
+            # directly passes a CommandDTO (positional addr1/addr2/addr3) to
+            # a code path that expects cmd.src.id, raising AttributeError.
+            # See ramses_cc issue 851.
+            _LOGGER.debug("Sending get_fan_param intent: %s", intent)
+            await self._coordinator.client.dispatcher.send(intent)
 
             # Clear pending state after timeout (non-blocking)
             self._schedule_clear_pending(entity, 30)
@@ -555,8 +557,10 @@ class RamsesServiceHandler:
                 action=Action.SET_FAN_PARAM,
                 data={"param_id": param_id, "value": value},
             )
-            cmd = build_dto(intent)
-            await self._coordinator.client.async_send_cmd(cmd)
+            # Use the CQRS CommandDispatcher (translates intent → CommandDTO
+            # → legacy Command).  See get_fan_param above / issue 851.
+            _LOGGER.debug("Sending set_fan_param intent: %s", intent)
+            await self._coordinator.client.dispatcher.send(intent)
             await asyncio.sleep(0.2)
 
             self._schedule_clear_pending(entity, 30)

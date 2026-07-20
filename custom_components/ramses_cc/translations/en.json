@@ -493,11 +493,15 @@
 
         "update_fan_params": {
             "name": "Update Fan Parameters",
-            "description": "Request all available configuration parameters (2411) from a FAN. Will update all parameter entities for the device.",
+            "description": "Request all available configuration parameters (2411) from a FAN. Will update all parameter entities for the device. Select the FAN climate entity as the target, or provide a RAMSES device_id (XX:XXXXXX).",
             "fields": {
+                "device_id": {
+                    "name": "Target device_id",
+                    "description": "Optional RAMSES device ID of the FAN (XX:XXXXXX). If omitted, select the FAN climate entity as the target."
+                },
                 "from_id": {
                     "name": "Source Device ID",
-                    "description": "Optional source device ID to use for the request (defaults to Bound REM). Enter any device ID in format XX:XXXXXX"
+                    "description": "Optional source device ID to use for the request (defaults to the bound REM, else the gateway). Enter a device ID in format XX:XXXXXX"
                 }
             }
         },
