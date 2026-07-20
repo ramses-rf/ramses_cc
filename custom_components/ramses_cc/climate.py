@@ -35,11 +35,12 @@ from homeassistant.helpers.entity_platform import (
 )
 from homeassistant.util import dt as dt_util
 
+from custom_components.ramses_cc.helpers import parse_packet_string
 from ramses_rf.devices import HvacVentilator
 from ramses_rf.systems.tcs import Evohome
 from ramses_rf.systems.zones import Zone
-from ramses_tx.command import Command
 from ramses_tx.const import SZ_MODE, SZ_SETPOINT, SZ_SYSTEM_MODE, Priority
+from ramses_tx.dtos import CommandDTO
 from ramses_tx.exceptions import (
     ProtocolSendFailed,
     ProtocolTimeoutError,
@@ -184,7 +185,14 @@ class RamsesController(RamsesEntity, ClimateEntity):
         await super().async_added_to_hass()
         if resolve_async_attr(self, self._device, "system_mode") is None:
             try:
-                cmd = Command.from_cli(f"RQ {self._device.id} 2E04 FF")
+                cmd = CommandDTO(
+                    verb="RQ",
+                    addr1="18:000730",
+                    addr2=self._device.id,
+                    addr3="--:------",
+                    code="2E04",
+                    payload="FF",
+                )
                 await self._device._gwy.async_send_cmd(cmd)
             except Exception as err:
                 _LOGGER.debug(
@@ -493,8 +501,13 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         await super().async_added_to_hass()
         if resolve_async_attr(self, self._device, "mode") is None:
             try:
-                cmd = Command.from_cli(
-                    f"RQ {self._device.tcs.id} 2349 {self._device.idx}"
+                cmd = CommandDTO(
+                    verb="RQ",
+                    addr1="18:000730",
+                    addr2=self._device.tcs.id,
+                    addr3="--:------",
+                    code="2349",
+                    payload=self._device.idx,
                 )
                 await self._device._gwy.async_send_cmd(cmd)
             except Exception as err:
@@ -1167,14 +1180,10 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                     packet_str,
                 )
 
-                # Users might enter a CLI shorthand OR a raw frame string;
-                # _build_packet_from_template returns a full packet frame
-                # (W --- src dst --:------ code len payload) which
-                # Command.from_cli() parses, but Command() does not.
-                try:
-                    cmd = Command.from_cli(packet_str)
-                except (ValueError, RamsesException):
-                    cmd = Command(packet_str)
+                # parse_packet_string parses both CLI and raw packet formats
+                cmd = parse_packet_string(packet_str)
+                if cmd is None:
+                    raise ValueError(f"Failed to parse packet_str: {packet_str}")
                 await self._device._gwy.async_send_cmd(
                     cmd, num_repeats=2, priority=Priority.HIGH
                 )
@@ -1202,12 +1211,10 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                     cmd_str,
                 )
 
-                # Users might enter a CLI shorthand OR a raw frame string
-                try:
-                    cmd = Command.from_cli(str(cmd_str))
-                except (ValueError, RamsesException):
-                    # Fallback for raw packet frames copied from logs
-                    cmd = Command(str(cmd_str))
+                # parse_packet_string parses both CLI and raw packet formats
+                cmd = parse_packet_string(str(cmd_str))
+                if cmd is None:
+                    raise ValueError(f"Failed to parse cmd_str: {cmd_str}")
 
                 await self._device._gwy.async_send_cmd(
                     cmd, num_repeats=2, priority=Priority.HIGH

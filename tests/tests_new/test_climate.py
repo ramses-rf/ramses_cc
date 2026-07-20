@@ -36,7 +36,6 @@ from ramses_rf.devices import HvacVentilator
 from ramses_rf.models import TemperatureState
 from ramses_rf.systems.tcs import Evohome
 from ramses_rf.systems.zones import Zone
-from ramses_tx import Command
 from ramses_tx.const import SZ_MODE, SZ_SETPOINT, SZ_SYSTEM_MODE
 from ramses_tx.exceptions import ProtocolSendFailed, TransportError
 
@@ -1515,21 +1514,12 @@ async def test_set_fan_mode_with_fan_commands_override(
     hvac.async_write_ha_state = MagicMock()
     hvac._bound_rem = "37:111111"
 
-    # Mock Command.from_cli to capture the packet string without parsing.
-    # The FAN template path uses Command.from_cli() first (which parses the
-    # full packet format), then falls back to Command().
-    captured_packets: list[str] = []
-
-    def mock_from_cli(frame: str) -> MagicMock:
-        captured_packets.append(frame)
-        return MagicMock()
-
-    with patch.object(Command, "from_cli", side_effect=mock_from_cli):
-        await hvac.async_set_fan_mode("boost")
+    await hvac.async_set_fan_mode("boost")
 
     # Should have sent via async_send_cmd (FAN template), NOT native
     mock_device._gwy.async_send_cmd.assert_awaited_once()
-    assert any("000706" in p for p in captured_packets), "Should use FAN template"
+    cmd = mock_device._gwy.async_send_cmd.call_args.args[0]
+    assert "000706" in str(cmd), "Should use FAN template"
     mock_device.set_fan_mode.assert_not_called()
 
 
@@ -1633,25 +1623,14 @@ async def test_set_fan_mode_fan_commands_wins_over_rem_and_native(
     hvac.async_write_ha_state = MagicMock()
     hvac._bound_rem = "37:111111"
 
-    # Mock Command.from_cli to capture the packet string without parsing
-    captured_packets: list[str] = []
-
-    def mock_from_cli(frame: str) -> MagicMock:
-        captured_packets.append(frame)
-        return MagicMock()
-
-    with patch.object(Command, "from_cli", side_effect=mock_from_cli):
-        await hvac.async_set_fan_mode("low")
+    await hvac.async_set_fan_mode("low")
 
     # FAN template should win (payload 000406)
     mock_device._gwy.async_send_cmd.assert_awaited_once()
-    assert any("000406" in p for p in captured_packets), "FAN template should win"
-    assert not any("000999" in p for p in captured_packets), (
-        "REM command should not be used"
-    )
-    assert not any("000888" in p for p in captured_packets), (
-        "known_list should not be used"
-    )
+    cmd = mock_device._gwy.async_send_cmd.call_args.args[0]
+    assert "000406" in str(cmd), "FAN template should win"
+    assert "000999" not in str(cmd), "REM command should not be used"
+    assert "000888" not in str(cmd), "known_list should not be used"
     mock_device.set_fan_mode.assert_not_called()
 
 
@@ -1928,7 +1907,7 @@ async def test_hvac_set_preset_mode(
         await hvac.async_set_preset_mode("eco")
 
 
-@patch("custom_components.ramses_cc.climate.Command")
+@patch("custom_components.ramses_cc.climate.CommandDTO")
 @patch("custom_components.ramses_cc.climate.resolve_async_attr")
 async def test_controller_async_added_to_hass(
     mock_resolve: MagicMock,
@@ -1946,12 +1925,19 @@ async def test_controller_async_added_to_hass(
 
     # 1. system_mode is None
     mock_resolve.return_value = None
-    mock_cmd.from_cli.return_value = "mock_cmd"
+    mock_cmd.return_value = "mock_cmd"
 
     with patch("custom_components.ramses_cc.climate.RamsesEntity.async_added_to_hass"):
         await controller.async_added_to_hass()
 
-    mock_cmd.from_cli.assert_called_once_with("RQ 01:123456 2E04 FF")
+    mock_cmd.assert_called_once_with(
+        verb="RQ",
+        addr1="18:000730",
+        addr2="01:123456",
+        addr3="--:------",
+        code="2E04",
+        payload="FF",
+    )
     mock_device._gwy.async_send_cmd.assert_awaited_once_with("mock_cmd")
 
     # 2. Exception handling
@@ -1961,14 +1947,14 @@ async def test_controller_async_added_to_hass(
 
     # 3. system_mode is not None
     mock_resolve.return_value = {"mode": "auto"}
-    mock_cmd.from_cli.reset_mock()
+    mock_cmd.reset_mock()
     with patch("custom_components.ramses_cc.climate.RamsesEntity.async_added_to_hass"):
         await controller.async_added_to_hass()
 
-    mock_cmd.from_cli.assert_not_called()
+    mock_cmd.assert_not_called()
 
 
-@patch("custom_components.ramses_cc.climate.Command")
+@patch("custom_components.ramses_cc.climate.CommandDTO")
 @patch("custom_components.ramses_cc.climate.resolve_async_attr")
 async def test_zone_async_added_to_hass(
     mock_resolve: MagicMock,
@@ -1989,12 +1975,19 @@ async def test_zone_async_added_to_hass(
 
     # 1. mode is None
     mock_resolve.return_value = None
-    mock_cmd.from_cli.return_value = "mock_cmd"
+    mock_cmd.return_value = "mock_cmd"
 
     with patch("custom_components.ramses_cc.climate.RamsesEntity.async_added_to_hass"):
         await zone.async_added_to_hass()
 
-    mock_cmd.from_cli.assert_called_once_with("RQ 01:123456 2349 01")
+    mock_cmd.assert_called_once_with(
+        verb="RQ",
+        addr1="18:000730",
+        addr2="01:123456",
+        addr3="--:------",
+        code="2349",
+        payload="01",
+    )
     mock_device._gwy.async_send_cmd.assert_awaited_once_with("mock_cmd")
 
     # 2. Exception handling
@@ -2004,8 +1997,8 @@ async def test_zone_async_added_to_hass(
 
     # 3. mode is not None
     mock_resolve.return_value = {"mode": "schedule"}
-    mock_cmd.from_cli.reset_mock()
+    mock_cmd.reset_mock()
     with patch("custom_components.ramses_cc.climate.RamsesEntity.async_added_to_hass"):
         await zone.async_added_to_hass()
 
-    mock_cmd.from_cli.assert_not_called()
+    mock_cmd.assert_not_called()

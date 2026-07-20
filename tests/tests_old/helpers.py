@@ -11,8 +11,8 @@ from typing import Any
 from homeassistant.util import dt as dt_util
 
 from custom_components.ramses_cc.const import STORAGE_KEY, STORAGE_VERSION
+from custom_components.ramses_cc.helpers import parse_packet_string
 from ramses_rf.gateway import Gateway
-from ramses_tx.command import Command
 
 from ..virtual_rf import VirtualRf
 
@@ -60,7 +60,7 @@ async def cast_packets_to_rf(
     with open(packet_log) as f:
         for line in f:
             if line := line.rstrip():
-                cmd = Command(line[31:].split("#")[0].rstrip())
+                cmd = parse_packet_string(line[31:].split("#")[0].rstrip())
                 frames.append(str(cmd).encode() + b"\r\n")
 
     await rf.dump_frames_to_rf(frames)

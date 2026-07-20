@@ -24,8 +24,8 @@ from custom_components.ramses_cc.remote import (
     _with_metadata,
     async_setup_entry,
 )
-from ramses_tx.command import Command
 from ramses_tx.const import Priority
+from ramses_tx.dtos import CommandDTO
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -218,15 +218,15 @@ async def test_remote_add_command(remote_entity: RamsesRemote) -> None:
     # Invalid packet string raises ValueError
     with (
         patch(
-            "custom_components.ramses_cc.remote.Command",
-            side_effect=Exception("Bad Pkt"),
+            "custom_components.ramses_cc.remote.parse_packet_string",
+            return_value=None,
         ),
         pytest.raises(ValueError, match="packet_string invalid"),
     ):
         await remote_entity.async_add_command("new_cmd", "INVALID_PKT")
 
     # Success case
-    with patch("custom_components.ramses_cc.remote.Command"):
+    with patch("custom_components.ramses_cc.remote.parse_packet_string"):
         # Add new command
         await remote_entity.async_add_command("new_cmd", VALID_PKT)
         assert remote_entity._commands["new_cmd"] == VALID_PKT
@@ -251,7 +251,7 @@ async def test_remote_send_command_logic(
     sent_cmd = call_args[0][0]
     kwargs = call_args[1]
 
-    assert isinstance(sent_cmd, Command)
+    assert isinstance(sent_cmd, CommandDTO)
     assert kwargs["priority"] == Priority.HIGH
     assert kwargs["num_repeats"] == 2
     assert kwargs["gap_duration"] == 0.5
@@ -548,7 +548,10 @@ async def test_remote_services(
         assert "Turning off REM device" in caplog.text
 
     # Test send_command
-    with patch("custom_components.ramses_cc.remote.Command", side_effect=lambda x: x):
+    with patch(
+        "custom_components.ramses_cc.remote.parse_packet_string",
+        side_effect=lambda x: x,
+    ):
         await remote_entity.async_send_command(["cmd_1"], num_repeats=1, delay_secs=0)
 
     mock_coordinator.client.async_send_cmd.assert_awaited()
@@ -563,7 +566,10 @@ async def test_send_command_edge_cases(
     remote_entity._commands = {"cmd_1": VALID_PKT}
 
     # Case 1: Multiple repeats and delay
-    with patch("custom_components.ramses_cc.remote.Command", side_effect=lambda x: x):
+    with patch(
+        "custom_components.ramses_cc.remote.parse_packet_string",
+        side_effect=lambda x: x,
+    ):
         await remote_entity.async_send_command(["cmd_1"], num_repeats=2, delay_secs=0.1)
 
     # Verify parameters passed to the coordinator client
@@ -590,7 +596,7 @@ async def test_send_command_failure(
 
     with (
         patch(
-            "custom_components.ramses_cc.remote.Command",
+            "custom_components.ramses_cc.remote.parse_packet_string",
             side_effect=lambda x: x,
         ),
         pytest.raises(HomeAssistantError, match="Error sending command "),
@@ -882,7 +888,7 @@ async def test_remote_send_command_no_client(
 
     # Patch Command to ensure we reach the client check without parsing errors
     with (
-        patch("custom_components.ramses_cc.remote.Command"),
+        patch("custom_components.ramses_cc.remote.parse_packet_string"),
         pytest.raises(HomeAssistantError, match="client is not initialized"),
     ):
         await remote_entity.async_send_command("boost")
@@ -899,7 +905,7 @@ async def test_add_command_writes_to_schema(
     """add_command calls _async_update_schema_commands with updated commands."""
     cast(MagicMock, mock_coordinator._async_update_schema_commands).reset_mock()
 
-    with patch("custom_components.ramses_cc.remote.Command"):
+    with patch("custom_components.ramses_cc.remote.parse_packet_string"):
         await remote_entity.async_add_command("my_boost", VALID_PKT)
 
     # Verify _commands was updated
@@ -924,7 +930,7 @@ async def test_add_command_overwrite_writes_to_schema(
     # Reset mock to clear any setup calls
     cast(MagicMock, mock_coordinator._async_update_schema_commands).reset_mock()
 
-    with patch("custom_components.ramses_cc.remote.Command"):
+    with patch("custom_components.ramses_cc.remote.parse_packet_string"):
         await remote_entity.async_add_command(
             "boost",
             "RQ --- 30:123456 18:111111 --:------ 22F1 003 000031",
@@ -1155,12 +1161,11 @@ async def test_send_command_sends_custom_command_packet(
     custom_pkt = "RQ --- 30:123456 18:111111 --:------ 22F1 003 000030"
     remote_entity._commands = {"my_custom": custom_pkt}
 
-    with patch.object(Command, "from_cli", side_effect=lambda x: x):
-        await remote_entity.async_send_command("my_custom")
+    await remote_entity.async_send_command("my_custom")
 
     mock_coordinator.client.async_send_cmd.assert_awaited_once()
     sent_cmd = mock_coordinator.client.async_send_cmd.call_args[0][0]
-    assert sent_cmd == custom_pkt
+    assert str(sent_cmd) == custom_pkt
     # Verify QoS parameters
     kwargs = mock_coordinator.client.async_send_cmd.call_args[1]
     assert kwargs["priority"] == Priority.HIGH
@@ -1251,7 +1256,7 @@ def test_build_packet_from_template() -> None:
 
     cmd_def = {"verb": "W", "code": "22F7", "payload": "0000EF"}
     result = _build_packet_from_template(cmd_def, fan, coordinator)
-    assert result == "W 32:153001 30:160000 22F7 0000EF"
+    assert result == "W 32:153001 30:160000 --:------ 22F7 0000EF"
 
 
 def test_build_packet_from_template_explicit_src() -> None:
@@ -1446,8 +1451,7 @@ async def test_fan_send_command_dict_template(
     fan_coordinator: MagicMock,
 ) -> None:
     """FAN entity send_command builds packet from dict template."""
-    with patch.object(Command, "from_cli", side_effect=lambda x: x):
-        await fan_remote_entity.async_send_command("bypass_on")
+    await fan_remote_entity.async_send_command("bypass_on")
     # Verify async_send_cmd was called with the built packet string
     fan_coordinator.client.async_send_cmd.assert_called_once()
     cmd = fan_coordinator.client.async_send_cmd.call_args.args[0]
@@ -1462,8 +1466,7 @@ async def test_fan_send_command_rem_string_fallback(
 ) -> None:
     """FAN entity send_command uses REM packet string for fallback commands."""
     # "boost" is a REM command (packet string), not a FAN dict template
-    with patch.object(Command, "from_cli", side_effect=lambda x: x):
-        await fan_remote_entity.async_send_command("boost")
+    await fan_remote_entity.async_send_command("boost")
     fan_coordinator.client.async_send_cmd.assert_called_once()
     cmd = fan_coordinator.client.async_send_cmd.call_args.args[0]
     assert "22F1" in str(cmd)

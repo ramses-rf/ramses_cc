@@ -38,7 +38,7 @@ from ramses_rf.schemas import (
     SZ_ZONES,
 )
 from ramses_tx.address import pkt_addrs
-from ramses_tx.command import Command
+from ramses_tx.dtos import CommandDTO
 from ramses_tx.exceptions import (
     PacketAddrSetInvalid,
     ProtocolSendFailed,
@@ -47,6 +47,7 @@ from ramses_tx.exceptions import (
 )
 
 from .const import CONF_SCHEMA, DOMAIN, SZ_KNOWN_LIST, SZ_TR_SKIPPED
+from .helpers import parse_packet_string
 
 if TYPE_CHECKING:
     from .coordinator import RamsesCoordinator
@@ -190,7 +191,11 @@ class RamsesServiceHandler:
                 f"Device not found: {call.data.get('device_id')}"
             ) from err
 
-        cmd = Command(call.data["device_info"]) if call.data["device_info"] else None
+        cmd = (
+            parse_packet_string(call.data["device_info"])
+            if call.data["device_info"]
+            else None
+        )
 
         _LOGGER.warning("Starting binding process for device %s", device.id)
 
@@ -257,7 +262,7 @@ class RamsesServiceHandler:
 
         self._schedule_refresh_later()
 
-    def _adjust_sentinel_packet(self, cmd: Command) -> None:
+    def _adjust_sentinel_packet(self, cmd: CommandDTO) -> None:
         """Fix address positioning for specific sentinel packets (18:000730)."""
         # HACK: to fix the device_id when GWY announcing.
         if not self._coordinator.client:

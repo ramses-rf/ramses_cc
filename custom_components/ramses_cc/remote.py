@@ -25,18 +25,13 @@ from homeassistant.helpers.event import async_track_state_change_event
 
 from ramses_rf.devices import HvacRemote, HvacVentilator
 from ramses_rf.entity import Entity as RamsesRFEntity
-from ramses_tx.command import Command
 from ramses_tx.const import DEFAULT_GAP_DURATION, Priority
-from ramses_tx.exceptions import (
-    ProtocolError,
-    ProtocolSendFailed,
-    ProtocolTimeoutError,
-    RamsesException,
-)
+from ramses_tx.exceptions import ProtocolError, ProtocolSendFailed, ProtocolTimeoutError
 
 from .const import ATTR_DEVICE_ID, CONF_SCHEMA, DOMAIN
 from .coordinator import RamsesCoordinator
 from .entity import RamsesEntity, RamsesEntityDescription
+from .helpers import parse_packet_string
 from .schemas import DEFAULT_NUM_REPEATS, DEFAULT_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
@@ -139,7 +134,7 @@ def _build_packet_from_template(
         optional ``src``.
     :param fan_device: The FAN (HvacVentilator) device that owns the command.
     :param coordinator: The coordinator (for HGI fallback lookup).
-    :return: A full packet string ready for ``Command()``.
+    :return: A full packet string ready for ``CommandDTO()``.
     :raises HomeAssistantError: If no src can be resolved.
     """
     verb = cmd_def[_CMD_VERB]
@@ -165,7 +160,7 @@ def _build_packet_from_template(
         )
 
     dst = fan_device.id
-    return f"{verb} {src} {dst} {code} {payload}"
+    return f"{verb} {src} {dst} --:------ {code} {payload}"
 
 
 def _parse_packet_to_template(packet: str) -> dict[str, str]:
@@ -591,12 +586,11 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
 
         # Users might enter a CLI shorthand OR a raw frame string;
         # _build_packet_from_template returns CLI shorthand (W src dst code
-        # payload) which Command.from_cli() parses.  For REM packet strings,
-        # users might enter either format — try from_cli first, then Command.
-        try:
-            cmd = Command.from_cli(packet_str)
-        except (ValueError, RamsesException):
-            cmd = Command(packet_str)
+        # payload) which parse_packet_string() parses.  For REM packet strings,
+        # users might enter either format.
+        cmd = parse_packet_string(packet_str)
+        if cmd is None:
+            raise ValueError(f"Failed to parse packet_str: {packet_str}")
 
         if not self.coordinator.client:
             raise HomeAssistantError(
@@ -662,11 +656,9 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
 
         assert not kwargs, kwargs  # TODO: remove me
 
-        # Basic validation: ensure packet parses as a Command
-        try:
-            Command(packet_string)
-        except Exception as err:  # noqa: BLE001
-            raise ValueError(f"packet_string invalid: {err}") from err
+        # Basic validation: ensure packet parses as a CommandDTO
+        if parse_packet_string(packet_string) is None:
+            raise ValueError(f"packet_string invalid: {packet_string}")
 
         if command[0] in self._commands:
             await self.async_delete_command(command)
