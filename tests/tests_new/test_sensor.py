@@ -31,7 +31,7 @@ from ramses_rf.devices import (
     Thermostat,
 )
 from ramses_rf.entity import Entity as RamsesRFEntity
-from ramses_tx.command import Command
+from ramses_tx.dtos import CommandDTO
 
 
 @pytest.fixture
@@ -227,8 +227,22 @@ async def test_async_update_poll_driven_success(
         # Check that commands were sent for each poll_code
         assert entity_poll_driven._device._gwy.async_send_cmd.call_count == 2
         calls = entity_poll_driven._device._gwy.async_send_cmd.call_args_list
-        assert calls[0][0][0] == Command.from_cli("RQ 01:123455 0001 00")
-        assert calls[1][0][0] == Command.from_cli("RQ 01:123455 0002 00")
+        assert calls[0][0][0] == CommandDTO(
+            verb="RQ",
+            addr1="18:000730",
+            addr2="01:123455",
+            addr3="--:------",
+            code="0001",
+            payload="00",
+        )
+        assert calls[1][0][0] == CommandDTO(
+            verb="RQ",
+            addr1="18:000730",
+            addr2="01:123455",
+            addr3="--:------",
+            code="0002",
+            payload="00",
+        )
 
         # Check logs
         assert "Polled 0001 for 01:123455" in caplog.text

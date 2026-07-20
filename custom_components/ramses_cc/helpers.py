@@ -14,6 +14,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 
+from ramses_tx.dtos import CommandDTO
+from ramses_tx.exceptions import PacketInvalid
+from ramses_tx.packet import Packet
+
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -194,3 +198,42 @@ def resolve_async_attr(
 
     # Return standard synchronous values immediately
     return val
+
+
+def parse_packet_string(packet_str: str) -> CommandDTO | None:
+    """Parse a packet string into a CommandDTO.
+
+    Handles both clean CLI formats and raw RF frames.
+    """
+    # 1. Try strict CLI format first
+    try:
+        cmd = CommandDTO.from_cli(packet_str)
+        # Validate verb
+        if cmd.verb.strip() not in ("I", "W", "RQ", "RP"):
+            raise ValueError("Invalid verb")
+
+        # Validate no garbage
+        parts = packet_str[2:].split()
+        if len(parts) > 0 and parts[0] == "---":
+            parts.pop(0)
+        if len(parts) > 6:
+            raise ValueError("Trailing garbage")
+
+        return cmd
+    except (ValueError, IndexError):
+        pass
+
+    # 2. Fallback: Parse as a raw RF frame
+    try:
+        pkt = Packet.from_port(dt.now(), packet_str)
+        dto = pkt.to_dto()
+        return CommandDTO(
+            verb=dto.verb,
+            addr1=dto.addr1,
+            addr2=dto.addr2,
+            addr3=dto.addr3,
+            code=dto.code,
+            payload=dto.payload,
+        )
+    except PacketInvalid:
+        return None

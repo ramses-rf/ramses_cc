@@ -24,7 +24,6 @@ from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.gateway import Gateway
 from ramses_rf.schemas import SZ_CONFIG, SZ_SCHEMA
 from ramses_rf.systems.tcs import Logbook, System
-from ramses_tx.command import Command
 from ramses_tx.const import (
     SZ_BATTERY_LEVEL,
     SZ_BATTERY_LOW,
@@ -43,6 +42,7 @@ from ramses_tx.const import (
     SZ_OTC_ACTIVE,
     SZ_SUMMER_MODE,
 )
+from ramses_tx.dtos import CommandDTO
 from ramses_tx.schemas import SZ_KNOWN_LIST
 
 from .const import (
@@ -211,7 +211,14 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
                 if tcs and hasattr(tcs, "get_faultlog"):
                     await tcs.get_faultlog(limit=1, force_refresh=True)
                 elif tcs and hasattr(tcs, "_gwy"):
-                    cmd = Command.from_cli(f"RQ {tcs.id} 0418 00")
+                    cmd = CommandDTO(
+                        verb="RQ",
+                        addr1="18:000730",
+                        addr2=tcs.id,
+                        addr3="--:------",
+                        code="0418",
+                        payload="00",
+                    )
                     await tcs._gwy.async_send_cmd(cmd)
             except Exception as err:
                 _LOGGER.debug(

@@ -76,7 +76,6 @@ from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.schemas import SZ_SCHEMA
 from ramses_rf.systems.tcs import System
 from ramses_rf.systems.zones import ZoneBase
-from ramses_tx.command import Command
 from ramses_tx.const import (
     SZ_BOILER_OUTPUT_TEMP,
     SZ_BOILER_RETURN_TEMP,
@@ -93,6 +92,7 @@ from ramses_tx.const import (
     SZ_REL_MODULATION_LEVEL,
     Code,
 )
+from ramses_tx.dtos import CommandDTO
 
 from .const import ATTR_SETPOINT, ATTR_WORKING_SCHEMA, DOMAIN, UnitOfVolumeFlowRate
 from .coordinator import RamsesCoordinator
@@ -157,7 +157,14 @@ class RamsesSensor(RamsesEntity, SensorEntity):
         _poll_cd = self.entity_description.poll_codes
         if _poll_cd:
             for code in _poll_cd:
-                cmd = Command.from_cli(f"RQ {self._device.id} {code} 00")
+                cmd = CommandDTO(
+                    verb="RQ",
+                    addr1="18:000730",
+                    addr2=self._device.id,
+                    addr3="--:------",
+                    code=code,
+                    payload="00",
+                )
                 try:
                     await self._device._gwy.async_send_cmd(cmd)
                     _LOGGER.debug("Polled %s for %s", code, self._device.id)
