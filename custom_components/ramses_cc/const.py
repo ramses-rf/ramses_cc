@@ -9,6 +9,7 @@ from homeassistant.const import CONF_SCAN_INTERVAL as CONF_SCAN_INTERVAL
 
 from ramses_rf.protocol.ramses import _2411_PARAMS_SCHEMA as _2411_PARAMS_SCHEMA
 from ramses_rf.schemas import SZ_BOUND_TO as SZ_BOUND_TO, SZ_SCHEMA as SZ_SCHEMA
+from ramses_tx.address import HGI_DEVICE_ID as HGI_DEVICE_ID
 from ramses_tx.const import SZ_IS_EVOFW3 as SZ_IS_EVOFW3
 from ramses_tx.schemas import (
     SZ_BUFFER_CAPACITY as SZ_BUFFER_CAPACITY,
@@ -50,7 +51,7 @@ CONF_UNKNOWN_CODES: Final = "unknown_codes"
 
 # Defaults
 DEFAULT_MQTT_TOPIC: Final = "RAMSES/GATEWAY"
-DEFAULT_HGI_ID: Final = "18:000730"
+DEFAULT_HGI_ID: Final = HGI_DEVICE_ID
 
 # State
 SZ_CLIENT_STATE: Final = "client_state"

@@ -423,7 +423,7 @@ async def test_gateway_binary_sensor_state(
     assert is_on_check_b is True
 
 
-@patch("custom_components.ramses_cc.binary_sensor.Command")
+@patch("custom_components.ramses_cc.binary_sensor.CommandDTO")
 @patch("custom_components.ramses_cc.binary_sensor.resolve_async_attr")
 async def test_logbook_async_added_to_hass(
     mock_resolve: MagicMock,
@@ -466,7 +466,7 @@ async def test_logbook_async_added_to_hass(
     del mock_device._tcs.get_faultlog
     mock_device._tcs._gwy = MagicMock()
     mock_device._tcs._gwy.async_send_cmd = AsyncMock()
-    mock_cmd.from_cli.return_value = "mock_cmd"
+    mock_cmd.return_value = "mock_cmd"
 
     # Act
     with patch(
@@ -476,7 +476,14 @@ async def test_logbook_async_added_to_hass(
         await sensor.async_added_to_hass()
 
     # Assert
-    mock_cmd.from_cli.assert_called_once_with("RQ 01:123456 0418 00")
+    mock_cmd.assert_called_once_with(
+        verb="RQ",
+        addr1="18:000730",
+        addr2="01:123456",
+        addr3="--:------",
+        code="0418",
+        payload="00",
+    )
     mock_device._tcs._gwy.async_send_cmd.assert_awaited_once_with("mock_cmd")
 
     # Act (Exception handling)
@@ -492,7 +499,7 @@ async def test_logbook_async_added_to_hass(
     # Arrange (active_faults present)
     # 4. active_faults is not None (should not poll)
     mock_resolve.return_value = [{"fault": "error"}]
-    mock_cmd.from_cli.reset_mock()
+    mock_cmd.reset_mock()
 
     # Act
     with patch(
@@ -502,4 +509,4 @@ async def test_logbook_async_added_to_hass(
         await sensor.async_added_to_hass()
 
     # Assert
-    mock_cmd.from_cli.assert_not_called()
+    mock_cmd.assert_not_called()
