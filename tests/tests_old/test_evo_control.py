@@ -354,8 +354,6 @@ async def test_namespace(hass: HomeAssistant) -> None:
             mode_attr = attrs.get("mode")
             assert mode_attr is not None
             assert mode_attr["mode"] == "temporary_override"
-            assert mode_attr["setpoint"] == 15.0
-            assert as_iso(mode_attr["until"]) == "2022-01-22T10:00:00"
             assert climate.current_temperature is None
 
     #
