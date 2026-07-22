@@ -341,11 +341,11 @@ async def test_namespace(hass: HomeAssistant) -> None:
         assert attrs is not None
 
         if zon_idx == "02":
-            # zone mode is hydrated from 2349/2309 packets (issue 843 fix)
-            mode_attr = attrs.get("mode")
-            assert mode_attr is not None
-            assert mode_attr["mode"] == "permanent_override"
-            assert mode_attr["setpoint"] == 19.0  # 2309 overrides 2349's 5.0
+            assert attrs.get("mode") == {
+                "mode": "permanent_override",
+                "setpoint": 19.0,
+                "until": None,
+            }
             # equivalent to {"temperatureStatus": isAvailable: true,
             # temperature: 18.16}
             assert climate.current_temperature == 18.16
