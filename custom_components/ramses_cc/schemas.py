@@ -1586,12 +1586,25 @@ def sync_learned_topology(
 
             # 1c. Sync DHW system
             learned_dhw = learned_entry.get(SZ_DHW_SYSTEM, {})
-            if isinstance(learned_dhw, dict) and learned_dhw:
+            if isinstance(learned_dhw, dict):
                 config_dhw = config_entry.setdefault(SZ_DHW_SYSTEM, {})
                 learned_dhw_sensor = learned_dhw.get(SZ_SENSOR)
                 if learned_dhw_sensor and not config_dhw.get(SZ_SENSOR):
                     config_dhw[SZ_SENSOR] = learned_dhw_sensor
                     changed = True
+                # Sync valve assignments (hotwater_valve, heating_valve).
+                # When the learned schema has valve=None (e.g. after
+                # re-parenting a BDR from hotwater_valve to
+                # appliance_control), remove the valve from the config too.
+                for valve_key in ("hotwater_valve", "heating_valve"):
+                    learned_valve = learned_dhw.get(valve_key)
+                    if learned_valve:
+                        if config_dhw.get(valve_key) != learned_valve:
+                            config_dhw[valve_key] = learned_valve
+                            changed = True
+                    elif valve_key in config_dhw and config_dhw[valve_key]:
+                        config_dhw[valve_key] = None
+                        changed = True
 
             # 1d. Sync TCS-level orphans (only remove devices now in zones)
             learned_tcs_orphans = set(learned_entry.get(SZ_ORPHANS, []))
