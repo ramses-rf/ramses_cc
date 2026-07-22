@@ -2992,6 +2992,132 @@ async def test_apply_schema_entry_does_not_overwrite_zone_sensor(
     # This is expected — the old device's orphan status is handled by ramses_rf's topology
 
 
+async def test_apply_schema_entry_loop_prevention_appliance_control(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _apply_schema_entry prevents discovery loop for appliance_control.
+
+    Issue 834 comment 5044906835: two relays (OTB + BDR) both broadcast
+    3B00/3EF0 and are both classified as appliance_control.  Accepting one
+    would displace the other from the single appliance_control slot,
+    causing a discovery loop.  The loop prevention guard
+    (_resolve_single_slot_conflicts) must redirect the new device to
+    orphans_heat instead of overwriting the existing slot.
+    """
+    handler = RamsesServiceHandler(mock_coordinator)
+    mock_client = MagicMock()
+    mock_engine = MagicMock()
+    mock_engine._include = []
+    mock_client._engine = mock_engine
+    mock_dev_filter = MagicMock()
+    mock_dev_filter._include = []
+    mock_client._device_filter = mock_dev_filter
+    mock_coordinator.client = mock_client
+
+    otb_id = "10:064873"
+    bdr_id = "13:042605"
+
+    # OTB is already the appliance_control
+    mock_coordinator.options = {
+        CONF_SCHEMA: {
+            "main_tcs": "01:216136",
+            "01:216136": {
+                SZ_SYSTEM: {SZ_APPLIANCE_CONTROL: otb_id},
+            },
+            otb_id: {},
+        }
+    }
+
+    # BDR is misclassified as FC (appliance_control) by the scan engine.
+    # The fragment tries to place it in the appliance_control slot.
+    fragment = {"01:216136": {SZ_SYSTEM: {SZ_APPLIANCE_CONTROL: bdr_id}}}
+    handler._apply_schema_entry(fragment, bdr_id)
+
+    schema = mock_coordinator.options[CONF_SCHEMA]
+    # OTB must still be appliance_control (not displaced)
+    assert schema["01:216136"][SZ_SYSTEM][SZ_APPLIANCE_CONTROL] == otb_id
+    # BDR must NOT be appliance_control
+    assert schema["01:216136"][SZ_SYSTEM][SZ_APPLIANCE_CONTROL] != bdr_id
+    # BDR must be redirected to orphans_heat
+    assert bdr_id in schema.get(SZ_ORPHANS_HEAT, [])
+
+
+async def test_apply_schema_entry_loop_prevention_hotwater_valve(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _apply_schema_entry prevents discovery loop for hotwater_valve.
+
+    Same loop prevention guard, but for the stored_hotwater.hotwater_valve
+    slot — two BDRs competing for the same DHW valve slot.
+    """
+    handler = RamsesServiceHandler(mock_coordinator)
+    mock_client = MagicMock()
+    mock_engine = MagicMock()
+    mock_engine._include = []
+    mock_client._engine = mock_engine
+    mock_dev_filter = MagicMock()
+    mock_dev_filter._include = []
+    mock_client._device_filter = mock_dev_filter
+    mock_coordinator.client = mock_client
+
+    existing_bdr = "13:111111"
+    new_bdr = "13:222222"
+
+    mock_coordinator.options = {
+        CONF_SCHEMA: {
+            "main_tcs": "01:216136",
+            "01:216136": {
+                SZ_DHW_SYSTEM: {"hotwater_valve": existing_bdr},
+            },
+        }
+    }
+
+    # New BDR tries to take the hotwater_valve slot
+    fragment = {"01:216136": {SZ_DHW_SYSTEM: {"hotwater_valve": new_bdr}}}
+    handler._apply_schema_entry(fragment, new_bdr)
+
+    schema = mock_coordinator.options[CONF_SCHEMA]
+    # Existing BDR must still be hotwater_valve
+    assert schema["01:216136"][SZ_DHW_SYSTEM]["hotwater_valve"] == existing_bdr
+    # New BDR must be in orphans_heat
+    assert new_bdr in schema.get(SZ_ORPHANS_HEAT, [])
+
+
+async def test_apply_schema_entry_no_conflict_same_device(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _apply_schema_entry allows re-accepting the same device (no conflict)."""
+    handler = RamsesServiceHandler(mock_coordinator)
+    mock_client = MagicMock()
+    mock_engine = MagicMock()
+    mock_engine._include = []
+    mock_client._engine = mock_engine
+    mock_dev_filter = MagicMock()
+    mock_dev_filter._include = []
+    mock_client._device_filter = mock_dev_filter
+    mock_coordinator.client = mock_client
+
+    otb_id = "10:064873"
+
+    mock_coordinator.options = {
+        CONF_SCHEMA: {
+            "main_tcs": "01:216136",
+            "01:216136": {
+                SZ_SYSTEM: {SZ_APPLIANCE_CONTROL: otb_id},
+            },
+        }
+    }
+
+    # Re-accept the same OTB — should NOT redirect (idempotent)
+    fragment = {"01:216136": {SZ_SYSTEM: {SZ_APPLIANCE_CONTROL: otb_id}}}
+    handler._apply_schema_entry(fragment, otb_id)
+
+    schema = mock_coordinator.options[CONF_SCHEMA]
+    assert schema["01:216136"][SZ_SYSTEM][SZ_APPLIANCE_CONTROL] == otb_id
+    # Should NOT be in orphans (no conflict)
+    assert otb_id not in schema.get(SZ_ORPHANS_HEAT, [])
+
+
 async def test_apply_schema_entry_preserves_existing_root_entry(
     mock_coordinator: RamsesCoordinator,
 ) -> None:

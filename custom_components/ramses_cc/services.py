@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import logging
 import re
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -72,6 +73,127 @@ def _device_in_fragment(fragment: dict[str, Any], device_id: str) -> bool:
         return False
 
     return _search(fragment)
+
+
+# Single-slot schema roles that hold exactly one device ID.  If a fragment
+# tries to place a device into one of these slots while a *different* device
+# already holds it, the merge would displace the existing device — which then
+# becomes an orphan and gets re-discovered, causing a discovery loop (issue
+# 834 comment 5044906835).  The guard in _apply_schema_entry detects such
+# conflicts and redirects the new device to orphans_heat instead.
+# NOTE: zone/DHW sensor slots are intentionally excluded — replacing a sensor
+# is a legitimate user action (swapping a TRV), not an automatic
+# misclassification loop.  The loop risk is specific to relay/actuator slots
+# where the scan engine's heuristic (e.g. 3B00/3EF0 → appliance_control) can
+# flag two devices for the same slot.
+_SINGLE_SLOT_ROLES: Final[frozenset[str]] = frozenset(
+    {SZ_APPLIANCE_CONTROL, "hotwater_valve", "heating_valve"}
+)
+
+
+def _resolve_single_slot_conflicts(
+    fragment: dict[str, Any],
+    current_schema: dict[str, Any],
+    device_id: str,
+) -> dict[str, Any]:
+    """Prevent a fragment from displacing a different device from a single-slot role.
+
+    Scans the fragment for single-slot keys (``appliance_control``,
+    ``hotwater_valve``, ``heating_valve``, ``sensor``) that would overwrite a
+    slot already held by a *different* device in ``current_schema``.  When a
+    conflict is found, the conflicting key is removed from the fragment and
+    the device being accepted is redirected to ``orphans_heat`` so the user
+    can resolve the conflict manually.
+
+    This prevents the discovery loop described in issue 834 comment
+    5044906835: two relays both broadcasting 3B00/3EF0 are both classified as
+    ``appliance_control``; accepting one displaces the other from the slot,
+    which is then re-discovered and re-accepted, ad infinitum.
+
+    :param fragment: The schema fragment from generate_schema_entry.
+    :param current_schema: The current config entry schema (before merge).
+    :param device_id: The device being accepted (the one the fragment is for).
+    :return: A possibly-modified fragment with conflicts resolved.
+    """
+    result = copy.deepcopy(fragment)
+    redirected = False
+
+    for tcs_id, tcs_frag in result.items():
+        if not isinstance(tcs_id, str) or not isinstance(tcs_frag, dict):
+            continue
+        if tcs_id in (SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC, "orphans"):
+            continue
+        current_tcs = current_schema.get(tcs_id, {})
+        if not isinstance(current_tcs, dict):
+            current_tcs = {}
+
+        # system.appliance_control
+        frag_sys = tcs_frag.get(SZ_SYSTEM)
+        if isinstance(frag_sys, dict):
+            frag_app = frag_sys.get(SZ_APPLIANCE_CONTROL)
+            cur_sys = current_tcs.get(SZ_SYSTEM, {})
+            cur_app = (
+                cur_sys.get(SZ_APPLIANCE_CONTROL) if isinstance(cur_sys, dict) else None
+            )
+            if (
+                isinstance(frag_app, str)
+                and frag_app == device_id
+                and cur_app
+                and cur_app != device_id
+            ):
+                _LOGGER.warning(
+                    "accept_discovered_device: %s would displace %s from "
+                    "appliance_control slot in %s — redirecting to "
+                    "orphans_heat to avoid discovery loop (issue 834)",
+                    device_id,
+                    cur_app,
+                    tcs_id,
+                )
+                frag_sys.pop(SZ_APPLIANCE_CONTROL)
+                if not frag_sys:
+                    tcs_frag.pop(SZ_SYSTEM)
+                redirected = True
+
+        # stored_hotwater.hotwater_valve / heating_valve (sensor excluded —
+        # sensor replacement is a legitimate user action, not a loop risk)
+        frag_dhw = tcs_frag.get(SZ_DHW_SYSTEM)
+        if isinstance(frag_dhw, dict):
+            cur_dhw = current_tcs.get(SZ_DHW_SYSTEM, {})
+            if not isinstance(cur_dhw, dict):
+                cur_dhw = {}
+            for slot_key in ("hotwater_valve", "heating_valve"):
+                frag_val = frag_dhw.get(slot_key)
+                cur_val = cur_dhw.get(slot_key)
+                if (
+                    isinstance(frag_val, str)
+                    and frag_val == device_id
+                    and cur_val
+                    and cur_val != device_id
+                ):
+                    _LOGGER.warning(
+                        "accept_discovered_device: %s would displace %s "
+                        "from %s slot in %s.stored_hotwater — redirecting "
+                        "to orphans_heat to avoid discovery loop (issue 834)",
+                        device_id,
+                        cur_val,
+                        slot_key,
+                        tcs_id,
+                    )
+                    frag_dhw.pop(slot_key)
+                    redirected = True
+            if not frag_dhw:
+                tcs_frag.pop(SZ_DHW_SYSTEM)
+
+    if redirected:
+        # Add the device to orphans_heat so it's not lost
+        orphans = result.get(SZ_ORPHANS_HEAT, [])
+        if not isinstance(orphans, list):
+            orphans = []
+        if device_id not in orphans:
+            orphans = sorted([*orphans, device_id])
+            result[SZ_ORPHANS_HEAT] = orphans
+
+    return result
 
 
 class _MockServiceCall:
@@ -1223,6 +1345,15 @@ class RamsesServiceHandler:
         has_existing_root = isinstance(existing_root, dict) and bool(existing_root)
 
         cleaned = remove_device_from_schema(current_schema, device_id)
+
+        # Loop prevention (issue 834 comment 5044906835): if the fragment
+        # would place device_id into a single-slot role (appliance_control,
+        # hotwater_valve, heating_valve, sensor) that is already held by a
+        # *different* device, strip the conflicting key and redirect the
+        # new device to orphans_heat.  Without this, deep_merge overwrites
+        # the existing device, which becomes an orphan and gets re-discovered
+        # — causing an infinite discovery loop.
+        fragment = _resolve_single_slot_conflicts(fragment, cleaned, device_id)
 
         if has_existing_root:
             # Strip the device's root entry from the fragment so deep_merge
