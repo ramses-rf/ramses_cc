@@ -1446,6 +1446,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 "advanced_features",
                 "packet_log",
                 "review_discovered",
+                "review_device_health",
                 "clear_cache",
             ],
         )
@@ -1967,6 +1968,213 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
         return self.async_show_form(
             step_id="review_discovered",
+            data_schema=vol.Schema(form_fields),
+            description_placeholders={"message": summary},
+            last_step=True,
+        )
+
+    async def async_step_review_device_health(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Review devices that haven't been seen recently.
+
+        Shows orphaned devices (in schema but not seen by scan for >threshold)
+        and lost devices (ACCEPTED, not seen for >threshold).  The user can
+        keep (dismiss the flag) or remove (full cleanup via remove_device
+        service) each device individually.
+        """
+        self.get_options()
+
+        coordinators = self.hass.data.get(DOMAIN, {})
+        coordinator = None
+        for coord in coordinators.values():
+            if hasattr(coord, "discovery_manager"):
+                coordinator = coord
+                break
+
+        if not coordinator or not coordinator.discovery_manager:
+            return self.async_show_form(
+                step_id="review_device_health",
+                description_placeholders={
+                    "message": "Passive device scan is not enabled."
+                },
+                last_step=True,
+            )
+
+        from .discovery import DiscoveryStatus
+
+        # Run an immediate check so the flags are up to date
+        config_schema_check = self.options.get(CONF_SCHEMA, {})
+        if isinstance(config_schema_check, dict):
+            coordinator.discovery_manager.check_orphaned_devices(config_schema_check)
+            coordinator.discovery_manager.check_for_lost_devices()
+
+        orphaned_devices = coordinator.discovery_manager.get_orphaned_devices()
+        lost_devices = coordinator.discovery_manager.get_lost_devices()
+
+        # Deduplicate: a device could be both orphaned and lost — only
+        # show it once, prioritising LOST (more severe).
+        lost_ids = {e.device.device_id for e in lost_devices}
+        orphaned_only = [
+            e for e in orphaned_devices if e.device.device_id not in lost_ids
+        ]
+
+        if not orphaned_only and not lost_devices:
+            if user_input is not None:
+                return self._async_save()
+            return self.async_show_form(
+                step_id="review_device_health",
+                description_placeholders={"message": "No orphaned or lost devices."},
+                last_step=True,
+            )
+
+        if user_input is not None:
+            # Process each device — "keep" clears the flag, "remove" calls
+            # the remove_device service for full cleanup.
+            removed_any = False
+            for entry in lost_devices:
+                device_id = entry.device.device_id
+                action = user_input.get(f"lost_{device_id}", "keep")
+                if action == "remove":
+                    await self.hass.services.async_call(
+                        DOMAIN,
+                        "remove_device",
+                        {"device_id": device_id},
+                        blocking=True,
+                    )
+                    removed_any = True
+                    _LOGGER.info(
+                        "review_device_health: removed lost device %s",
+                        device_id,
+                    )
+                elif action == "keep":
+                    # Clear LOST status → back to ACCEPTED, clear orphaned
+                    meta = coordinator.discovery_manager._metadata.get(device_id)
+                    if meta:
+                        meta.status = DiscoveryStatus.ACCEPTED
+                        meta.orphaned = None
+
+            for entry in orphaned_only:
+                device_id = entry.device.device_id
+                action = user_input.get(f"orphaned_{device_id}", "keep")
+                if action == "remove":
+                    await self.hass.services.async_call(
+                        DOMAIN,
+                        "remove_device",
+                        {"device_id": device_id},
+                        blocking=True,
+                    )
+                    removed_any = True
+                    _LOGGER.info(
+                        "review_device_health: removed orphaned device %s",
+                        device_id,
+                    )
+                elif action == "keep":
+                    # Clear the orphaned flag — device is still there, just quiet
+                    meta = coordinator.discovery_manager._metadata.get(device_id)
+                    if meta:
+                        meta.orphaned = None
+
+            # Save discovery metadata to .storage via the coordinator's
+            # save cycle (export_state is called inside async_save_client_state)
+            await coordinator.async_save_client_state()
+
+            if removed_any:
+                # remove_device service already updated the config entry,
+                # so refresh self.options from the coordinator to avoid
+                # overwriting with stale data, then save normally
+                self.options = dict(coordinator.options)
+
+            return self._async_save()
+
+        # Build summary table
+        lines: list[str] = []
+        if lost_devices:
+            lines.append(
+                f"**{len(lost_devices)} lost device(s)** "
+                "(accepted but not seen for >7 days):\n"
+            )
+            lines.append("| Device | Type | Last seen | Status |")
+            lines.append("|--------|------|-----------|--------|")
+            for entry in lost_devices:
+                d = entry.device
+                last_seen = getattr(d, "last_seen", "—")
+                lines.append(
+                    f"| `{d.device_id}` | {d.likely_type or '?'} | {last_seen} | LOST |"
+                )
+
+        if orphaned_only:
+            if lines:
+                lines.append("\n")
+            lines.append(
+                f"**{len(orphaned_only)} orphaned device(s)** "
+                "(in schema but not seen recently):\n"
+            )
+            lines.append("| Device | Type | Last seen | Note |")
+            lines.append("|--------|------|-----------|------|")
+            for entry in orphaned_only:
+                d = entry.device
+                last_seen = getattr(d, "last_seen", "—")
+                note = entry.metadata.orphaned or ""
+                lines.append(
+                    f"| `{d.device_id}` | {d.likely_type or '?'} "
+                    f"| {last_seen} | {note} |"
+                )
+
+        if not lines:
+            lines.append("No orphaned or lost devices.")
+        summary = "\n".join(lines)
+
+        # Build form with per-device Keep/Remove selectors
+        form_fields: dict[Any, Any] = {}
+
+        for entry in lost_devices:
+            d = entry.device
+            device_id = d.device_id
+            last_seen = getattr(d, "last_seen", "—")
+            field_label = (
+                f"{device_id} | {d.likely_type or '?'} | last seen: {last_seen} | LOST"
+            )
+            form_fields[
+                vol.Required(
+                    f"lost_{device_id}",
+                    default="keep",
+                    description={"label": field_label},
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "keep", "label": "Keep (dismiss flag)"},
+                        {"value": "remove", "label": "Remove device"},
+                    ],
+                )
+            )
+
+        for entry in orphaned_only:
+            d = entry.device
+            device_id = d.device_id
+            last_seen = getattr(d, "last_seen", "—")
+            field_label = (
+                f"{device_id} | {d.likely_type or '?'} | "
+                f"last seen: {last_seen} | orphaned"
+            )
+            form_fields[
+                vol.Required(
+                    f"orphaned_{device_id}",
+                    default="keep",
+                    description={"label": field_label},
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "keep", "label": "Keep (dismiss flag)"},
+                        {"value": "remove", "label": "Remove device"},
+                    ],
+                )
+            )
+
+        return self.async_show_form(
+            step_id="review_device_health",
             data_schema=vol.Schema(form_fields),
             description_placeholders={"message": summary},
             last_step=True,

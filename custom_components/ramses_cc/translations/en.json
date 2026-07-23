@@ -147,6 +147,7 @@
                     "advanced_features": "Advanced features",
                     "packet_log": "Packet log",
                     "review_discovered": "Review discovered devices",
+                    "review_device_health": "Review device health",
                     "clear_cache": "Clear cache"
                 }
             },
@@ -246,6 +247,11 @@
             },
             "review_discovered": {
                 "title": "Review discovered devices",
+                "description": "{message}",
+                "data": {}
+            },
+            "review_device_health": {
+                "title": "Review device health",
                 "description": "{message}",
                 "data": {}
             }

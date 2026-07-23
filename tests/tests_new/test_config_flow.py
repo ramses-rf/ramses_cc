@@ -2840,3 +2840,287 @@ async def test_options_flow_schema_strips_commands_for_validation(
     data = result.get("data")
     assert data is not None
     assert SZ_TR_COMMANDS in data[CONF_SCHEMA].get("37:153001", {})
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Options flow: review_device_health step (orphaned/lost devices)
+# ───────────────────────────────────────────────────────────────────────
+
+
+async def test_review_device_health_no_coordinator(hass: HomeAssistant) -> None:
+    """Test review_device_health step when no coordinator with discovery_manager."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_device_health"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "review_device_health"
+    placeholders = result.get("description_placeholders", {})
+    assert "not enabled" in placeholders.get("message", "")
+
+
+async def test_review_device_health_no_manager(hass: HomeAssistant) -> None:
+    """Test review_device_health step when coordinator has no discovery_manager."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = None
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_device_health"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    placeholders = result.get("description_placeholders", {})
+    assert "not enabled" in placeholders.get("message", "")
+
+
+async def test_review_device_health_no_devices(hass: HomeAssistant) -> None:
+    """Test review_device_health step when there are no orphaned/lost devices."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_orphaned_devices.return_value = []
+    mock_coord.discovery_manager.get_lost_devices.return_value = []
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_device_health"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    placeholders = result.get("description_placeholders", {})
+    assert "No orphaned or lost" in placeholders.get("message", "")
+
+
+async def test_review_device_health_shows_form_with_lost(
+    hass: HomeAssistant,
+) -> None:
+    """Test review_device_health step shows form with lost device selector."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "04:056053"
+    mock_entry.device.likely_type = "TRV"
+    mock_entry.device.last_seen = "2026-07-01T10:00:00"
+    mock_entry.metadata.status = MagicMock()
+    mock_entry.metadata.orphaned = "last seen 2026-07-01 (>7 days)"
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_lost_devices.return_value = [mock_entry]
+    mock_coord.discovery_manager.get_orphaned_devices.return_value = []
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_device_health"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "review_device_health"
+    data_schema = result.get("data_schema")
+    assert data_schema is not None
+    schema_dict = data_schema.schema
+    field_names = {
+        str(k) if hasattr(k, "schema") else k for k, _ in schema_dict.items()
+    }
+    assert "lost_04:056053" in field_names
+    placeholders = result.get("description_placeholders", {})
+    assert "04:056053" in placeholders.get("message", "")
+    assert "LOST" in placeholders.get("message", "")
+
+
+async def test_review_device_health_shows_form_with_orphaned(
+    hass: HomeAssistant,
+) -> None:
+    """Test review_device_health step shows form with orphaned device selector."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "01:123456"
+    mock_entry.device.likely_type = "CTL"
+    mock_entry.device.last_seen = "2026-07-10T12:00:00"
+    mock_entry.metadata.orphaned = "last seen 2026-07-10 (>7 days)"
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_lost_devices.return_value = []
+    mock_coord.discovery_manager.get_orphaned_devices.return_value = [mock_entry]
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_device_health"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    data_schema = result.get("data_schema")
+    assert data_schema is not None
+    schema_dict = data_schema.schema
+    field_names = {
+        str(k) if hasattr(k, "schema") else k for k, _ in schema_dict.items()
+    }
+    assert "orphaned_01:123456" in field_names
+    placeholders = result.get("description_placeholders", {})
+    assert "01:123456" in placeholders.get("message", "")
+    assert "orphaned" in placeholders.get("message", "")
+
+
+async def test_review_device_health_keep_clears_flag(
+    hass: HomeAssistant,
+) -> None:
+    """Test review_device_health 'keep' action clears the orphaned flag."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_meta = MagicMock()
+    mock_meta.orphaned = "last seen 2026-07-01 (>7 days)"
+    mock_meta.status = MagicMock()
+
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "04:056053"
+    mock_entry.device.likely_type = "TRV"
+    mock_entry.device.last_seen = "2026-07-01T10:00:00"
+    mock_entry.metadata = mock_meta
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_lost_devices.return_value = []
+    mock_coord.discovery_manager.get_orphaned_devices.return_value = [mock_entry]
+    mock_coord.discovery_manager._metadata = {"04:056053": mock_meta}
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.options = {SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}}
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    # Navigate to review_device_health
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_device_health"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+
+    # Submit with "keep" action
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={"orphaned_04:056053": "keep"},
+    )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    # Verify the orphaned flag was cleared
+    assert mock_meta.orphaned is None
+    # Verify save was called
+    mock_coord.async_save_client_state.assert_awaited_once()
+
+
+async def test_review_device_health_remove_calls_service(
+    hass: HomeAssistant,
+) -> None:
+    """Test review_device_health 'remove' action calls the remove_device service."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_meta = MagicMock()
+    mock_meta.orphaned = "last seen 2026-07-01 (>7 days)"
+
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "04:056053"
+    mock_entry.device.likely_type = "TRV"
+    mock_entry.device.last_seen = "2026-07-01T10:00:00"
+    mock_entry.metadata = mock_meta
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_lost_devices.return_value = []
+    mock_coord.discovery_manager.get_orphaned_devices.return_value = [mock_entry]
+    mock_coord.discovery_manager._metadata = {"04:056053": mock_meta}
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.options = {SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}}
+    hass.data[DOMAIN] = {config_entry.entry_id: mock_coord}
+
+    # Register a mock remove_device service so async_call works
+    remove_calls: list[dict[str, Any]] = []
+
+    async def _mock_remove_device(call: Any) -> None:
+        remove_calls.append(dict(call.data))
+
+    hass.services.async_register(DOMAIN, "remove_device", _mock_remove_device)
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    # Navigate to review_device_health
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_device_health"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+
+    # Submit with "remove" action
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={"orphaned_04:056053": "remove"},
+    )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    # Verify the remove_device service was called with the right device_id
+    assert len(remove_calls) == 1
+    assert remove_calls[0] == {"device_id": "04:056053"}

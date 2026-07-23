@@ -502,6 +502,39 @@ class DiscoveryManager:
                 result.append(entry)
         return result
 
+    def get_orphaned_devices(self) -> list[DiscoveredDeviceEntry]:
+        """Get devices that have an orphaned flag set.
+
+        These are schema devices that haven't been seen by the scan
+        engine for longer than the orphan threshold (default 7 days).
+        The ``review_device_health`` config flow step shows them so the
+        user can remove them if truly gone, or dismiss the flag if the
+        device is just quiet.
+
+        :return: List of device entries with orphaned set.
+        """
+        result: list[DiscoveredDeviceEntry] = []
+        for entry in self.get_devices():
+            if entry.metadata.orphaned:
+                result.append(entry)
+        return result
+
+    def get_lost_devices(self) -> list[DiscoveredDeviceEntry]:
+        """Get devices that have LOST status.
+
+        These are ACCEPTED devices that haven't been seen for the
+        configured threshold (default 7 days).  The
+        ``review_device_health`` config flow step shows them so the user
+        can remove them if truly gone.
+
+        :return: List of device entries with LOST status.
+        """
+        result: list[DiscoveredDeviceEntry] = []
+        for entry in self.get_devices():
+            if entry.metadata.status == DiscoveryStatus.LOST:
+                result.append(entry)
+        return result
+
     def check_bound_mismatches(self, schema: dict[str, Any]) -> int:
         """Check for _bound mismatches between scan engine and schema.
 
