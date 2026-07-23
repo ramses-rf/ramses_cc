@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, call, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -460,11 +460,11 @@ async def test_init_service_wrappers_advanced(
     assert mock_coordinator.async_send_packet.called
 
 
-async def test_async_migrate_entry_v1_to_v2(hass: HomeAssistant) -> None:
-    """Test the migration of a config entry from version 1 to 2."""
+async def test_async_migrate_entry_v1_to_v3(hass: HomeAssistant) -> None:
+    """Test the migration of a config entry from version 1 to 3 (chained)."""
     entry = MagicMock()
     entry.version = 1
-    entry.entry_id = "test_migration_v1_v2"
+    entry.entry_id = "test_migration_v1_v3"
 
     # Mocking legacy options that need to be cleaned up
     entry.options = {
@@ -481,10 +481,22 @@ async def test_async_migrate_entry_v1_to_v2(hass: HomeAssistant) -> None:
     }
 
     with patch.object(hass.config_entries, "async_update_entry") as mock_update:
+        # Make async_update_entry actually update entry.version and entry.options
+        # so the chained v2→v3 migration sees the updated state
+        def _do_update(ent, **kwargs):
+            if "version" in kwargs:
+                ent.version = kwargs["version"]
+            if "options" in kwargs:
+                ent.options = kwargs["options"]
+
+        mock_update.side_effect = _do_update
         result = await async_migrate_entry(hass, entry)
 
         assert result is True
-        mock_update.assert_called_once_with(
+        # v1→v2 is called first, then v2→v3 (no known_list, so just version bump)
+        assert mock_update.call_count == 2
+        # First call: v1→v2 (strip deprecated keys)
+        assert mock_update.call_args_list[0] == call(
             entry,
             options={
                 "packet_log": {
@@ -497,20 +509,41 @@ async def test_async_migrate_entry_v1_to_v2(hass: HomeAssistant) -> None:
             },
             version=2,
         )
+        # Second call: v2→v3 (no known_list to merge, just version bump)
+        assert mock_update.call_args_list[1] == call(
+            entry,
+            options={
+                "packet_log": {
+                    "buffer_capacity": 100,
+                },
+                "ramses_rf": {
+                    "enforce_known_list": True,
+                },
+                "other_setting": "kept",
+            },
+            version=3,
+        )
 
 
-async def test_async_migrate_entry_v2_no_change(hass: HomeAssistant) -> None:
-    """Test that a version 2 config entry is not migrated or modified."""
+async def test_async_migrate_entry_v2_to_v3_no_known_list(
+    hass: HomeAssistant,
+) -> None:
+    """Test that a version 2 config entry is migrated to v3 (version bump only
+    when there's no known_list to merge)."""
     entry = MagicMock()
     entry.version = 2
-    entry.entry_id = "test_no_migration_v2"
+    entry.entry_id = "test_migration_v2_v3"
     entry.options = {"packet_log": {}}
 
     with patch.object(hass.config_entries, "async_update_entry") as mock_update:
         result = await async_migrate_entry(hass, entry)
 
         assert result is True
-        mock_update.assert_not_called()
+        mock_update.assert_called_once_with(
+            entry,
+            options={"packet_log": {}},
+            version=3,
+        )
 
 
 def test_healed_serial_port_options_from_mqtt_hints() -> None:
