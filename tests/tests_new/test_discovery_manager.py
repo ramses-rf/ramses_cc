@@ -1999,3 +1999,86 @@ class TestSyncWithSchema:
         # or if it is, its status should not be REMOVED
         if "18:130236" in manager._metadata:
             assert manager._metadata["18:130236"].status != DiscoveryStatus.REMOVED
+
+
+class TestGetOrphanedDevices:
+    """Tests for DiscoveryManager.get_orphaned_devices."""
+
+    def test_returns_only_orphaned(self) -> None:
+        """Only devices with orphaned flag set are returned."""
+        dev1 = make_discovered_device("04:056053", "TRV")
+        dev2 = make_discovered_device("01:145038", "CTL")
+        scan = make_mock_scan([dev1, dev2])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager._metadata["04:056053"] = DeviceMetadata(
+            orphaned="last seen 2026-07-01 (>7 days)"
+        )
+        manager._metadata["01:145038"] = DeviceMetadata()
+
+        result = manager.get_orphaned_devices()
+        assert len(result) == 1
+        assert result[0].device.device_id == "04:056053"
+
+    def test_empty_when_no_orphaned(self) -> None:
+        """No orphaned flags → empty list."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        result = manager.get_orphaned_devices()
+        assert result == []
+
+    def test_cleared_orphaned_not_returned(self) -> None:
+        """An orphaned flag that was cleared (set to None) is not returned."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager._metadata["04:056053"] = DeviceMetadata(
+            orphaned="last seen 2026-07-01 (>7 days)"
+        )
+        manager._metadata["04:056053"].orphaned = None
+
+        result = manager.get_orphaned_devices()
+        assert result == []
+
+
+class TestGetLostDevices:
+    """Tests for DiscoveryManager.get_lost_devices."""
+
+    def test_returns_only_lost(self) -> None:
+        """Only devices with LOST status are returned."""
+        dev1 = make_discovered_device("04:056053", "TRV")
+        dev2 = make_discovered_device("01:145038", "CTL")
+        scan = make_mock_scan([dev1, dev2])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager._metadata["04:056053"] = DeviceMetadata(status=DiscoveryStatus.LOST)
+        manager._metadata["01:145038"] = DeviceMetadata(status=DiscoveryStatus.ACCEPTED)
+
+        result = manager.get_lost_devices()
+        assert len(result) == 1
+        assert result[0].device.device_id == "04:056053"
+
+    def test_empty_when_no_lost(self) -> None:
+        """No LOST devices → empty list."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager._metadata["04:056053"] = DeviceMetadata(status=DiscoveryStatus.ACCEPTED)
+
+        result = manager.get_lost_devices()
+        assert result == []
+
+    def test_accepted_not_returned(self) -> None:
+        """ACCEPTED devices are not returned by get_lost_devices."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager._metadata["04:056053"] = DeviceMetadata(status=DiscoveryStatus.ACCEPTED)
+
+        result = manager.get_lost_devices()
+        assert result == []
