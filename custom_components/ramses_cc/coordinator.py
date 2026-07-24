@@ -1892,7 +1892,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 existing_comments = config_schema.get(SZ_DEVICE_COMMENTS, {})
                 if isinstance(existing_comments, dict):
                     refreshed = self.discovery_manager.refresh_device_comments(
-                        existing_comments
+                        existing_comments, config_schema
                     )
                     if refreshed is not existing_comments:
                         config_schema = dict(config_schema)

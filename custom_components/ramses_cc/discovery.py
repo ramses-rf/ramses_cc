@@ -220,7 +220,9 @@ class DiscoveryManager:
         return result
 
     def refresh_device_comments(
-        self, existing_comments: dict[str, str]
+        self,
+        existing_comments: dict[str, str],
+        config_schema: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """Update device comments with the latest scan engine data.
 
@@ -230,6 +232,9 @@ class DiscoveryManager:
 
         :param existing_comments: The current device_comments dict from the
             config schema.
+        :param config_schema: The full config schema (used to check if a
+            device is already placed as hotwater_valve, which overrides the
+            scan engine's FC domain hint).  Issue 834.
         :return: A new dict with updated comments (or the original dict if
             no changes were made).
         """
@@ -237,7 +242,25 @@ class DiscoveryManager:
         changed = False
         result = dict(existing_comments)
 
+        # Build a set of device IDs that are placed as hotwater_valve in
+        # the schema.  The scan engine's domain_id=FC hint (from 3B00/3EF0)
+        # is ambiguous — a hotwater_valve relay also broadcasts these codes.
+        # If the device is already placed as hotwater_valve in the schema,
+        # we suppress the "domain FC" comment to avoid misleading the user.
+        # See issue 834 comment 5044906835.
+        hotwater_valves: set[str] = set()
+        if config_schema:
+            for ctl_entry in config_schema.values():
+                if not isinstance(ctl_entry, dict):
+                    continue
+                dhw = ctl_entry.get("stored_hotwater", {})
+                if isinstance(dhw, dict):
+                    valve = dhw.get("hotwater_valve")
+                    if isinstance(valve, str):
+                        hotwater_valves.add(valve)
+
         for dev_id, dev in engine_devices.items():
+            schema_role = "hotwater_valve" if dev_id in hotwater_valves else None
             # HGI gateways (18:) are tracked but don't have zone bindings.
             # Still create comments for them (without zone/bound info).
             if dev_id.startswith("18:"):
@@ -248,7 +271,9 @@ class DiscoveryManager:
                 ):
                     continue  # already has a comment with suffix
                 likely_type = dev.likely_type or "HGI"
-                new_comment = self._build_comment(dev, likely_type, None, None)
+                new_comment = self._build_comment(
+                    dev, likely_type, None, None, schema_role=schema_role
+                )
                 if new_comment != result.get(dev_id, ""):
                     result[dev_id] = new_comment
                     changed = True
@@ -260,10 +285,15 @@ class DiscoveryManager:
             if not dev.zone_idx and not dev.bound_to:
                 # No binding info — still create a basic comment if missing
                 # or if it lacks the auto-generated suffix.
-                if comment and self._COMMENT_SUFFIX in comment:
+                # Exception: if the device has a schema_role (e.g.
+                # hotwater_valve), we must rebuild the comment to suppress
+                # the scan engine's FC domain hint.  Issue 834.
+                if comment and self._COMMENT_SUFFIX in comment and schema_role is None:
                     continue  # existing comment, no new info to add
                 likely_type = dev.likely_type or "unknown"
-                new_comment = self._build_comment(dev, likely_type, None, None)
+                new_comment = self._build_comment(
+                    dev, likely_type, None, None, schema_role=schema_role
+                )
                 if new_comment != comment:
                     result[dev_id] = new_comment
                     changed = True
@@ -276,7 +306,11 @@ class DiscoveryManager:
             # Rebuild the comment from the scan engine data
             likely_type = dev.likely_type or "unknown"
             new_comment = self._build_comment(
-                dev, likely_type, dev.bound_to, dev.zone_idx
+                dev,
+                likely_type,
+                dev.bound_to,
+                dev.zone_idx,
+                schema_role=schema_role,
             )
             if new_comment != comment:
                 result[dev_id] = new_comment
@@ -917,12 +951,18 @@ class DiscoveryManager:
         likely_type: str,
         bound_to: str | None,
         zone_idx: str | None,
+        *,
+        schema_role: str | None = None,
     ) -> str:
         """Build a descriptive comment from scan engine data.
 
         Includes: likely type, confidence, ambiguity notes, binding info,
         domain_id (appliance_control), packet codes seen, and battery/RSSI
         if available.
+
+        :param schema_role: The device's actual role in the schema (e.g.
+            ``"hotwater_valve"``).  When set, this overrides the scan
+            engine's domain_id hint — the schema is the SSOT.  See issue 834.
         """
         parts: list[str] = []
 
@@ -945,8 +985,13 @@ class DiscoveryManager:
             parts.append(f"zone {zone_idx}")
 
         # Domain ID (FC = appliance_control, issue 834)
+        # The scan engine's domain_id is a hint from 3B00/3EF0 broadcasts.
+        # Both appliance_control and hotwater_valve relays send these codes,
+        # so the hint is ambiguous.  If the schema has already placed this
+        # device as hotwater_valve, suppress the FC hint — the schema is
+        # the SSOT and the user has confirmed the placement.
         domain_id = getattr(dev, "domain_id", None) if dev else None
-        if domain_id == "FC":
+        if domain_id == "FC" and schema_role != "hotwater_valve":
             parts.append("domain FC (appliance_control)")
 
         # Packet codes seen
