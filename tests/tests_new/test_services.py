@@ -57,6 +57,7 @@ from ramses_rf.schemas import (
 from ramses_rf.systems import System, Zone
 from ramses_rf.topology import Child
 from ramses_tx.const import DevType
+from ramses_tx.dtos import CommandDTO
 from ramses_tx.exceptions import (
     PacketAddrSetInvalid,
     ProtocolSendFailed,
@@ -192,22 +193,21 @@ def test_adjust_sentinel_packet_swaps_on_invalid() -> None:
 
     handler = RamsesServiceHandler(coordinator)
 
-    cmd = MagicMock()
-    cmd.src.id = SENTINEL_ID
-    cmd.dst.id = HGI_ID
-    cmd._frame = "X" * 40
-
-    m0, m1, m2 = MagicMock(), MagicMock(), MagicMock()
-    m0.id, m1.id, m2.id = "addr0", "addr1", "addr2"
-    cmd._addrs = [m0, m1, m2]
+    cmd = CommandDTO(
+        verb=" I",
+        addr1=SENTINEL_ID,
+        addr2=HGI_ID,
+        addr3="--:------",
+        code="1F09",
+        payload="FF",
+    )
 
     with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_validate:
         mock_validate.side_effect = PacketAddrSetInvalid("Invalid structure")
-        handler._adjust_sentinel_packet(cmd)
+        result = handler._adjust_sentinel_packet(cmd)
 
-        assert cmd._addrs[1].id == "addr2"
-        assert cmd._addrs[2].id == "addr1"
-        assert cmd._repr is None
+        assert result.addr2 == "--:------"
+        assert result.addr3 == HGI_ID
 
 
 def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
@@ -218,18 +218,20 @@ def test_adjust_sentinel_packet_no_swap_on_valid() -> None:
 
     handler = RamsesServiceHandler(coordinator)
 
-    cmd = MagicMock()
-    cmd.src.id = SENTINEL_ID
-    cmd.dst.id = HGI_ID
-
-    m0, m1, m2 = MagicMock(), MagicMock(), MagicMock()
-    m0.id, m1.id, m2.id = "addr0", "addr1", "addr2"
-    cmd._addrs = [m0, m1, m2]
+    cmd = CommandDTO(
+        verb=" I",
+        addr1=SENTINEL_ID,
+        addr2=HGI_ID,
+        addr3="--:------",
+        code="1F09",
+        payload="FF",
+    )
 
     with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_validate:
         mock_validate.return_value = True
-        handler._adjust_sentinel_packet(cmd)
-        assert cmd._addrs[1].id == "addr1"
+        result = handler._adjust_sentinel_packet(cmd)
+        assert result.addr2 == HGI_ID
+        assert result.addr3 == "--:------"
 
 
 def test_adjust_sentinel_packet_ignores_other_devices() -> None:
@@ -239,17 +241,19 @@ def test_adjust_sentinel_packet_ignores_other_devices() -> None:
     mock_client.hgi.id = HGI_ID
     handler = RamsesServiceHandler(coordinator)
 
-    cmd = MagicMock()
-    cmd.src.id = "01:123456"  # Not sentinel
+    cmd = CommandDTO(
+        verb=" I",
+        addr1="01:123456",  # Not sentinel
+        addr2=HGI_ID,
+        addr3="--:------",
+        code="30C9",
+        payload="000834",
+    )
 
-    m0, m1, m2 = MagicMock(), MagicMock(), MagicMock()
-    m0.id, m1.id, m2.id = "addr0", "addr1", "addr2"
-    cmd._addrs = [m0, m1, m2]
-
-    handler._adjust_sentinel_packet(cmd)
-    assert cmd._addrs[0].id == "addr0"
-    assert cmd._addrs[1].id == "addr1"
-    assert cmd._addrs[2].id == "addr2"
+    result = handler._adjust_sentinel_packet(cmd)
+    assert result.addr1 == "01:123456"
+    assert result.addr2 == HGI_ID
+    assert result.addr3 == "--:------"
 
 
 def test_get_param_id_validation(mock_coordinator: RamsesCoordinator) -> None:
@@ -956,18 +960,24 @@ async def test_update_device_via_device_logic(
 async def test_adjust_sentinel_packet_early_return(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _adjust_sentinel_packet returns early if src/dst don't match."""
+    """Test _adjust_sentinel_packet returns early if addr1/addr2 don't match."""
     handler = RamsesServiceHandler(mock_coordinator)
 
     mock_client = cast(Any, mock_coordinator.client)
     mock_client.hgi.id = "18:006402"
-    cmd = MagicMock()
-    cmd.src.id = "18:999999"  # Not sentinel
-    cmd.dst.id = "01:000000"  # Not HGI
+    cmd = CommandDTO(
+        verb=" I",
+        addr1="18:999999",  # Not sentinel
+        addr2="01:000000",  # Not HGI
+        addr3="--:------",
+        code="30C9",
+        payload="000834",
+    )
 
     with patch("custom_components.ramses_cc.services.pkt_addrs") as mock_pkt_addrs:
-        handler._adjust_sentinel_packet(cmd)
+        result = handler._adjust_sentinel_packet(cmd)
         mock_pkt_addrs.assert_not_called()
+        assert result is cmd  # unchanged
 
 
 async def test_find_param_entity_missing_in_platform(
