@@ -64,11 +64,13 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     CONF_ADVANCED_FEATURES,
+    CONF_COMMANDS,
     CONF_FRESH_START,
     CONF_MQTT_HGI_ID,
     CONF_MQTT_TOPIC,
     CONF_MQTT_USE_HA,
     CONF_PASSIVE_SCAN,
+    CONF_SCHEMA,
     CONF_SEND_PACKET,
     DOMAIN,
     SVC_ACCEPT_DISCOVERED_DEVICE,
@@ -80,8 +82,15 @@ from .const import (
     SVC_GET_DISCOVERED_DEVICES,
     SVC_REMOVE_DEVICE,
     SVC_REMOVE_DISCOVERED_DEVICE,
+    SZ_KNOWN_LIST,
     SZ_PORT_NAME,
     SZ_SERIAL_PORT,
+    SZ_TR_ALIAS,
+    SZ_TR_BOUND,
+    SZ_TR_CLASS,
+    SZ_TR_COMMANDS,
+    SZ_TR_FAKED,
+    SZ_TR_SCHEME,
 )
 from .coordinator import RamsesCoordinator
 from .schemas import (
@@ -273,11 +282,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate legacy configuration options to the current version 2.
+    """Migrate legacy configuration options to the current version 3.
 
-    This handles the transition away from user-selectable database storage
-    and removes deprecated packet log keys (e.g., `file_name`) that cause
-    strict schema validation to fail during setup.
+    v1 → v2: Clean up deprecated packet_log and database keys.
+    v2 → v3: Merge known_list traits into schema as _-prefixed keys
+    (Phase 4 Step 1 — schema becomes the single source of truth).
+    The known_list itself is kept in the config entry for now; it will
+    be removed in Step 2 once PR 914 (Phase 3.75) merges.
 
     :param hass: The Home Assistant instance.
     :param entry: The ConfigEntry to migrate.
@@ -314,6 +325,65 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_update_entry(entry, options=new_options, version=2)
         _LOGGER.info(
             "Successfully migrated ramses_cc config entry %s to version 2",
+            entry.entry_id,
+        )
+
+    if entry.version == 2:
+        new_options = {**entry.options}
+
+        # Phase 4 Step 1: merge known_list traits into schema as _-prefixed keys.
+        # The schema becomes the single source of truth. known_list is kept
+        # as a fallback until Step 2 (blocked on PR 914 / Phase 3.75).
+        known_list = new_options.get(SZ_KNOWN_LIST, {})
+        schema = dict(new_options.get(CONF_SCHEMA, {}))
+
+        if known_list and isinstance(known_list, dict):
+            _LOGGER.info(
+                "Phase 4 migration: merging %d known_list entries into schema",
+                len(known_list),
+            )
+            # Trait mapping: known_list key → schema _-prefixed key
+            trait_map = {
+                "class": SZ_TR_CLASS,
+                "alias": SZ_TR_ALIAS,
+                "faked": SZ_TR_FAKED,
+                "bound": SZ_TR_BOUND,
+                "scheme": SZ_TR_SCHEME,
+                CONF_COMMANDS: SZ_TR_COMMANDS,
+            }
+            merged_count = 0
+            for device_id, traits in known_list.items():
+                if not isinstance(traits, dict):
+                    continue
+                # Ensure the device exists in the schema (as an orphan if
+                # not already present).  Devices that are only in known_list
+                # but not in schema will be handled by the SSOT migration
+                # in the coordinator — here we only merge traits for devices
+                # that already exist in the schema.
+                if device_id not in schema:
+                    continue
+                if not isinstance(schema[device_id], dict):
+                    schema[device_id] = {}
+                for kl_key, schema_key in trait_map.items():
+                    val = traits.get(kl_key)
+                    if val is None:
+                        continue
+                    # Only set if not already present (schema wins — it may
+                    # have been set by the user via the config flow)
+                    if schema_key not in schema[device_id]:
+                        schema[device_id][schema_key] = val
+                        merged_count += 1
+
+            new_options[CONF_SCHEMA] = schema
+            if merged_count:
+                _LOGGER.info(
+                    "Phase 4 migration: merged %d traits into schema",
+                    merged_count,
+                )
+
+        hass.config_entries.async_update_entry(entry, options=new_options, version=3)
+        _LOGGER.info(
+            "Successfully migrated ramses_cc config entry %s to version 3",
             entry.entry_id,
         )
 
