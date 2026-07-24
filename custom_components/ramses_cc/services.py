@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import copy
+import dataclasses
 import logging
 import re
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -369,7 +370,7 @@ class RamsesServiceHandler:
 
         cmd = self._coordinator.client.create_cmd(**kwargs)
 
-        self._adjust_sentinel_packet(cmd)
+        cmd = self._adjust_sentinel_packet(cmd)
 
         try:
             await self._coordinator.client.async_send_cmd(cmd)
@@ -383,7 +384,7 @@ class RamsesServiceHandler:
 
         self._schedule_refresh_later()
 
-    def _adjust_sentinel_packet(self, cmd: CommandDTO) -> None:
+    def _adjust_sentinel_packet(self, cmd: CommandDTO) -> CommandDTO:
         """Fix address positioning for specific sentinel packets (18:000730)."""
         # HACK: to fix the device_id when GWY announcing.
         if not self._coordinator.client:
@@ -392,28 +393,25 @@ class RamsesServiceHandler:
             )
         hgi = self._coordinator.client.hgi
         if not hgi or not hgi.id:
-            return
+            return cmd
 
-        if cmd.src.id != "18:000730" or cmd.dst.id != hgi.id:
-            return
+        # CommandDTO uses positional addressing (addr1/addr2/addr3).
+        # addr1 is the source (from_id), addr2 is the destination.
+        if cmd.addr1 != "18:000730" or cmd.addr2 != hgi.id:
+            return cmd
 
         try:
-            # Validate if the current address structure is acceptable without slicing
-            addr1 = cmd._addrs[1].id if len(cmd._addrs) > 1 else "--:------"
-            addr2 = cmd._addrs[2].id if len(cmd._addrs) > 2 else "--:------"
-
-            pkt_addrs(f"{hgi.id} {addr1} {addr2}")
+            # Validate if the current address structure is acceptable
+            pkt_addrs(f"{hgi.id} {cmd.addr2} {cmd.addr3}")
         except PacketAddrSetInvalid:
-            # If invalid, swap addr1 and addr2 to correct the structure safely
-            if isinstance(cmd._addrs, list):
-                cmd._addrs[1], cmd._addrs[2] = cmd._addrs[2], cmd._addrs[1]
-            else:
-                cmd._addrs = (cmd._addrs[0], cmd._addrs[2], cmd._addrs[1])
-
-            cast(Any, cmd)._repr = None  # Invalidate cached representation
+            # If invalid, swap addr2 and addr3 to correct the structure.
+            # CommandDTO is frozen, so use dataclasses.replace.
+            cmd = dataclasses.replace(cmd, addr2=cmd.addr3, addr3=cmd.addr2)
             _LOGGER.debug(
                 "Swapped addresses for sentinel packet 18:000730 to maintain protocol validity"
             )
+
+        return cmd
 
     async def async_get_fan_param(self, call: dict[str, Any] | ServiceCall) -> None:
         """Handle 'get_fan_param' service call.
