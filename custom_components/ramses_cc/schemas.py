@@ -662,8 +662,13 @@ def merge_schemas(
         config_only_devices = config_device_ids - cached_device_ids
 
         if cached_device_ids.issubset(config_device_ids) and not config_only_devices:
-            _LOGGER.info("Using the cached schema")
-            result = cached_schema
+            _LOGGER.info("Using the cached schema (merged with config traits)")
+            # Deep merge config into cached so user-authored traits (e.g.
+            # _class, _alias) in the config schema take precedence over
+            # stale values in the cached schema.  Without this, changing
+            # _class in the config flow would be silently ignored when the
+            # cached schema has the same device set (issue R24).
+            result = deep_merge(config_schema, cached_schema)
         elif config_only_devices:
             _LOGGER.info(
                 "Config schema has devices not in cached schema (%s), merging",
