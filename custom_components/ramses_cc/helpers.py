@@ -148,10 +148,16 @@ def resolve_async_attr(
         # the last dispatch.  This prevents command floods when the getter
         # has side-effects (e.g. dispatching RQ commands) and the result is
         # still None (unhydrated state).
+        # However, if the cached value is None (unhydrated), we skip the
+        # cooldown so that the first real data (e.g. a 30C9 temperature
+        # broadcast) is picked up immediately rather than waiting 30s.
         COOLDOWN_SECS = 30
         last_dispatch = getattr(entity, cooldown_key, 0)
         now = time.monotonic()
-        within_cooldown = (now - last_dispatch) < COOLDOWN_SECS
+        cached_val = getattr(entity, cache_key, default)
+        within_cooldown = (
+            cached_val is not None and (now - last_dispatch) < COOLDOWN_SECS
+        )
 
         # Dispatch the background task to resolve the coroutine
         if not getattr(entity, resolving_key, False) and not within_cooldown:
