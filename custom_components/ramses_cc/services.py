@@ -1044,16 +1044,17 @@ class RamsesServiceHandler:
                 )
                 continue
             else:
-                # Force-create the device — this calls _setup_discovery_cmds()
-                # which adds the right RQ codes to the device's DiscoveryService.
+                # Force-create the device.  PR 927+ removed the legacy
+                # DiscoveryService (dev.discovery), so we can't access
+                # dev.discovery.cmds here.  PollingManager handles polling
+                # now — just log that the device was created.
                 try:
                     dev = device_registry.get_device(device_id)
                     created.append(device_id)
                     _LOGGER.debug(
-                        "Created device %s (%s), discovery poller started with %d cmds",
+                        "Created device %s (%s)",
                         device_id,
                         getattr(dev, "_SLUG", "?"),
-                        len(dev.discovery.cmds),
                     )
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.warning(
@@ -1114,6 +1115,9 @@ class RamsesServiceHandler:
         # NOTE: devices with zero discovery cmds (TRV, DHW sensor, THM, etc.)
         # will be created but not actively probed — they are verified only
         # when they send traffic or the CTL's 000C response reveals them.
+        # PR 927+ removed the legacy DiscoveryService (dev.discovery), so
+        # the old per-device probing is no longer available.  PollingManager
+        # handles polling now — skip the probing loop entirely.
         probed = 0
         zero_cmds = 0
         for device_id in created + already_present:
@@ -1122,11 +1126,17 @@ class RamsesServiceHandler:
                 continue
             if client.hgi and device_id == client.hgi.id:
                 continue
-            if not dev.discovery.cmds:
+            # Legacy DiscoveryService was removed in PR 927.  If it still
+            # exists (older ramses_rf), use it; otherwise skip probing.
+            disc = getattr(dev, "discovery", None)
+            if disc is None:
+                zero_cmds += 1
+                continue
+            if not disc.cmds:
                 zero_cmds += 1
                 continue
             try:
-                await dev.discovery.discover()
+                await disc.discover()
                 probed += 1
             except Exception as err:  # noqa: BLE001
                 _LOGGER.debug("Discovery cycle failed for %s: %s", device_id, err)
