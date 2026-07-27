@@ -326,6 +326,10 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         # Fallback: infer from zone demand (3150 packets) — threshold 10%
         # zone_demand is on a 0.0–1.0 scale (from hex_to_percent), not 0–100
         demand = await self.zone_demand()
+        _LOGGER.warning(
+            "%s pump_active fallback: zone_demand()=%s, demand_state=%s",
+            self.id, demand, getattr(self, "demand_state", "MISSING")
+        )
         if demand is not None:
             return demand > 0.10
         return None
