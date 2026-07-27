@@ -11,7 +11,7 @@
     "issue_tracker": "https://github.com/ramses-rf/ramses_cc/issues",
     "loggers": ["ramses_rf"],
     "requirements": [
-      "ramses-rf @ git+https://github.com/ac-uy/ramses_rf.git@v0.57.15"
+      "ramses-rf @ git+https://github.com/ac-uy/ramses_rf.git@v0.57.16"
     ],
     "single_config_entry": true,
     "version": "0.57.11"
