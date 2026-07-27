@@ -199,8 +199,13 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         super()._handle_msg(msg)
 
         # Cache 3EF0 pump state directly on the device (bypass entity_state routing)
-        if msg.code == Code._3EF0 and isinstance(msg.payload, dict):
-            if "pump_active" in msg.payload:
+        if msg.code == Code._3EF0:
+            # Parse pump state from raw payload if it's a UFC 9-byte packet
+            raw = msg.payload if isinstance(msg.payload, str) else getattr(msg, '_payload', '')
+            if isinstance(raw, str) and len(raw) >= 8:
+                byte3 = int(raw[6:8], 16)
+                self._pump_active_from_3ef0 = bool(byte3 & 0x12)
+            elif isinstance(msg.payload, dict) and "pump_active" in msg.payload:
                 self._pump_active_from_3ef0 = msg.payload["pump_active"]
 
         # Several assumptions are made, regarding 000C pkts:
