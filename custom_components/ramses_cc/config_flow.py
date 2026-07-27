@@ -27,13 +27,13 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.storage import Store
 
-from ramses_rf.schemas import (
+from .ramses_rf.schemas import (
     SCH_GATEWAY_DICT,
     SCH_GLOBAL_SCHEMAS,
     SZ_RESTORE_CACHE,
     SZ_SCHEMA,
 )
-from ramses_tx.schemas import (
+from .ramses_tx.schemas import (
     SCH_ENGINE_DICT,
     SCH_SERIAL_PORT_CONFIG,
     SZ_BUFFER_CAPACITY,

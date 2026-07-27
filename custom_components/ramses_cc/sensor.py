@@ -30,7 +30,7 @@ from homeassistant.helpers.entity_platform import (
     async_get_current_platform,
 )
 
-from ramses_rf.const import (
+from .ramses_rf.const import (
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BYPASS_MODE,
@@ -60,7 +60,7 @@ from ramses_rf.const import (
     SZ_SUPPLY_TEMP,
     SZ_TEMPERATURE,
 )
-from ramses_rf.devices import (
+from .ramses_rf.devices import (
     DhwSensor,
     HvacCarbonDioxideSensor,
     HvacHumiditySensor,
@@ -71,11 +71,11 @@ from ramses_rf.devices import (
     TrvActuator,
     UfhController,
 )
-from ramses_rf.entity import Entity as RamsesRFEntity
-from ramses_rf.schemas import SZ_SCHEMA
-from ramses_rf.systems.tcs import System
-from ramses_rf.systems.zones import ZoneBase
-from ramses_tx.const import (
+from .ramses_rf.entity import Entity as RamsesRFEntity
+from .ramses_rf.schemas import SZ_SCHEMA
+from .ramses_rf.systems.tcs import System
+from .ramses_rf.systems.zones import ZoneBase
+from .ramses_tx.const import (
     SZ_BOILER_OUTPUT_TEMP,
     SZ_BOILER_RETURN_TEMP,
     SZ_BOILER_SETPOINT,

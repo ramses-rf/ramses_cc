@@ -11,9 +11,9 @@ import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers import config_validation as cv
 
-from ramses_rf.config import sch_global_traits_dict_factory
-from ramses_rf.helpers import deep_merge, is_subset, shrink
-from ramses_rf.schemas import (
+from .ramses_rf.config import sch_global_traits_dict_factory
+from .ramses_rf.helpers import deep_merge, is_subset, shrink
+from .ramses_rf.schemas import (
     SCH_GATEWAY_CONFIG,
     SCH_GLOBAL_SCHEMAS_DICT,
     SCH_RESTORE_CACHE_DICT,
@@ -24,7 +24,7 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
     SZ_SYSTEM,
 )
-from ramses_tx.const import (
+from .ramses_tx.const import (
     COMMAND_REGEX,
     DEFAULT_GAP_DURATION,
     # DEFAULT_NUM_REPEATS,  # use 3 in ramses_cc Actions, not 0 like ramses_tx
@@ -34,7 +34,7 @@ from ramses_tx.const import (
     MIN_NUM_REPEATS,
     SZ_ZONES,
 )
-from ramses_tx.schemas import (
+from .ramses_tx.schemas import (
     SCH_ENGINE_DICT,
     SZ_KNOWN_LIST,
     SZ_PORT_CONFIG,

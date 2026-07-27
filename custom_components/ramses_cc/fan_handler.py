@@ -10,11 +10,11 @@ from homeassistant.const import Platform
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from ramses_rf.devices import Device, HvacRemoteBase, HvacVentilator
-from ramses_rf.entity import Entity as RamsesRFEntity
-from ramses_tx import Command
-from ramses_tx.const import DevType
-from ramses_tx.typing import DeviceIdT
+from .ramses_rf.devices import Device, HvacRemoteBase, HvacVentilator
+from .ramses_rf.entity import Entity as RamsesRFEntity
+from .ramses_tx import Command
+from .ramses_tx.const import DevType
+from .ramses_tx.typing import DeviceIdT
 
 from .const import DOMAIN, SIGNAL_NEW_DEVICES, SZ_BOUND_TO, SZ_KNOWN_LIST
 

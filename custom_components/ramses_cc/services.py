@@ -12,10 +12,10 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.event import async_call_later
 
-from ramses_rf.devices import Fakeable
-from ramses_rf.exceptions import BindingFlowFailed
-from ramses_rf.protocol.ramses import _2411_PARAMS_SCHEMA as _2411_PARAMS_SCHEMA
-from ramses_rf.schemas import (
+from .ramses_rf.devices import Fakeable
+from .ramses_rf.exceptions import BindingFlowFailed
+from .ramses_rf.protocol.ramses import _2411_PARAMS_SCHEMA as _2411_PARAMS_SCHEMA
+from .ramses_rf.schemas import (
     SZ_ACTUATORS,
     SZ_APPLIANCE_CONTROL,
     SZ_DHW_SYSTEM,
@@ -32,9 +32,9 @@ from ramses_rf.schemas import (
     SZ_UFH_SYSTEM,
     SZ_ZONES,
 )
-from ramses_tx.address import pkt_addrs
-from ramses_tx.command import Command
-from ramses_tx.exceptions import (
+from .ramses_tx.address import pkt_addrs
+from .ramses_tx.command import Command
+from .ramses_tx.exceptions import (
     PacketAddrSetInvalid,
     ProtocolSendFailed,
     ProtocolTimeoutError,

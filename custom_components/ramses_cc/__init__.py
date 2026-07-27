@@ -100,7 +100,7 @@ def _get_ramses_tx_exceptions() -> ModuleType:
 
     global _RAMSES_TX_EXC
     if _RAMSES_TX_EXC is None:
-        from ramses_tx import exceptions as exc_module
+        from .ramses_tx import exceptions as exc_module
 
         _RAMSES_TX_EXC = exc_module
     return _RAMSES_TX_EXC

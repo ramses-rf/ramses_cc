@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 
-from ramses_tx.transport import CallbackTransport, TransportConfig
+from .ramses_tx.transport import CallbackTransport, TransportConfig
 
 if TYPE_CHECKING:
     from homeassistant.components.mqtt import PublishPayloadType
