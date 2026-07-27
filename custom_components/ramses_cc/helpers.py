@@ -174,7 +174,7 @@ def resolve_async_attr(
                         if getattr(entity, "entity_id", None):
                             entity.async_write_ha_state()
                 except Exception as err:
-                    _LOGGER.debug("Error resolving async state %s: %s", attr_name, err)
+                    _LOGGER.warning("Error resolving async state %s: %s", attr_name, err)
                 finally:
                     setattr(entity, resolving_key, False)
 
