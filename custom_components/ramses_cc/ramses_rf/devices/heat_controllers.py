@@ -198,41 +198,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
-        # Cache 3EF0 pump state directly on the device (bypass entity_state routing)
-        if msg.code == Code._3EF0:
-            # Try multiple payload formats to find the raw hex
-            raw = None
-            if isinstance(msg.payload, str) and len(msg.payload) >= 8:
-                raw = msg.payload
-            elif isinstance(msg.payload, dict) and "pump_active" in msg.payload:
-                self._pump_active_from_3ef0 = msg.payload["pump_active"]
-                raw = None  # already handled
-            else:
-                # Check _payload, _pkt.payload, or other attrs
-                for attr in ('_payload', '_raw_payload'):
-                    candidate = getattr(msg, attr, None)
-                    if isinstance(candidate, str) and len(candidate) >= 8:
-                        raw = candidate
-                        break
-                if raw is None and hasattr(msg, '_pkt'):
-                    pkt_payload = getattr(msg._pkt, 'payload', None)
-                    if isinstance(pkt_payload, str) and len(pkt_payload) >= 8:
-                        raw = pkt_payload
-
-            if raw is not None:
-                try:
-                    byte3 = int(raw[6:8], 16)
-                    self._pump_active_from_3ef0 = bool(byte3 & 0x12)
-                except (ValueError, IndexError):
-                    pass
-
-            # Debug: log what we got
-            _LOGGER.warning(
-                "%s 3EF0 _handle_msg: payload type=%s, value=%r, _pump_active=%s",
-                self.id, type(msg.payload).__name__, msg.payload,
-                getattr(self, '_pump_active_from_3ef0', 'NOT SET'),
-            )
-
         # Several assumptions are made, regarding 000C pkts:
         # - UFC bound only to CTL (not, e.g. SEN)
         # - all circuits bound to the same controller
@@ -342,8 +307,9 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         Fallback: zone_demand > 10% from 3150 packets (always available).
         The HCC100 only broadcasts 3EF0 when 2D49 binding is active.
         """
-        # Direct cache from _handle_msg (bypasses entity_state routing)
-        from_3ef0 = getattr(self, "_pump_active_from_3ef0", None)
+        # Read from global parser cache (set by parser_3ef0 for UFC devices)
+        from ..parsers.heating import _UFC_PUMP_STATE
+        from_3ef0 = _UFC_PUMP_STATE.get(self.id)
         if from_3ef0 is not None:
             return from_3ef0
 

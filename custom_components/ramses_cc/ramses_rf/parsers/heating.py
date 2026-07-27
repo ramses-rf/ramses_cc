@@ -67,6 +67,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 _INFORM_DEV_MSG = "Support the development of ramses_rf by reporting this packet"
 
+# Global store for UFC pump state (set by parser, read by heat_controllers.pump_active)
+_UFC_PUMP_STATE: dict[str, bool] = {}
 
 # zone_name
 @register_parser("0004")
@@ -1059,11 +1061,14 @@ def parser_3ef0(payload: str, msg: Message) -> PayDictT._3EF0 | PayDictT._JASPER
         # Byte 3 flags: bit 4 (0x10) = cooling pump, bit 1 (0x02) = heating pump
         # pump_active = True if ANY pump-related bit is set (0x12 mask)
         byte3 = int(payload[6:8], 16)
+        pump_active = bool(byte3 & 0x12)
         _LOGGER.warning(
             f"{msg!r} < {_INFORM_DEV_MSG} (UFC 3EF0 byte3=0x{byte3:02X})"
         )
+        # Store globally for direct access by pump_active property
+        _UFC_PUMP_STATE[msg.src.id] = pump_active
         return {  # type: ignore[return-value]
-            "pump_active": bool(byte3 & 0x12),
+            "pump_active": pump_active,
         }
 
     # TODO: These two should be picked up by the regex
