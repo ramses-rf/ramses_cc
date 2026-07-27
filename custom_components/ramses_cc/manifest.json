@@ -11,5 +11,5 @@
     "issue_tracker": "https://github.com/ramses-rf/ramses_cc/issues",
     "loggers": ["ramses_rf"],
     "single_config_entry": true,
-    "version": "0.57.17"
+    "version": "0.57.18"
   }
