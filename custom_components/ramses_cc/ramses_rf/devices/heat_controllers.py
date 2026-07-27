@@ -307,35 +307,37 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         Fallback: zone_demand > 10% from 3150 packets (always available).
         The HCC100 only broadcasts 3EF0 when 2D49 binding is active.
         """
-        from_3ef0 = await self.entity_state.get_value(Code._3EF0, key="pump_active")
-        if from_3ef0 is not None:
-            _LOGGER.debug(
-                "%s pump_active: 3EF0 returned %s", self.id, from_3ef0
-            )
-            return cast("bool | None", from_3ef0)
-        # DEBUG: trace why 3EF0 returned None
-        msgs_dict = await self.entity_state.get_message_log_flat()
-        has_3ef0_in_flat = Code._3EF0 in msgs_dict
-        _LOGGER.warning(
-            "%s pump_active: 3EF0 returned None! "
-            "3EF0 in message_log_flat=%s, _current_state keys=%s",
-            self.id,
-            has_3ef0_in_flat,
-            [str(h.code) for h in self.entity_state._current_state.keys()],
-        )
-        # Fallback: infer from zone demand (3150 packets) — threshold 10%
-        # zone_demand is on a 0.0–1.0 scale (from hex_to_percent), not 0–100
+        import asyncio
+
         try:
-            demand = await self.zone_demand()
-        except BaseException as exc:
-            _LOGGER.warning(
-                "%s pump_active fallback EXCEPTION before log: %s %s",
-                self.id, type(exc).__name__, exc
+            from_3ef0 = await self.entity_state.get_value(
+                Code._3EF0, key="pump_active"
             )
-            raise
-        _LOGGER.warning(  # noqa: E501
-            "%s pump_active fallback: zone_demand()=%s, demand_state=%s",
-            self.id, demand, getattr(self, "demand_state", "MISSING")
+        except (asyncio.CancelledError, Exception) as exc:
+            _LOGGER.debug(
+                "%s pump_active: get_value(3EF0) raised %s, using fallback",
+                self.id, type(exc).__name__,
+            )
+            from_3ef0 = None
+
+        if from_3ef0 is not None:
+            return cast("bool | None", from_3ef0)
+
+        # Fallback: infer pump state from zone demand (3150 packets).
+        # zone_demand is on a 0.0–1.0 scale (hex_to_percent), threshold 10%.
+        # This path MUST return a value — never propagate CancelledError.
+        demand: float | None = None
+        try:
+            state = getattr(self, "demand_state", None)
+            demand = state.zone_demand if state else None
+        except Exception as exc:
+            _LOGGER.warning(
+                "%s pump_active fallback: error reading demand_state: %s",
+                self.id, exc,
+            )
+
+        _LOGGER.debug(
+            "%s pump_active fallback: zone_demand=%s", self.id, demand
         )
         if demand is not None:
             return demand > 0.10

@@ -173,6 +173,10 @@ def resolve_async_attr(
                         setattr(entity, cache_key, res)
                         if getattr(entity, "entity_id", None):
                             entity.async_write_ha_state()
+                except asyncio.CancelledError:
+                    _LOGGER.debug(
+                        "Task cancelled while resolving async state %s", attr_name
+                    )
                 except Exception as err:
                     _LOGGER.warning("Error resolving async state %s: %s", attr_name, err)
                 finally:
