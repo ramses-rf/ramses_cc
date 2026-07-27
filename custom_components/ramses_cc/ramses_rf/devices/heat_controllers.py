@@ -198,6 +198,11 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
+        # Cache 3EF0 pump state directly on the device (bypass entity_state routing)
+        if msg.code == Code._3EF0 and isinstance(msg.payload, dict):
+            if "pump_active" in msg.payload:
+                self._pump_active_from_3ef0 = msg.payload["pump_active"]
+
         # Several assumptions are made, regarding 000C pkts:
         # - UFC bound only to CTL (not, e.g. SEN)
         # - all circuits bound to the same controller
@@ -307,38 +312,23 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         Fallback: zone_demand > 10% from 3150 packets (always available).
         The HCC100 only broadcasts 3EF0 when 2D49 binding is active.
         """
-        import asyncio
-
-        try:
-            from_3ef0 = await self.entity_state.get_value(
-                Code._3EF0, key="pump_active"
-            )
-        except (asyncio.CancelledError, Exception) as exc:
-            _LOGGER.debug(
-                "%s pump_active: get_value(3EF0) raised %s, using fallback",
-                self.id, type(exc).__name__,
-            )
-            from_3ef0 = None
-
+        # Direct cache from _handle_msg (bypasses entity_state routing)
+        from_3ef0 = getattr(self, "_pump_active_from_3ef0", None)
         if from_3ef0 is not None:
-            return cast("bool | None", from_3ef0)
+            return from_3ef0
 
         # Fallback: infer pump state from zone demand (3150 packets).
         # zone_demand is on a 0.0–1.0 scale (hex_to_percent), threshold 10%.
-        # This path MUST return a value — never propagate CancelledError.
         demand: float | None = None
         try:
             state = getattr(self, "demand_state", None)
             demand = state.zone_demand if state else None
         except Exception as exc:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "%s pump_active fallback: error reading demand_state: %s",
                 self.id, exc,
             )
 
-        _LOGGER.debug(
-            "%s pump_active fallback: zone_demand=%s", self.id, demand
-        )
         if demand is not None:
             return demand > 0.10
         return None
