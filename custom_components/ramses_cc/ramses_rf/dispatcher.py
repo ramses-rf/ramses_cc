@@ -686,6 +686,15 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
             _log_message(gwy, msg)
             return
 
+        # Store the message BEFORE routing/ingestion so that any signal
+        # handlers (e.g. SIGNAL_UPDATE) that trigger entity_state reads
+        # will find the message already in the store.  Previously this
+        # was in the `else` block (after route_payload), creating a race
+        # where the async _msg_handler Task hadn't written the message
+        # before entity state cursors advanced past it.
+        if gwy.message_store:
+            gwy.message_store.add(msg)
+
         _cqrs_ingestion_engine(gwy, msg)
 
         route_payload(gwy, msg)
@@ -704,9 +713,6 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
 
     else:
         _log_message(gwy, msg)
-        if gwy.message_store:
-            gwy.message_store.add(msg)
-            # why add it? enable for evohome
 
 
 # TODO: this needs cleaning up (e.g. handle intervening packet)
