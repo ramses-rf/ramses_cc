@@ -324,9 +324,10 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
             [str(h.code) for h in self.entity_state._current_state.keys()],
         )
         # Fallback: infer from zone demand (3150 packets) — threshold 10%
+        # zone_demand is on a 0.0–1.0 scale (from hex_to_percent), not 0–100
         demand = await self.zone_demand()
         if demand is not None:
-            return demand > 10
+            return demand > 0.10
         return None
 
     async def mode(self) -> str | None:  # 2D49
