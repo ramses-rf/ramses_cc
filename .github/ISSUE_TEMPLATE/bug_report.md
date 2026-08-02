@@ -23,9 +23,9 @@ Provide code if you can. For example, if you are having an issue with a service 
 A clear and concise description of what you expected to happen.
 
 **Please include the following information:**
- - `ramses_cc:` your integration **config** (copy it from HA > Integrations > Ramses RF > Diagnose > YourEspGatewayDevice > Gateway status sensor (click on it) > Three dots menu at top right > Attributes)
- - contemporaneous portion of the **home-assistant.log** (HA > Settings > System > Logs > Download Logs top right)
- - contemporaneous portion of the **packet.log** (use File editor to open)
+ - `ramses_cc:` your integration **config** (copy it from HA > Integrations > Ramses RF > Configure cog wheel > System Schema and Known Devices > System schema)
+ - contemporaneous portion of the **home-assistant.log** (HA > Settings > System > Logs > Download Logs top right, turn on debug logging first)
+ - contemporaneous portion of the **packet.log** (use File editor app to open)
 
 **Screenshots**
 Only if applicable, add screenshots to help explain your problem. _Do not provide a screenshot as an alternative to providing the above information._
