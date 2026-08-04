@@ -22,7 +22,7 @@
               'actuators': list([
               ]),
               'class': None,
-              'sensor': '01:145038',
+              'sensor': None,
             }),
           }),
         }),
@@ -253,11 +253,6 @@
             'system': dict({
               'appliance_control': '10:123456',
             }),
-            'zones': dict({
-              '00': dict({
-                'sensor': '01:145038',
-              }),
-            }),
           }),
         }),
       }),
@@ -288,7 +283,7 @@
               'actuators': list([
               ]),
               'class': None,
-              'sensor': '01:145038',
+              'sensor': None,
             }),
           }),
         }),
@@ -642,9 +637,6 @@
         ]),
         'schema': dict({
           '01:145038': dict({
-            'system': dict({
-              'appliance_control': None,
-            }),
           }),
         }),
       }),
