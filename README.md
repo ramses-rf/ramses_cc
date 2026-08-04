@@ -5,7 +5,7 @@
 [![Coverage](https://github.com/ramses-rf/ramses_cc/actions/workflows/check-cov.yml/badge.svg?event=push)](https://github.com/ramses-rf/ramses_cc/actions/workflows/check-cov.yml)
 
 This release contains many improvements in the ramses_rf library and a new v3 format for the Config schema.
-Backup before updating!
+Backup before updating! You may need to update custom automations and actions.
 
 Notice: our Wiki [Config System Schema](https://github.com/ramses-rf/ramses_cc/wiki/2.1-Configuration-step-3:-Schemas) explains the new Config Schema Discovery tool.
 
