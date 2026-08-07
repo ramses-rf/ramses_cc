@@ -113,6 +113,15 @@ class RamsesEntity(CoordinatorEntity):
         attrs = {
             ATTR_ID: self._device.id,
         }
+        interval = resolve_async_attr(self, self._device, "effective_polling_interval")
+        if interval is not None and type(interval).__name__ not in (
+            "MagicMock",
+            "AsyncMock",
+            "Mock",
+            "PropertyMock",
+        ):
+            attrs["effective_polling_interval"] = interval
+
         if self.entity_description.ramses_cc_extra_attributes:
             for k, v in self.entity_description.ramses_cc_extra_attributes.items():
                 if hasattr(self._device, v):

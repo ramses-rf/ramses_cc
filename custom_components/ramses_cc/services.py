@@ -47,7 +47,7 @@ from ramses_tx.exceptions import (
     TransportError,
 )
 
-from .const import CONF_SCHEMA, DOMAIN, SZ_TR_SKIPPED
+from .const import ATTR_POLLING_INTERVAL, CONF_SCHEMA, DOMAIN, SZ_TR_SKIPPED
 from .exceptions import RamsesBindingError, RamsesProtocolError
 from .helpers import parse_packet_string
 
@@ -1736,3 +1736,36 @@ class RamsesServiceHandler:
                 dev_filter._include.remove(device_id)  # noqa: SLF001
 
         _LOGGER.info("Removed device %s from schema and registries", device_id)
+
+    async def async_set_polling_interval(self, call: ServiceCall) -> None:
+        """Set or reset effective polling interval for a RAMSES device."""
+        data = dict(call.data)
+        device_id = self._resolve_device_id(data)
+        if not device_id:
+            raise ServiceValidationError(
+                f"Missing or invalid device_id in set_polling_interval call: {call.data}"
+            )
+
+        client = self._coordinator.client
+        if not client or not hasattr(client, "device_by_id"):
+            raise ServiceValidationError("RAMSES client device registry not available")
+
+        device = client.device_by_id.get(device_id)
+        if not device:
+            raise ServiceValidationError(
+                f"Device {device_id} not found in RAMSES device registry"
+            )
+
+        polling_interval = data.get(ATTR_POLLING_INTERVAL)
+        if hasattr(device, "set_polling_interval"):
+            device.set_polling_interval(polling_interval)
+            _LOGGER.info(
+                "Set effective polling interval for device %s to %s",
+                device_id,
+                polling_interval,
+            )
+        else:
+            _LOGGER.warning(
+                "Device %s does not support set_polling_interval",
+                device_id,
+            )

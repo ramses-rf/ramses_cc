@@ -104,12 +104,14 @@ from .schemas import (
     SCH_REMOVE_DISCOVERED_DEVICE,
     SCH_SEND_PACKET,
     SCH_SET_FAN_PARAM_DOMAIN,
+    SCH_SET_POLLING_INTERVAL,
     SCH_UPDATE_FAN_PARAMS_DOMAIN,
     SVC_BIND_DEVICE,
     SVC_FORCE_UPDATE,
     SVC_GET_FAN_PARAM,
     SVC_SEND_PACKET,
     SVC_SET_FAN_PARAM,
+    SVC_SET_POLLING_INTERVAL,
     SVC_SYNC_TOPOLOGY,
     SVC_UPDATE_FAN_PARAMS,
     SVCS_RAMSES_CLIMATE,
@@ -580,6 +582,10 @@ def async_register_domain_services(
     async def async_update_fan_params(call: ServiceCall) -> None:
         await _coordinator._async_run_fan_param_sequence(call)
 
+    @verify_domain_control(DOMAIN)
+    async def async_set_polling_interval(call: ServiceCall) -> None:
+        await _coordinator.async_set_polling_interval(call)
+
     # register the handlers
     hass.services.async_register(
         DOMAIN, SVC_BIND_DEVICE, async_bind_device, schema=SCH_BIND_DEVICE
@@ -665,6 +671,12 @@ def async_register_domain_services(
         SVC_UPDATE_FAN_PARAMS,
         async_update_fan_params,
         schema=SCH_UPDATE_FAN_PARAMS_DOMAIN,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SVC_SET_POLLING_INTERVAL,
+        async_set_polling_interval,
+        schema=SCH_SET_POLLING_INTERVAL,
     )
 
     # Advanced features

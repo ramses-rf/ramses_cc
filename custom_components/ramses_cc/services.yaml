@@ -921,3 +921,23 @@ remove_device:
       required: true
       selector:
         text:
+
+
+set_polling_interval:
+  # Configure or reset the effective polling interval in seconds for a RAMSES device.
+  fields:
+    device_id:
+      # The target device ID (e.g. 04:056053).
+      example: "04:056053"
+      required: true
+      selector:
+        text:
+    polling_interval:
+      # The polling interval in seconds, or omit/null to reset to default.
+      example: 300
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 86400
+          unit_of_measurement: "s"

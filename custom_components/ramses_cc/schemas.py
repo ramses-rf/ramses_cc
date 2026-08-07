@@ -76,6 +76,7 @@ from .const import (
     ATTR_OPENWINDOW,
     ATTR_OVERRUN,
     ATTR_PERIOD,
+    ATTR_POLLING_INTERVAL,
     ATTR_SCHEDULE,
     ATTR_SETPOINT,
     ATTR_TEMPERATURE,
@@ -2711,6 +2712,16 @@ SCH_UPDATE_FAN_PARAMS_DOMAIN = vol.Schema(
         vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
         vol.Optional("device_id"): vol.Any(None, cv.string),
         vol.Optional("from_id"): _SCH_DEVICE_ID,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+SVC_SET_POLLING_INTERVAL: Final = "set_polling_interval"
+SCH_SET_POLLING_INTERVAL = vol.Schema(
+    {
+        vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
+        vol.Optional("device_id"): vol.Any(None, cv.string),
+        vol.Optional(ATTR_POLLING_INTERVAL): vol.Any(None, vol.Coerce(float)),
     },
     extra=vol.PREVENT_EXTRA,
 )

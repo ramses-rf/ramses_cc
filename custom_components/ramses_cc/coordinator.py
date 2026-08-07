@@ -2427,6 +2427,13 @@ class RamsesCoordinator(DataUpdateCoordinator):
         """
         await self.service_handler.async_remove_device(call)
 
+    async def async_set_polling_interval(self, call: ServiceCall) -> None:
+        """Delegate to Service Handler.
+
+        :param call: The service call object containing parameters.
+        """
+        await self.service_handler.async_set_polling_interval(call)
+
     async def async_get_fan_param(self, call: dict[str, Any] | ServiceCall) -> None:
         """Delegate to Service Handler.
 
