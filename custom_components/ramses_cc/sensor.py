@@ -93,7 +93,7 @@ from ramses_tx.dtos import CommandDTO
 from .const import ATTR_SETPOINT, ATTR_WORKING_SCHEMA, DOMAIN, UnitOfVolumeFlowRate
 from .coordinator import RamsesCoordinator
 from .entity import RamsesEntity, RamsesEntityDescription
-from .helpers import resolve_async_attr
+from .helpers import extract_demand, resolve_async_attr
 from .typing import RamsesConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
@@ -183,6 +183,8 @@ class RamsesSensor(RamsesEntity, SensorEntity):
         val = resolve_async_attr(
             self, self._device, self.entity_description.ramses_rf_attr
         )
+        if hasattr(val, "demand"):
+            val = extract_demand(val)
 
         if val is not None:
             if self.native_unit_of_measurement == PERCENTAGE:

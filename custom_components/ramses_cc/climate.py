@@ -58,7 +58,13 @@ from .const import (
 )
 from .coordinator import RamsesCoordinator
 from .entity import RamsesEntity, RamsesEntityDescription
-from .helpers import fields_to_aware, resolve_async_attr
+from .helpers import (
+    dto_to_dict,
+    extract_demand,
+    fields_to_aware,
+    resolve_async_attr,
+    resolve_demand_attr,
+)
 from .remote import _build_packet_from_template, _is_command_dict, _split_commands
 from .schemas import SCH_SET_SYSTEM_MODE_EXTRA, SCH_SET_ZONE_MODE_EXTRA
 from .typing import RamsesConfigEntry
@@ -251,9 +257,16 @@ class RamsesController(RamsesEntity, ClimateEntity):
             system_mode = system_mode.copy()
             system_mode["until"] = fields_to_aware(system_mode["until"])
 
+        heat_demands = resolve_demand_attr(
+            self, self._device, "thermal_demands", "heat_demands"
+        )
+        heat_demand = resolve_demand_attr(
+            self, self._device, "thermal_demand", "heat_demand"
+        )
+
         return super().extra_state_attributes | {
-            "heat_demand": resolve_async_attr(self, self._device, "heat_demand"),
-            "heat_demands": resolve_async_attr(self, self._device, "heat_demands"),
+            "heat_demand": extract_demand(heat_demand),
+            "heat_demands": dto_to_dict(heat_demands),
             "relay_demands": resolve_async_attr(self, self._device, "relay_demands"),
             "system_mode": system_mode,
             "tpi_params": resolve_async_attr(self, self._device, "tpi_params"),
@@ -272,10 +285,13 @@ class RamsesController(RamsesEntity, ClimateEntity):
             if system_mode[SZ_SYSTEM_MODE] == SystemMode.HEAT_OFF:
                 return HVACAction.OFF
 
-        heat_demand = resolve_async_attr(self, self._device, "heat_demand")
-        if heat_demand:
+        heat_demand = resolve_demand_attr(
+            self, self._device, "thermal_demand", "heat_demand"
+        )
+        demand_val = extract_demand(heat_demand)
+        if demand_val:
             return HVACAction.HEATING
-        if heat_demand is not None:
+        if demand_val is not None:
             return HVACAction.IDLE
 
         return None
@@ -544,7 +560,12 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             mode = mode.copy()
             mode["until"] = fields_to_aware(mode["until"])
 
+        heat_demand = resolve_demand_attr(
+            self, self._device, "thermal_demand", "heat_demand"
+        )
+
         return super().extra_state_attributes | {
+            "heat_demand": extract_demand(heat_demand),
             "params": resolve_async_attr(self, self._device, "params"),
             "zone_idx": self._device.idx,
             "heating_type": resolve_async_attr(self, self._device, "heating_type"),
@@ -571,10 +592,13 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             if system_mode[SZ_SYSTEM_MODE] == SystemMode.HEAT_OFF:
                 return HVACAction.OFF
 
-        heat_demand = resolve_async_attr(self, self._device, "heat_demand")
-        if heat_demand:
+        heat_demand = resolve_demand_attr(
+            self, self._device, "thermal_demand", "heat_demand"
+        )
+        demand_val = extract_demand(heat_demand)
+        if demand_val:
             return HVACAction.HEATING
-        if heat_demand is not None:
+        if demand_val is not None:
             return HVACAction.IDLE
         return None
 

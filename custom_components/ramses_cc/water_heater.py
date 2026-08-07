@@ -37,7 +37,12 @@ from ramses_tx.exceptions import (
 from .const import DOMAIN, SystemMode, ZoneMode
 from .coordinator import RamsesCoordinator
 from .entity import RamsesEntity, RamsesEntityDescription
-from .helpers import fields_to_aware, resolve_async_attr
+from .helpers import (
+    extract_demand,
+    fields_to_aware,
+    resolve_async_attr,
+    resolve_demand_attr,
+)
 from .schemas import SCH_SET_DHW_MODE_EXTRA
 from .typing import RamsesConfigEntry
 
@@ -145,8 +150,11 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
                 )
         else:
             # Fallback to evaluating active heat demand if mode expires
-            heat_demand = resolve_async_attr(self, self._device, "heat_demand")
-            if heat_demand:
+            heat_demand = resolve_demand_attr(
+                self, self._device, "thermal_demand", "heat_demand"
+            )
+            demand_val = extract_demand(heat_demand)
+            if demand_val:
                 self._last_known_operation = STATE_ON
             elif self._last_known_operation is None:
                 self._last_known_operation = STATE_AUTO

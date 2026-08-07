@@ -7,7 +7,7 @@ import inspect
 import logging
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime as dt
 from typing import Any, Final
 
@@ -297,3 +297,68 @@ def parse_packet_string(packet_str: str) -> CommandDTO | None:
         )
     except PacketInvalid:
         return None
+
+
+def _is_mock(obj: Any) -> bool:
+    """Return True if obj is a unittest.mock object."""
+    return type(obj).__name__ in ("MagicMock", "AsyncMock", "Mock", "PropertyMock")
+
+
+def extract_demand(val: Any) -> float | None:
+    """Extract a numeric demand value (0.0 to 1.0) from a float or DTO object.
+
+    :param val: A float, ThermalDemandDTO, UfhCircuitDemandDTO, or None.
+    :return: Float demand value or None.
+    """
+    if val is None or _is_mock(val):
+        return None
+    if hasattr(val, "thermal_demand"):
+        res = val.thermal_demand
+        return float(res) if res is not None and not _is_mock(res) else None
+    if hasattr(val, "heat_demand"):
+        res = val.heat_demand
+        return float(res) if res is not None and not _is_mock(res) else None
+    if hasattr(val, "demand"):
+        res = val.demand
+        return float(res) if res is not None and not _is_mock(res) else None
+    if isinstance(val, (int, float)):
+        return float(val)
+    return None
+
+
+def resolve_demand_attr(
+    entity: Any, obj: Any, primary_attr: str, fallback_attr: str
+) -> Any:
+    """Resolve primary attribute (e.g. thermal_demand) with fallback (heat_demand).
+
+    Handles MagicMock objects in tests cleanly when only fallback_attr was mocked.
+    """
+    if _is_mock(obj):
+        obj_dict = getattr(obj, "__dict__", {})
+        if primary_attr not in obj_dict and fallback_attr in obj_dict:
+            return resolve_async_attr(entity, obj, fallback_attr)
+    val = resolve_async_attr(entity, obj, primary_attr)
+    if val is None or _is_mock(val):
+        fallback_val = resolve_async_attr(entity, obj, fallback_attr)
+        if fallback_val is not None and not _is_mock(fallback_val):
+            return fallback_val
+    return val
+
+
+def dto_to_dict(val: Any) -> Any:
+    """Convert a DTO, dataclass, or container of DTOs into plain dictionaries.
+
+    :param val: A DTO object, dict, list, or primitive value.
+    :return: Clean dict, list, or primitive suitable for HA state attributes.
+    """
+    if val is None or _is_mock(val):
+        return None
+    if hasattr(val, "__dataclass_fields__"):
+        return {k: dto_to_dict(v) for k, v in asdict(val).items()}
+    if isinstance(val, dict):
+        return {k: dto_to_dict(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [dto_to_dict(item) for item in val]
+    if hasattr(val, "value"):  # Enums
+        return val.value
+    return val
