@@ -87,7 +87,7 @@ _CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.coordinator.py
 
 NUM_DEVS_BEFORE = 16  # All known_list devices (enforce_known_list always on)
 NUM_DEVS_AFTER = 16  # Same — all devices already in known_list
-NUM_SVCS_AFTER = 39  # proxy for success, platform services included since 0.51.8
+NUM_SVCS_AFTER = 40  # proxy for success, platform services included since 0.51.8
 NUM_ENTS_AFTER = 72  # proxy for success (Phase 4: more devices in known_list)
 NUM_ENTS_AFTER_ALT = (
     NUM_ENTS_AFTER - 9
