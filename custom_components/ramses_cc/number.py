@@ -170,7 +170,7 @@ async def async_setup_entry(
         pending_entities = coordinator._parameter_entities_pending
         loaded_entities = coordinator._parameter_entities_loaded
 
-        if all(isinstance(d, RamsesNumberParam) for d in device_list):
+        if all(isinstance(d, RamsesNumberBase) for d in device_list):
             _LOGGER.debug("Adding %d entities directly", len(device_list))
             # Filter out entities that are already loaded in the platform
             entities_to_add = []
@@ -329,6 +329,23 @@ async def async_setup_entry(
 
                         pending_entities.add(unique_id)
                         entities.append(entity)
+
+        # Instantiate diagnostic polling interval entities for mains-powered devices
+        for device in coord_devices:
+            is_battery = getattr(device, "is_battery", False)
+            dev_type = getattr(device, "type", "")
+            dev_slug = getattr(device, "_SLUG", "")
+            if not is_battery and (
+                dev_type in ("01", "02", "10", "13", "32")
+                or dev_slug in ("CTL", "OTB", "BDR", "UFC", "FAN")
+            ):
+                poll_entity = RamsesPollingInterval(coordinator, device)
+                if (
+                    poll_entity.unique_id
+                    and poll_entity.unique_id not in pending_entities
+                ):
+                    pending_entities.add(poll_entity.unique_id)
+                    entities.append(poll_entity)
 
     # Add all collected entities to the platform
     if entities:
@@ -1218,3 +1235,38 @@ def create_parameter_entities(
         device_id,
     )
     return entities
+
+
+class RamsesPollingInterval(RamsesNumberBase):
+    """Number entity exposing effective polling interval for mains-powered devices."""
+
+    def __init__(self, coordinator: RamsesCoordinator, device: RamsesRFEntity) -> None:
+        """Initialize the polling interval entity."""
+        description = RamsesEntityDescription(
+            key="polling_interval",
+            translation_key="polling_interval",
+        )
+        super().__init__(coordinator, device, description)
+        self._attr_translation_key = "polling_interval"
+        self._attr_unique_id = f"{device.id}_polling_interval"
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_native_min_value = 1.0
+        self._attr_native_max_value = 86400.0
+        self._attr_native_step = 1.0
+        self._attr_native_unit_of_measurement = "s"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the effective polling interval in seconds."""
+        eff = getattr(self._device, "effective_polling_interval", None)
+        if isinstance(eff, dict) and eff:
+            return float(min(eff.values()))
+        if isinstance(eff, (int, float)):
+            return float(eff)
+        return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the polling interval override for the target device."""
+        if hasattr(self._device, "set_polling_interval"):
+            self._device.set_polling_interval(int(value))
+            self.async_write_ha_state()

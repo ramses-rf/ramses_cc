@@ -57,7 +57,7 @@ from homeassistant.components.water_heater.const import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse, callback
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv, service
 from homeassistant.helpers.service import verify_domain_control
@@ -176,6 +176,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 key,
                 schema,
             )
+            supports_resp = (
+                SupportsResponse.OPTIONAL
+                if "schedule" in key
+                else SupportsResponse.NONE
+            )
             service.async_register_platform_entity_service(
                 hass,
                 DOMAIN,
@@ -183,6 +188,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 entity_domain=entity_domain,
                 schema=schema,
                 func=f"async_{key}",
+                supports_response=supports_resp,
             )
 
     return True

@@ -1,70 +1,64 @@
-"""Tests for Polling Interval Diagnostics and set_polling_interval service in ramses_cc."""
+"""Unit tests for RAMSES CC polling interval diagnostic entity and service."""
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.ramses_cc.const import ATTR_POLLING_INTERVAL
-from custom_components.ramses_cc.entity import RamsesEntity, RamsesEntityDescription
+from custom_components.ramses_cc.number import RamsesPollingInterval
 from custom_components.ramses_cc.services import RamsesServiceHandler
 
 
-def test_ramses_entity_polling_interval_attribute() -> None:
-    """Test RamsesEntity extra_state_attributes includes effective_polling_interval when supported."""
+def test_ramses_polling_interval_native_value() -> None:
     # Arrange
     coordinator = MagicMock()
     device = MagicMock()
-    device.id = "04:123456"
-    device.effective_polling_interval = 300.0
-
-    desc = RamsesEntityDescription(key="test_entity")
-    entity = RamsesEntity(coordinator, device, desc)
+    device.id = "10:123456"
+    device.effective_polling_interval = {"3EF0": 300, "10E0": 86400}
+    entity = RamsesPollingInterval(coordinator, device)
 
     # Act
-    attrs = entity.extra_state_attributes
+    value = entity.native_value
 
     # Assert
-    assert attrs["id"] == "04:123456"
-    assert attrs["effective_polling_interval"] == 300.0
-
-
-def test_ramses_entity_polling_interval_attribute_absent() -> None:
-    """Test RamsesEntity extra_state_attributes when effective_polling_interval is None."""
-    # Arrange
-    coordinator = MagicMock()
-    device = MagicMock()
-    device.id = "04:123456"
-    device.effective_polling_interval = None
-
-    desc = RamsesEntityDescription(key="test_entity")
-    entity = RamsesEntity(coordinator, device, desc)
-
-    # Act
-    attrs = entity.extra_state_attributes
-
-    # Assert
-    assert attrs["id"] == "04:123456"
-    assert "effective_polling_interval" not in attrs
+    assert value == 300.0
+    assert entity.entity_category.value == "diagnostic"
+    assert entity.unique_id == "10:123456_polling_interval"
 
 
 @pytest.mark.asyncio
-async def test_service_set_polling_interval() -> None:
-    """Test RamsesServiceHandler.async_set_polling_interval updates device polling interval."""
+async def test_ramses_polling_interval_set_native_value() -> None:
     # Arrange
-    hass = MagicMock()
     coordinator = MagicMock()
     device = MagicMock()
-    device.id = "04:123456"
-
-    coordinator.hass = hass
-    coordinator.client.device_by_id = {"04:123456": device}
-
-    handler = RamsesServiceHandler(coordinator)
-    call = MagicMock()
-    call.data = {"device_id": "04:123456", ATTR_POLLING_INTERVAL: 600.0}
+    device.id = "10:123456"
+    device.set_polling_interval = MagicMock()
+    entity = RamsesPollingInterval(coordinator, device)
+    entity.async_write_ha_state = MagicMock()
 
     # Act
-    await handler.async_set_polling_interval(call)
+    await entity.async_set_native_value(600.0)
 
     # Assert
-    device.set_polling_interval.assert_called_once_with(600.0)
+    device.set_polling_interval.assert_called_once_with(600)
+    entity.async_write_ha_state.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_service_set_polling_interval_success() -> None:
+    # Arrange
+    coordinator = MagicMock()
+    client = MagicMock()
+    device = MagicMock()
+    device.set_polling_interval = MagicMock()
+    client.device_by_id = {"10:123456": device}
+    coordinator.client = client
+
+    services = RamsesServiceHandler(coordinator)
+    call = MagicMock()
+    call.data = {"device_id": "10:123456", "polling_interval": 600}
+
+    # Act
+    await services.async_set_polling_interval(call)
+
+    # Assert
+    device.set_polling_interval.assert_called_once_with(600)

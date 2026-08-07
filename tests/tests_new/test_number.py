@@ -235,8 +235,7 @@ async def test_setup_entry_device_processing(
 
             assert async_add_entities.call_count == 1
             added_entities = async_add_entities.call_args[0][0]
-            assert len(added_entities) == 1
-            assert added_entities[0] == mock_entity
+            assert mock_entity in added_entities
 
         # Case 2: Device callback
         add_devices_cb = mock_coordinator.async_register_platform.call_args[0][1]

@@ -1757,15 +1757,22 @@ class RamsesServiceHandler:
             )
 
         polling_interval = data.get(ATTR_POLLING_INTERVAL)
-        if hasattr(device, "set_polling_interval"):
-            device.set_polling_interval(polling_interval)
-            _LOGGER.info(
-                "Set effective polling interval for device %s to %s",
-                device_id,
-                polling_interval,
+        int_val = int(polling_interval) if polling_interval is not None else None
+
+        if not hasattr(device, "set_polling_interval"):
+            raise ServiceValidationError(
+                f"Device {device_id} does not support set_polling_interval"
             )
-        else:
-            _LOGGER.warning(
-                "Device %s does not support set_polling_interval",
-                device_id,
-            )
+
+        try:
+            device.set_polling_interval(int_val)
+        except ValueError as err:
+            raise ServiceValidationError(
+                f"Invalid polling interval for device {device_id}: {err}"
+            ) from err
+
+        _LOGGER.info(
+            "Set effective polling interval for device %s to %s",
+            device_id,
+            int_val,
+        )
