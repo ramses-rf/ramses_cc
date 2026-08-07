@@ -18,13 +18,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from ramses_rf.const import SZ_SUMMER_MODE
-from ramses_rf.devices import BdrSwitch, HgiGateway, OtbGateway, TrvActuator
-from ramses_rf.entity import Entity as RamsesRFEntity
-from ramses_rf.gateway import Gateway
-from ramses_rf.schemas import SZ_CONFIG, SZ_SCHEMA
-from ramses_rf.systems.tcs import Logbook, System
-from ramses_tx.const import (
+from ramses_rf.const import (
     SZ_BATTERY_LEVEL,
     SZ_BATTERY_LOW,
     SZ_BATTERY_STATE,
@@ -38,9 +32,15 @@ from ramses_tx.const import (
     SZ_DHW_ENABLED,
     SZ_FAULT_PRESENT,
     SZ_FLAME_ACTIVE,
-    SZ_IS_EVOFW3,
     SZ_OTC_ACTIVE,
+    SZ_SUMMER_MODE,
 )
+from ramses_rf.devices import BdrSwitch, HgiGateway, OtbGateway, TrvActuator
+from ramses_rf.entity import Entity as RamsesRFEntity
+from ramses_rf.gateway import Gateway
+from ramses_rf.schemas import SZ_CONFIG, SZ_SCHEMA
+from ramses_rf.systems.tcs import Logbook, System
+from ramses_tx.const import SZ_IS_EVOFW3
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.schemas import SZ_KNOWN_LIST
 

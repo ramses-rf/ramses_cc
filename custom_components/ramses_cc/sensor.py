@@ -57,6 +57,7 @@ from ramses_rf.const import (
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_MAX_REL_MODULATION,
+    SZ_OEM_CODE,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
     SZ_OUTSIDE_TEMP,
@@ -87,7 +88,7 @@ from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.schemas import SZ_SCHEMA
 from ramses_rf.systems.tcs import System
 from ramses_rf.systems.zones import ZoneBase
-from ramses_tx.const import SZ_OEM_CODE, Code
+from ramses_tx.const import Code
 from ramses_tx.dtos import CommandDTO
 
 from .const import ATTR_SETPOINT, ATTR_WORKING_SCHEMA, DOMAIN, UnitOfVolumeFlowRate

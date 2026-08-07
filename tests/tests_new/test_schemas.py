@@ -39,8 +39,8 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
     SZ_SENSORS,
     SZ_SYSTEM,
+    SZ_ZONES,
 )
-from ramses_tx.const import SZ_ZONES
 from ramses_tx.schemas import SZ_PORT_NAME, SZ_SERIAL_PORT
 
 

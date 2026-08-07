@@ -24,10 +24,10 @@ from homeassistant.helpers.entity_platform import (
 )
 from homeassistant.util import dt as dt_util
 
+from ramses_rf.const import SZ_ACTIVE, SZ_MODE, SZ_SYSTEM_MODE
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.systems.tcs import StoredHw
 from ramses_rf.systems.zones import DhwZone
-from ramses_tx.const import SZ_ACTIVE, SZ_MODE, SZ_SYSTEM_MODE
 from ramses_tx.exceptions import (
     ProtocolSendFailed,
     ProtocolTimeoutError,

@@ -18,9 +18,9 @@ from custom_components.ramses_cc.water_heater import (
     RamsesWaterHeater,
     async_setup_entry,
 )
+from ramses_rf.const import SZ_SYSTEM_MODE
 from ramses_rf.models import TemperatureState
 from ramses_rf.systems.zones import DhwZone
-from ramses_tx.const import SZ_SYSTEM_MODE
 from ramses_tx.exceptions import ProtocolSendFailed
 
 # Constants for testing
