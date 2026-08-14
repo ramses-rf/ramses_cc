@@ -855,8 +855,8 @@ def parser_2d49(payload: str, msg: Message) -> PayDictT._2D49:
     assert payload[2:] in ("0000", "00FF", "C800", "C8FF"), _INFORM_DEV_MSG
 
     return {
-        "zone_idx": int(payload[0:2], 16),
-        "mode": "cool" if payload[2:4] == "C8" else "heat",
+        "zone_idx": payload[0:2],
+        "cooling_demand": payload[2:4] == "C8",
     }
 
 

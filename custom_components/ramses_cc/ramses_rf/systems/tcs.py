@@ -1229,8 +1229,11 @@ class SysMode(SystemBase):  # 2E04
         }
 
     async def mode(self) -> str | None:  # 2D49
-        """Return 'cool', 'heat', or None from 2D49 changeover state."""
-        return await self.entity_state.get_value(Code._2D49, key="mode")
+        """Return 'cool' or None from 2D49 cooling demand state."""
+        cooling = await self.entity_state.get_value(Code._2D49, key="cooling_demand")
+        if cooling is True:
+            return "cool"
+        return None
 
     async def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
