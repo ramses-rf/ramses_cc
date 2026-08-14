@@ -288,9 +288,15 @@ class RamsesController(RamsesEntity, ClimateEntity):
         mode = resolve_async_attr(self, self._device, "mode")
         if mode == "cool":
             return HVACMode.COOL
+        if mode is None:
+            if system_mode is not None:
+                return MODE_TCS_TO_HA.get(
+                    system_mode[SZ_SYSTEM_MODE], HVACMode.HEAT
+                )
+            return HVACMode.HEAT
         if mode == "heat":
             return HVACMode.HEAT
-        return HVACMode.AUTO  # default when no 2D49 received yet
+        return HVACMode.AUTO  # default for an unrecognised controller mode
 
     @property
     def preset_mode(self) -> str | None:

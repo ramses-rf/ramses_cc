@@ -244,6 +244,15 @@ async def test_controller_modes_and_actions(
     mock_device.system_mode = MagicMock(return_value={SZ_SYSTEM_MODE: SystemMode.AUTO})
     assert controller.hvac_mode == HVACMode.HEAT
 
+    # 2a. UfhController mode mapping: cooling overrides the configured default,
+    # while an inactive or missing 2D49 signal preserves that default.
+    # Validates: Requirements 1.7
+    mock_device.mode = AsyncMock(return_value="cool")
+    assert controller.hvac_mode == HVACMode.COOL
+
+    mock_device.mode = AsyncMock(return_value=None)
+    assert controller.hvac_mode == HVACMode.HEAT
+
     # 3. preset_mode
     mock_device.system_mode = MagicMock(return_value=None)
     assert controller.preset_mode == PRESET_NONE
