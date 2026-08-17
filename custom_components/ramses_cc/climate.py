@@ -198,7 +198,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
                     code="2E04",
                     payload="FF",
                 )
-                await self._device._gwy.async_send_cmd(cmd)
+                await self._device._gateway.async_send_cmd(cmd)
             except Exception as err:
                 _LOGGER.debug(
                     "Failed to poll system_mode for %s: %s",
@@ -529,7 +529,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
                     code="2349",
                     payload=self._device.idx,
                 )
-                await self._device._gwy.async_send_cmd(cmd)
+                await self._device._gateway.async_send_cmd(cmd)
             except Exception as err:
                 _LOGGER.debug(
                     "Failed to poll mode for %s: %s",
@@ -1233,7 +1233,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                 cmd = parse_packet_string(packet_str)
                 if cmd is None:
                     raise ValueError(f"Failed to parse packet_str: {packet_str}")
-                await self._device._gwy.async_send_cmd(
+                await self._device._gateway.async_send_cmd(
                     cmd, num_repeats=2, priority=Priority.HIGH
                 )
                 self.async_write_ha_state()
@@ -1265,7 +1265,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                 if cmd is None:
                     raise ValueError(f"Failed to parse cmd_str: {cmd_str}")
 
-                await self._device._gwy.async_send_cmd(
+                await self._device._gateway.async_send_cmd(
                     cmd, num_repeats=2, priority=Priority.HIGH
                 )
                 self.async_write_ha_state()

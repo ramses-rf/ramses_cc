@@ -219,7 +219,7 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
                         code="0418",
                         payload="00",
                     )
-                    await tcs._gwy.async_send_cmd(cmd)
+                    await tcs._gateway.async_send_cmd(cmd)
             except Exception as err:
                 _LOGGER.debug(
                     "Failed to poll active_faults for %s: %s",
@@ -278,7 +278,7 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
         :return: Dictionary of attributes for the gateway.
         :rtype: dict[str, Any]
         """
-        gwy: Gateway = self._device._gwy
+        gwy: Gateway = self._device._gateway
         engine = getattr(gwy, "_engine", None)
         gwy_config = getattr(gwy, "config", getattr(gwy, "_gwy_config", None))
 

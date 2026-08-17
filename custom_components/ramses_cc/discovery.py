@@ -343,7 +343,7 @@ class DiscoveryManager:
             # Previously only updated comments for devices with zone_idx or
             # bound_to, but this left newly discovered devices without comments.
             comment = result.get(dev_id, "")
-            if not dev.zone_idx and not dev.bound_to:
+            if not dev.zone_index and not dev.bound_to:
                 # No binding info — still create a basic comment if missing
                 # or if it lacks the auto-generated suffix.
                 # Exceptions that force a rebuild:
@@ -369,7 +369,7 @@ class DiscoveryManager:
                     changed = True
                 continue
             # Check if comment already has the correct zone/bound info
-            has_zone = dev.zone_idx and f"zone {dev.zone_idx}" in comment
+            has_zone = dev.zone_index and f"zone {dev.zone_index}" in comment
             # "belongs to" for FAN (32:), "bound to" for heat TCS
             bound_phrase = (
                 f"belongs to {dev.bound_to}"
@@ -385,7 +385,7 @@ class DiscoveryManager:
                 dev,
                 likely_type,
                 dev.bound_to,
-                dev.zone_idx,
+                dev.zone_index,
                 schema_role=schema_role,
             )
             if new_comment != comment:
@@ -427,7 +427,7 @@ class DiscoveryManager:
                     else dev_entry.get(SZ_TR_CLASS, "unknown")
                 )
                 likely_type = likely_type or "unknown"
-                zone_idx = engine_dev.zone_idx if engine_dev else None
+                zone_idx = engine_dev.zone_index if engine_dev else None
                 new_comment = self._build_comment(
                     engine_dev or _SchemaOnlyDevice(dev_id, likely_type),
                     likely_type,
@@ -1584,7 +1584,7 @@ class DiscoveryManager:
             dev = entry.device if entry else None
             likely_type = dev.likely_type if dev else "unknown"
             bound_to = dev.bound_to if dev else None
-            zone_idx = dev.zone_idx if dev else None
+            zone_idx = dev.zone_index if dev else None
             domain_id = getattr(dev, "domain_id", None) if dev else None
 
             # Build a descriptive comment from scan engine data so the user
@@ -1870,8 +1870,8 @@ class DiscoveryManager:
             line = f"- `{dev.device_id}` ({dev.likely_type}"
             if dev.confidence:
                 line += f", {dev.confidence}"
-            if dev.zone_idx:
-                line += f", zone={dev.zone_idx}"
+            if dev.zone_index:
+                line += f", zone={dev.zone_index}"
             if dev.bound_to:
                 line += f", bound to {dev.bound_to}"
             if dev.is_battery:

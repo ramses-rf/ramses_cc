@@ -38,7 +38,7 @@ from ramses_rf.schemas import (
     SZ_UFH_SYSTEM,
     SZ_ZONES,
 )
-from ramses_tx.address import pkt_addrs
+from ramses_tx.address import packet_addrs as pkt_addrs
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.exceptions import (
     PacketAddrSetInvalid,

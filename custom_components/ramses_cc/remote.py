@@ -149,7 +149,7 @@ def _build_packet_from_template(
         # Fallback to HGI gateway ID
         client = coordinator.client
         if client:
-            hgi = getattr(client, "_gwy", None)
+            hgi = getattr(client, "_gateway", None) or getattr(client, "_gwy", None)
             if hgi:
                 hgi_dev = getattr(hgi, "_hgi", None) or getattr(hgi, "hgi", None)
                 if hgi_dev:

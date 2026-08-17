@@ -244,7 +244,7 @@ class RamsesFanHandler:
                             payload="00",
                         )
                         _LOGGER.debug("Poll 10D0 filter_remaining for %s", device.id)
-                        await device._gwy.async_send_cmd(cmd)
+                        await device._gateway.async_send_cmd(cmd)
                     except Exception as err:
                         _LOGGER.debug(
                             "Failed to poll filter_remaining for %s: %s",

@@ -166,7 +166,7 @@ class RamsesSensor(RamsesEntity, SensorEntity):
                     payload="00",
                 )
                 try:
-                    await self._device._gwy.async_send_cmd(cmd)
+                    await self._device._gateway.async_send_cmd(cmd)
                     _LOGGER.debug("Polled %s for %s", code, self._device.id)
                 except Exception as err:
                     _LOGGER.debug(
