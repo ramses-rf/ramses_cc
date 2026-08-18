@@ -252,7 +252,10 @@ class RamsesRegexEvent(RamsesEvent):
             #     )
 
             # filter msg by advanced_config regex, fire an event if a match
-            if regex and regex.search(f"{msg!r}"):
+            # If no regex is configured, fire for all messages (so that
+            # downstream listeners like ramses_extras hvac_fan_card can
+            # receive 31DA/10D0 data without explicit regex configuration).
+            if regex is None or regex.search(f"{msg!r}"):
                 event_data = {
                     "type": RamsesEventType.REGEX,
                     "device_id": msg.src.id,
