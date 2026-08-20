@@ -1239,7 +1239,7 @@ class BaseRamsesFlow:
             ): selector.TextSelector(),
             vol.Optional(
                 CONF_PASSIVE_SCAN,
-                default=False,
+                default=True,
                 description={
                     "suggested_value": suggested_values.get(CONF_PASSIVE_SCAN)
                 },
