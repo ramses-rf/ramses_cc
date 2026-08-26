@@ -2570,7 +2570,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         parent_device_id: tuple[str, str] | None = None
         if isinstance(device, Zone) and device.tcs:
             _LOGGER.info("ZONE %s parent_device_id SET to %s", model, device.tcs.id)
-            parent_device_id = (DOMAIN, str(device.tcs.id))
+            parent_device_id = str(device.tcs.id)
         elif isinstance(device, UfhCircuit) and device.ufc:
             ufc_id = str(device.ufc.id)
             _LOGGER.info(
