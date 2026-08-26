@@ -8,7 +8,7 @@
 2024-01-01T00:00:02.002000 045 RP --- 01:145038 18:006402 --:------ 000C 006 02080010DAF5  # {'zone_idx':  '02', 'zone_type': '08', 'device_role': 'rad_actuator', 'devices': ['04:056053']}  # ...and this set is in together with the next set:
 
 2024-01-01T00:00:02.003000 045 RP --- 01:145038 18:006402 --:------ 000C 006 0A04005A23FD  # {'zone_idx':  '0A', 'zone_type': '04', 'device_role': 'zone_sensor',  'devices': ['22:140285']}
-2024-01-01T00:00:02.004000 045 RP --- 01:145038 18:006402 --:------ 000C 006 0A080012E29A  # {'zone_idx':  '0A', 'zone_type': '08', 'device_role': 'rad_actuator', 'devices': ['04:189082']} # this line together with the one before causes non-existing via_device error
+2024-01-01T00:00:02.004000 045 RP --- 01:145038 18:006402 --:------ 000C 006 0A080012E29A  # {'zone_idx':  '0A', 'zone_type': '08', 'device_role': 'rad_actuator', 'devices': ['04:189082']} # this line together with the one before causes non-existing parent_device error
 
 2024-01-01T00:00:03.001000 045 RP --- 01:145038 18:006402 --:------ 0004 022 02004B69746368656E00000000000000000000000000  # {'zone_idx': '02', 'name': 'Kitchen'}
 2024-01-01T00:00:03.002000 045 RP --- 01:145038 18:006402 --:------ 0004 022 0A004F66666963650000000000000000000000000000  # {'zone_idx': '04', 'name': 'Office'}

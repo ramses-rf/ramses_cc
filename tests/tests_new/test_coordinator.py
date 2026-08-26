@@ -258,7 +258,7 @@ async def test_update_device_relationships(
 
     # We patch the class in the BROKER module so it checks against our dummy
     with patch("custom_components.ramses_cc.coordinator.Zone", DummyZone):
-        # 1. Test Zone with TCS (hits via_device logic for Zones)
+        # 1. Test Zone with TCS (hits parent_device logic for Zones)
         mock_zone = MagicMock(spec=DummyZone)
         mock_zone.id = "04:123456"
         mock_zone.tcs = MagicMock()
@@ -274,9 +274,9 @@ async def test_update_device_relationships(
             mock_reg = dr_m.return_value
             await mock_coordinator._async_update_device(mock_zone)
 
-            # Verify via_device was set to TCS ID
+            # Verify parent_device_id was set to TCS ID
             call_kwargs = cast(Any, mock_reg.async_get_or_create).call_args[1]
-            assert call_kwargs["via_device"] == (DOMAIN, "01:999999")
+            assert call_kwargs["parent_device_id"] == ("01:999999")
 
 
 async def test_update_device_child_parent(
@@ -303,7 +303,7 @@ async def test_update_device_child_parent(
         await mock_coordinator._async_update_device(mock_child)
 
         call_kwargs = cast(Any, mock_reg.async_get_or_create).call_args[1]
-        assert call_kwargs["via_device"] == (DOMAIN, "04:123456")
+        assert call_kwargs["parent_device_id"] == ("04:123456")
 
 
 async def test_async_start(mock_coordinator: RamsesCoordinator) -> None:

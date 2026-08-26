@@ -1038,10 +1038,10 @@ async def test_get_device_and_from_id_propagates_exceptions(
         )
 
 
-async def test_update_device_via_device_logic(
+async def test_update_device_parent_device_logic(
     mock_coordinator: RamsesCoordinator, hass: HomeAssistant
 ) -> None:
-    """Test the via_device logic in _update_device for Zones and Children."""
+    """Test the parent_device logic in _update_device for Zones and Children."""
     # 1. Test Zone with TCS
     mock_tcs = MagicMock()
     mock_tcs.id = "01:123456"
@@ -1070,15 +1070,15 @@ async def test_update_device_via_device_logic(
     ):
         # Trigger update for Zone
         await mock_coordinator._async_update_device(mock_zone)
-        # Check zone via_device (most recent call)
+        # Check zone parent_device_id (most recent call)
         call_args_zone = mock_dr.async_get_or_create.call_args_list[-1][1]
-        assert call_args_zone["via_device"] == (DOMAIN, "01:123456")
+        assert call_args_zone["parent_device_id"] == ("01:123456")
 
         # Trigger update for Child
         await mock_coordinator._async_update_device(mock_child)
-        # Check child via_device (most recent call)
+        # Check child parent_device_id (most recent call)
         call_args_child = mock_dr.async_get_or_create.call_args_list[-1][1]
-        assert call_args_child["via_device"] == (DOMAIN, "02:222222")
+        assert call_args_child["parent_device_id"] == ("02:222222")
 
 
 async def test_adjust_sentinel_packet_early_return(
@@ -1178,9 +1178,9 @@ async def test_update_device_valid_child_type(
     ):
         await mock_coordinator._async_update_device(mock_child)
 
-        # Check that it used the parent for via_device
+        # Check that it used the parent for parent_device_id
         call_args = mock_dr.async_get_or_create.call_args[1]
-        assert call_args["via_device"] == (DOMAIN, "02:888888")
+        assert call_args["parent_device_id"] == ("02:888888")
 
 
 async def test_get_fan_param_generic_exception(
@@ -1472,8 +1472,8 @@ async def test_bind_device_generic_exception(
 async def test_update_device_simple_device(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _update_device for a simple device (not Zone, not Child) sets via_device=None."""
-    # A plain device (not Zone, not Child) should fall through to via_device = None
+    """Test _update_device for a simple device (not Zone, not Child) sets parent_device_id=None."""
+    # A plain device (not Zone, not Child) should fall through to parent_device_id=None
     mock_dev = MagicMock()
     mock_dev.id = "63:111111"
     mock_dev._SLUG = "SEN"
@@ -1486,9 +1486,9 @@ async def test_update_device_simple_device(
     ):
         await mock_coordinator._async_update_device(mock_dev)
 
-        # Check that via_device is None using dictionary get method to prevent KeyError
+        # Check that parent_device_id is None using dictionary get method to prevent KeyError
         call_args = mock_dr.async_get_or_create.call_args[1]
-        assert call_args.get("via_device") is None
+        assert call_args.get("parent_device_id") is None
 
 
 async def test_run_fan_param_sequence_errors(
@@ -1621,14 +1621,14 @@ async def test_update_device_relationships(hass: HomeAssistant) -> None:
 
         await coordinator._async_update_device(child_device)
 
-        # Verify via_device is set to parent
+        # Verify parent_device_id is set to parent
         dev_reg.async_get_or_create.assert_called_with(
             config_entry_id="test_entry",
             identifiers={(DOMAIN, "04:123456")},
             name="Test Child",
             manufacturer=None,
             model="Test Model",
-            via_device=(DOMAIN, "01:123456"),
+            parent_device_id=("01:123456"),
             serial_number="04:123456",
         )
 
@@ -1649,9 +1649,9 @@ async def test_update_device_relationships(hass: HomeAssistant) -> None:
 
         await coordinator._async_update_device(generic_device)
 
-        # Verify via_device is None using dictionary get method to prevent KeyError
+        # Verify parent_device_id is None using dictionary get method to prevent KeyError
         args, kwargs = dev_reg.async_get_or_create.call_args
-        assert kwargs.get("via_device") is None
+        assert kwargs.get("parent_device_id") is None
 
 
 async def test_bind_device_lookup_error(hass: HomeAssistant) -> None:
@@ -1894,7 +1894,7 @@ async def test_update_device_already_registered(hass: HomeAssistant) -> None:
         device._SLUG = "BDR"
         device.state_store = MagicMock()
         device.state_store._msg_value_code = AsyncMock(return_value=None)
-        # Ensure it doesn't trigger Child/Zone logic for via_device
+        # Ensure it doesn't trigger Child/Zone logic for parent_device_id
         device._parent = None
 
         # First call - should register the device

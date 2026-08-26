@@ -27,7 +27,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo
 from homeassistant.helpers.dispatcher import (
     async_dispatcher_connect,
     async_dispatcher_send,
@@ -2567,24 +2567,24 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         device_registry = dr.async_get(self.hass)
 
-        via_device: tuple[str, str] | None = None
+        parent_device_id: tuple[str, str] | None = None
         if isinstance(device, Zone) and device.tcs:
-            _LOGGER.info("ZONE %s via_device SET to %s", model, device.tcs.id)
-            via_device = (DOMAIN, str(device.tcs.id))
+            _LOGGER.info("ZONE %s parent_device_id SET to %s", model, device.tcs.id)
+            parent_device_id = (DOMAIN, str(device.tcs.id))
         elif isinstance(device, UfhCircuit) and device.ufc:
             ufc_id = str(device.ufc.id)
             _LOGGER.info(
-                "UFH Circuit %s via_device SET to %s", device.id, ufc_id
+                "UFH Circuit %s parent_device_id SET to %s", device.id, ufc_id
             )
-            via_device = (DOMAIN, ufc_id)
+            parent_device_id = (DOMAIN, ufc_id)
         elif isinstance(device, Child) and getattr(device, "_parent", None):
             parent = getattr(device, "_parent", None)
             child_parent_id = getattr(parent, "id", None) if parent else None
             _LOGGER.info(
-                "CHILD %s via_device SET to %s", model, child_parent_id
+                "CHILD %s parent_device_id SET to %s", model, child_parent_id
             )
             if child_parent_id:
-                via_device = (DOMAIN, str(child_parent_id))
+                parent_device_id = (DOMAIN, str(child_parent_id))
         elif isinstance(device, DeviceHvac) and getattr(
             device, "_parent_fan", None
         ):
@@ -2593,43 +2593,70 @@ class RamsesCoordinator(DataUpdateCoordinator):
             parent_fan_id = (
                 getattr(parent_fan, "id", None) if parent_fan else None
             )
-            _LOGGER.info("HVAC %s via_device SET to %s", model, parent_fan_id)
+            _LOGGER.info(
+                "HVAC %s parent_device_id SET to %s", model, parent_fan_id
+            )
             if parent_fan_id:
-                via_device = (DOMAIN, str(parent_fan_id))
+                parent_device_id = str(parent_fan_id)
         else:
-            via_device = None
+            parent_device_id = None
 
         # Conditionally assemble kwargs to protect HA TypedDict strict checks
         kwargs: dict[str, Any] = {}
-        if via_device is not None:
-            kwargs["via_device"] = via_device
+        if suggested_area is not None:
+            kwargs["suggested_area"] = suggested_area
+        if parent_device_id is not None:
+            if (
+                device_registry.async_get(
+                    config_entry_id=self.entry.entry_id,
+                    device_id=parent_device_id,
+                ).__class__
+                == ChildDeviceInfo
+            ):  # children can't be nested
+                _LOGGER.warning(
+                    "Parent %s is a Child, can't nest", parent_device_id
+                )
+                return
+            kwargs["parent_device_id"] = parent_device_id
             if (
                 isinstance(device, UfhCircuit)
                 and hasattr(DeviceInfo, "__annotations__")
-                and "parent_device" in DeviceInfo.__annotations__
+                and "parent_device_id" in DeviceInfo.__annotations__
             ):
-                kwargs["parent_device"] = via_device
+                kwargs["parent_device_id"] = parent_device_id
 
-        if suggested_area is not None:
-            kwargs["suggested_area"] = suggested_area
+            kwargs["parent_device_id"] = parent_device_id
+            device_info = ChildDeviceInfo(
+                identifiers={(DOMAIN, str(device.id))},
+                name=device_name,
+                **kwargs,
+            )
+            if self._device_info.get(str(device.id)) == device_info:
+                return
 
-        device_info = DeviceInfo(
-            identifiers={(DOMAIN, str(device.id))},
-            name=device_name,
-            manufacturer=None,
-            model=model,
-            serial_number=str(device.id),
-            **kwargs,
-        )
+            self._device_info[str(device.id)] = device_info
 
-        if self._device_info.get(str(device.id)) == device_info:
-            return
+            device_registry.async_get_or_create_child(
+                config_entry_id=self.entry.entry_id, **device_info
+            )
+        else:
+            device_info = DeviceInfo(
+                identifiers={(DOMAIN, str(device.id))},
+                name=device_name,
+                manufacturer=None,
+                model=model,
+                serial_number=str(device.id),
+                **kwargs,
+            )
 
-        self._device_info[str(device.id)] = device_info
+            if self._device_info.get(str(device.id)) == device_info:
+                return
 
-        device_registry.async_get_or_create(
-            config_entry_id=self.entry.entry_id, **device_info
-        )
+            self._device_info[str(device.id)] = device_info
+
+            device_registry.async_get_or_create(
+                config_entry_id=self.entry.entry_id, **device_info
+            )
 
     async def _async_update_data(self) -> None:
         """Fetch data from the RAMSES RF client."""
@@ -2846,7 +2873,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         )
 
         # Process new devices for fan logic: Systems/DHWs before Devices
-        # to ensure via_device parents exist
+        # to ensure parent_device_id parents exist
         for device in (
             new_systems + new_dhws + new_zones + new_devices + new_circuits
         ):
