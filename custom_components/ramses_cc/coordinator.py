@@ -2576,7 +2576,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             _LOGGER.info(
                 "UFH Circuit %s parent_device_id SET to %s", device.id, ufc_id
             )
-            parent_device_id = (DOMAIN, ufc_id)
+            parent_device_id = str(ufc_id)
         elif isinstance(device, Child) and getattr(device, "_parent", None):
             parent = getattr(device, "_parent", None)
             child_parent_id = getattr(parent, "id", None) if parent else None
@@ -2584,7 +2584,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 "CHILD %s parent_device_id SET to %s", model, child_parent_id
             )
             if child_parent_id:
-                parent_device_id = (DOMAIN, str(child_parent_id))
+                parent_device_id = str(child_parent_id)
         elif isinstance(device, DeviceHvac) and getattr(
             device, "_parent_fan", None
         ):
