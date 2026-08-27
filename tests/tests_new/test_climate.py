@@ -4,8 +4,8 @@ from datetime import datetime as dt, timedelta as td
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 from homeassistant.components.climate.const import (
     FAN_AUTO,
     FAN_OFF,

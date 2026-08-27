@@ -7,8 +7,8 @@ from datetime import timedelta as td
 from typing import Any, Final, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 from homeassistant.components.climate.const import HVACMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -1419,7 +1419,7 @@ async def test_controller_validation_error(
     entity = RamsesController(mock_coordinator, mock_evohome, MagicMock())
     entity._device = mock_evohome
 
-    # Mock set_mode to raise Voluptuous error
+    # Mock set_mode to raise probatio error
     mock_evohome.set_mode.side_effect = vol.Invalid("Invalid mode")
 
     with pytest.raises(ServiceValidationError):

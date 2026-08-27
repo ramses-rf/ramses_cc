@@ -253,7 +253,7 @@ async def test_async_set_operation_mode_boost(
     water_heater: RamsesWaterHeater, mock_device: MagicMock
 ) -> None:
     """Test setting operation mode to BOOST."""
-    # We use real dt.util to ensure voluptuous checks (cv.dt_util) pass.
+    # We use real dt.util to ensure probatio checks (cv.dt_util) pass.
     # Mocking dt_util.dt_util often fails isinstance(x, dt_util) checks.
     now = dt_util.now()
     await water_heater.async_set_operation_mode(STATE_BOOST)

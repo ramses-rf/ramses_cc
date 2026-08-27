@@ -11,8 +11,8 @@ from importlib.metadata import version
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 from homeassistant.components.usb.models import USBDevice
 from homeassistant.config_entries import (
     SOURCE_USER,
@@ -63,7 +63,7 @@ HOMEASSISTANT_VERSION = version("homeassistant")
 
 
 def _get_schema_default(schema_key: Any) -> Any:
-    """Robustly extract the default value from a voluptuous Marker.
+    """Robustly extract the default value from a probatio Marker.
 
     Home Assistant strips defaults and moves them to 'suggested_value'
     in the description placeholder during form processing.

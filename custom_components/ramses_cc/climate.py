@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace as dc_replace
 from datetime import datetime as dt, timedelta as td
 from typing import Any, Final
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityDescription,

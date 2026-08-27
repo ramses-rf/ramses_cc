@@ -49,7 +49,7 @@ if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):  # pragma: no cover
     )
 # ------------------------
 
-import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
+import probatio as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant import config_entries
 from homeassistant.components.climate.const import (
     DOMAIN as CLIMATE_ENTITY_DOMAIN,

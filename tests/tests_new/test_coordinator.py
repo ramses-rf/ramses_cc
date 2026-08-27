@@ -11,9 +11,9 @@ from datetime import datetime as dt, timedelta as td
 from typing import Any, cast
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
+import probatio as vol  # type: ignore[import-untyped, unused-ignore]
 import pytest
 import serial  # type: ignore[import-untyped]
-import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant, ServiceCall

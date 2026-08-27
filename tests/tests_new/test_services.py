@@ -6,8 +6,8 @@ from datetime import datetime as dt, timedelta as td
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError

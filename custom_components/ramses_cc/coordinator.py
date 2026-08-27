@@ -16,8 +16,8 @@ from functools import lru_cache
 from threading import Semaphore
 from typing import TYPE_CHECKING, Any, Final, TypeVar
 
+import probatio as vol  # type: ignore[import-untyped, unused-ignore]
 import serial  # type: ignore[import-untyped]
-import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.components.persistent_notification import (
     async_create as async_create_notification,
     async_dismiss as async_dismiss_notification,

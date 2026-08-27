@@ -9,7 +9,7 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlparse
 
-import voluptuous as vol  # type: ignore[import-untyped, unused-ignore]
+import probatio as vol  # type: ignore[import-untyped, unused-ignore]
 from homeassistant.components import mqtt, usb
 from homeassistant.config_entries import (
     ConfigEntry,
