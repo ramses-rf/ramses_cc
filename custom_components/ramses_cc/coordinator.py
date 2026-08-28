@@ -2606,15 +2606,21 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if suggested_area is not None:
             kwargs["suggested_area"] = suggested_area
         if parent_device_id is not None:
-            if (
-                device_registry.async_get(
-                    config_entry_id=self.entry.entry_id,
-                    device_id=parent_device_id,
-                ).__class__
-                == ChildDeviceInfo
+            parent = device_registry.async_get_device_by_identifier(
+                (DOMAIN, parent_device_id), self.entry.entry_id
+            )
+            if parent is None:
+                _LOGGER.warning(
+                    "Parent %s does not exist. Must create it first",
+                    parent_device_id,
+                )
+                # create parent first
+                await self._async_create_device(parent_device_id, None, None)
+            elif (
+                parent.__class__ == ChildDeviceInfo
             ):  # children can't be nested
                 _LOGGER.warning(
-                    "Parent %s is a Child, can't nest", parent_device_id
+                    "Parent %s is itself a Child, can't nest", parent_device_id
                 )
                 return
             kwargs["parent_device_id"] = parent_device_id
@@ -2640,23 +2646,34 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 config_entry_id=self.entry.entry_id, **device_info
             )
         else:
-            device_info = DeviceInfo(
-                identifiers={(DOMAIN, str(device.id))},
-                name=device_name,
-                manufacturer=None,
-                model=model,
-                serial_number=str(device.id),
-                **kwargs,
-            )
+            await self._async_create_device(device.id, device_name, model)
 
-            if self._device_info.get(str(device.id)) == device_info:
-                return
+    async def _async_create_device(
+        self,
+        dev_id: str,
+        dev_name: str | None,
+        dev_model: str | None,
+        **kwargs,
+    ) -> None:
 
-            self._device_info[str(device.id)] = device_info
+        device_info = DeviceInfo(
+            identifiers={(DOMAIN, str(dev_id))},
+            name=dev_name,
+            manufacturer=None,
+            model=dev_model,
+            serial_number=str(dev_id),
+            **kwargs,
+        )
 
-            device_registry.async_get_or_create(
-                config_entry_id=self.entry.entry_id, **device_info
-            )
+        if self._device_info.get(str(dev_id)) == device_info:
+            return
+
+        self._device_info[str(dev_id)] = device_info
+
+        device_registry = dr.async_get(self.hass)
+        device_registry.async_get_or_create(
+            config_entry_id=self.entry.entry_id, **device_info
+        )
 
     async def _async_update_data(self) -> None:
         """Fetch data from the RAMSES RF client."""
