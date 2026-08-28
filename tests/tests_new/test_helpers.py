@@ -138,7 +138,7 @@ def test_as_iso_conversion() -> None:
     assert as_iso(None) == "None"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_resolve_async_attr_sync_and_async(hass: HomeAssistant) -> None:
     """Test resolve_async_attr helper with sync and async targets."""
     # 1. Sync value test
@@ -170,7 +170,7 @@ async def test_resolve_async_attr_sync_and_async(hass: HomeAssistant) -> None:
     assert res_cached == "async_resolved"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_clear_async_attr_cache(hass: HomeAssistant) -> None:
     """Test clearing async attribute resolution cache and cancelling tasks."""
     entity = SimpleNamespace(hass=hass)

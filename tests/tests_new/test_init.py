@@ -84,7 +84,7 @@ async def async_flush_queues(gwy: Any) -> None:
         await asyncio.sleep(0)
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     """Return a mock coordinator.
 
@@ -110,7 +110,7 @@ def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     return coordinator
 
 
-@pytest.mark.parametrize("instance", TEST_SYSTEMS)
+@pytest.mark.parametrize("instance", TEST_SYSTEMS)  # type: ignore[untyped-decorator]
 async def test_entities(
     hass: HomeAssistant,
     hass_storage: dict[str, Any],

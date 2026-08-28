@@ -357,7 +357,7 @@ async def _setup_via_entry_(
     return entry
 
 
-@pytest.fixture()  # need hass fixture to ensure hass/rf use same event loop
+@pytest.fixture()  # type: ignore[untyped-decorator]  # need hass fixture to ensure hass/rf use same event loop
 async def entry(hass: HomeAssistant) -> AsyncGenerator[ConfigEntry]:
     """Set up the test bed."""
 
@@ -505,7 +505,7 @@ TESTS_SEND_COMMAND = {
 
 
 # TODO: extended test of underlying method
-@pytest.mark.parametrize("index", TESTS_SEND_COMMAND)
+@pytest.mark.parametrize("index", TESTS_SEND_COMMAND)  # type: ignore[untyped-decorator]
 async def test_send_command(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -797,7 +797,7 @@ TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
 
 
 # TODO: extended test of underlying method (duration/until)
-@pytest.mark.parametrize("index", TESTS_SET_DHW_MODE_GOOD)
+@pytest.mark.parametrize("index", TESTS_SET_DHW_MODE_GOOD)  # type: ignore[untyped-decorator]
 async def test_set_dhw_mode_good(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -827,7 +827,7 @@ async def test_set_dhw_mode_good(
     # )
 
 
-@pytest.mark.parametrize("index", TESTS_SET_DHW_MODE_FAIL)
+@pytest.mark.parametrize("index", TESTS_SET_DHW_MODE_FAIL)  # type: ignore[untyped-decorator]
 async def test_set_dhw_mode_fail(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -850,7 +850,7 @@ async def test_set_dhw_mode_fail(
         raise AssertionError("Expected vol.MultipleInvalid")
 
 
-@pytest.mark.parametrize("index", TESTS_SET_DHW_MODE_FAIL2)
+@pytest.mark.parametrize("index", TESTS_SET_DHW_MODE_FAIL2)  # type: ignore[untyped-decorator]
 async def test_set_dhw_mode_fail2(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -880,7 +880,7 @@ TESTS_SET_DHW_PARAMS = {
 }
 
 
-@pytest.mark.parametrize("index", TESTS_SET_DHW_PARAMS)
+@pytest.mark.parametrize("index", TESTS_SET_DHW_PARAMS)  # type: ignore[untyped-decorator]
 async def test_set_dhw_params(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -948,7 +948,7 @@ TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
 
 
 # TODO: extended test of underlying method (duration/period)
-@pytest.mark.parametrize("index", TESTS_SET_SYSTEM_MODE_GOOD)
+@pytest.mark.parametrize("index", TESTS_SET_SYSTEM_MODE_GOOD)  # type: ignore[untyped-decorator]
 async def test_set_system_mode_good(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -973,7 +973,7 @@ async def test_set_system_mode_good(
         )
 
 
-@pytest.mark.parametrize("index", TESTS_SET_SYSTEM_MODE_FAIL)
+@pytest.mark.parametrize("index", TESTS_SET_SYSTEM_MODE_FAIL)  # type: ignore[untyped-decorator]
 async def test_set_system_mode_fail(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -994,7 +994,7 @@ async def test_set_system_mode_fail(
         raise AssertionError("Expected vol.MultipleInvalid")
 
 
-@pytest.mark.parametrize("index", TESTS_SET_SYSTEM_MODE_FAIL2)
+@pytest.mark.parametrize("index", TESTS_SET_SYSTEM_MODE_FAIL2)  # type: ignore[untyped-decorator]
 async def test_set_system_mode_fail2(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -1033,7 +1033,7 @@ TESTS_SET_ZONE_CONFIG = {
 }
 
 
-@pytest.mark.parametrize("index", TESTS_SET_ZONE_CONFIG)
+@pytest.mark.parametrize("index", TESTS_SET_ZONE_CONFIG)  # type: ignore[untyped-decorator]
 async def test_set_zone_config(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -1152,7 +1152,7 @@ TESTS_SET_ZONE_MODE_FAIL2: dict[str, dict[str, Any]] = {
 }
 
 
-@pytest.mark.parametrize("index", TESTS_SET_ZONE_MODE_GOOD)
+@pytest.mark.parametrize("index", TESTS_SET_ZONE_MODE_GOOD)  # type: ignore[untyped-decorator]
 async def test_set_zone_mode_good(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -1182,7 +1182,7 @@ async def test_set_zone_mode_good(
     # )
 
 
-@pytest.mark.parametrize("index", TESTS_SET_ZONE_MODE_FAIL)
+@pytest.mark.parametrize("index", TESTS_SET_ZONE_MODE_FAIL)  # type: ignore[untyped-decorator]
 async def test_set_zone_mode_fail(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -1203,7 +1203,7 @@ async def test_set_zone_mode_fail(
         raise AssertionError("Expected vol.MultipleInvalid")
 
 
-@pytest.mark.parametrize("index", TESTS_SET_ZONE_MODE_FAIL2)
+@pytest.mark.parametrize("index", TESTS_SET_ZONE_MODE_FAIL2)  # type: ignore[untyped-decorator]
 async def test_set_zone_mode_fail2(
     hass: HomeAssistant, entry: ConfigEntry, index: str
 ) -> None:
@@ -1323,13 +1323,13 @@ async def test_svc_send_packet_with_impersonation(
 # New tests for the climate async migration
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator() -> MagicMock:
     """Mock the RamsesCoordinator."""
     return MagicMock()
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_evohome() -> MagicMock:
     """Mock the Evohome device."""
     device = MagicMock()
@@ -1344,7 +1344,7 @@ def mock_evohome() -> MagicMock:
     return device
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_zone() -> MagicMock:
     """Mock the Zone device."""
     device = MagicMock()

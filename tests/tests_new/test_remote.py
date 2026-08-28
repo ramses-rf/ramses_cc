@@ -27,7 +27,7 @@ from ramses_tx.const import Priority
 from ramses_tx.dtos import CommandDTO
 
 
-@pytest.fixture(autouse=True, scope="module")
+@pytest.fixture(autouse=True, scope="module")  # type: ignore[untyped-decorator]
 def _inject_entity_platform() -> Iterator[None]:
     """Inject EntityPlatform into HA entity module for Python 3.14 autospec.
 
@@ -50,7 +50,7 @@ MOCK_DEV_ID = "12:123456"
 VALID_PACKET = "RQ --- 30:123456 18:111111 --:------ 22F1 003 000030"
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     """Return a mock coordinator with required internal structures."""
     coordinator = MagicMock()
@@ -90,7 +90,7 @@ def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_remote_device() -> MagicMock:
     """Return a mock HvacRemote device."""
     device = MagicMock()
@@ -99,7 +99,7 @@ def mock_remote_device() -> MagicMock:
     return device
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def remote_entity(
     hass: HomeAssistant,
     mock_coordinator: MagicMock,
@@ -304,8 +304,8 @@ async def test_remote_send_command_exception_handling(
         await remote.async_send_command("boost")
 
 
-@pytest.mark.skip
-@pytest.mark.asyncio
+@pytest.mark.skip  # type: ignore[untyped-decorator]
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_remote_learn_command_success(
     remote_entity: RamsesRemote,
     hass: HomeAssistant,
@@ -428,8 +428,8 @@ async def test_async_learn_command_callback() -> None:
 # new tests for remote_learn events
 
 
-@pytest.mark.skip
-@pytest.mark.asyncio
+@pytest.mark.skip  # type: ignore[untyped-decorator]
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_learn_command_success(
     remote_entity: RamsesRemote,
     mock_coordinator: MagicMock,
@@ -457,7 +457,7 @@ async def test_async_learn_command_success(
         mock_event.assert_called_once()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_learn_command_invalid_command_type(
     remote_entity: RamsesRemote,
 ) -> None:
@@ -473,7 +473,7 @@ async def test_async_learn_command_invalid_command_type(
         )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_learn_command_command_already_exists(
     remote_entity: RamsesRemote,
 ) -> None:
@@ -496,7 +496,7 @@ async def test_async_learn_command_command_already_exists(
         device.async_delete_command.assert_called_once_with(["boost"])
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_learn_command_kwargs_not_empty(
     remote_entity: RamsesRemote,
 ) -> None:
@@ -515,7 +515,7 @@ async def test_async_learn_command_kwargs_not_empty(
 # end new
 
 
-@pytest.mark.skip  # no separate filter
+@pytest.mark.skip  # type: ignore[untyped-decorator]  # no separate filter
 async def test_remote_learn_filter_logic(
     mock_coordinator: MagicMock,
     mock_remote_device: MagicMock,
@@ -638,7 +638,7 @@ async def test_send_command_failure(
         await remote_entity.async_send_command(["cmd_fail"])
 
 
-@pytest.mark.skip
+@pytest.mark.skip  # type: ignore[untyped-decorator]
 async def test_learn_command(hass: HomeAssistant) -> None:
     """Test the learn_command service."""
     remote = RamsesRemote(
@@ -659,7 +659,7 @@ async def test_learn_command(hass: HomeAssistant) -> None:
     assert "fail_cmd" not in remote._commands
 
 
-@pytest.mark.skip
+@pytest.mark.skip  # type: ignore[untyped-decorator]
 async def test_learn_command_failure(hass: HomeAssistant) -> None:
     """Test the learn_command service failure."""
     remote = RamsesRemote(
@@ -847,7 +847,7 @@ async def test_fan_param_methods(
     mock_coordinator.async_set_fan_param.assert_not_called()
 
 
-@pytest.mark.skip
+@pytest.mark.skip  # type: ignore[untyped-decorator]
 async def test_remote_learn_cleanup_on_timeout(
     hass: HomeAssistant,
     mock_coordinator: MagicMock,
@@ -1034,7 +1034,7 @@ async def test_learn_command_callback_writes_to_schema(
     learning_session = asyncio.Event()
 
     # Replicate the _async_on_change callback logic from async_learn_command
-    @callback
+    @callback  # type: ignore[untyped-decorator]
     async def _async_on_change(event: Any) -> None:
         codes = ("22F1", "22F3", "22F7")
         new_state: State = event.data["new_state"]
@@ -1093,7 +1093,7 @@ async def test_learn_command_callback_ignores_wrong_src(
 
     learning_session = asyncio.Event()
 
-    @callback
+    @callback  # type: ignore[untyped-decorator]
     async def _async_on_change(event: Any) -> None:
         codes = ("22F1", "22F3", "22F7")
         new_state: State = event.data["new_state"]
@@ -1148,7 +1148,7 @@ async def test_learn_command_callback_ignores_wrong_code(
 
     learning_session = asyncio.Event()
 
-    @callback
+    @callback  # type: ignore[untyped-decorator]
     async def _async_on_change(event: Any) -> None:
         codes = ("22F1", "22F3", "22F7")
         new_state: State = event.data["new_state"]
@@ -1374,7 +1374,7 @@ def test_build_packet_length_calculated() -> None:
     assert "0005" in result2
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_fan_device() -> MagicMock:
     """Return a mock HvacVentilator device."""
     device = MagicMock(spec=HvacVentilator)
@@ -1383,7 +1383,7 @@ def mock_fan_device() -> MagicMock:
     return device
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def fan_coordinator(hass: HomeAssistant) -> MagicMock:
     """Return a mock coordinator for FAN entity tests."""
     coordinator = MagicMock()
@@ -1411,7 +1411,7 @@ def fan_coordinator(hass: HomeAssistant) -> MagicMock:
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def fan_remote_entity(
     hass: HomeAssistant,
     fan_coordinator: MagicMock,

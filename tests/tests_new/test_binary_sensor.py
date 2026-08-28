@@ -28,7 +28,7 @@ from ramses_rf.systems.tcs import Logbook, System
 from ramses_tx.const import SZ_IS_EVOFW3
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator() -> MagicMock:
     """Return a mock RamsesCoordinator.
 

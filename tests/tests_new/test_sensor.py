@@ -36,7 +36,7 @@ from ramses_rf.enums import PumpRelayState
 from ramses_tx.dtos import CommandDTO
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator() -> MagicMock:
     """Return a mock RamsesCoordinator."""
     coordinator = MagicMock()
@@ -45,7 +45,7 @@ def mock_coordinator() -> MagicMock:
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_device() -> MagicMock:
     """Return a mock RamsesRFEntity."""
     device = MagicMock(spec=RamsesRFEntity)
@@ -164,7 +164,7 @@ def mock_entity_description_no_codes():
     return description
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def entity_push_driven(
     mock_coordinator: MagicMock, mock_device_gwy, mock_entity_description_codes
 ):
@@ -178,7 +178,7 @@ def entity_push_driven(
     return sensor
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def entity_poll_driven(
     mock_coordinator: MagicMock, mock_device_gwy, mock_entity_description_codes
 ):
@@ -190,7 +190,7 @@ def entity_poll_driven(
     return sensor
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def entity_poll_driven_no_codes(
     mock_coordinator: MagicMock,
     mock_device_gwy,
@@ -204,7 +204,7 @@ def entity_poll_driven_no_codes(
     return sensor
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_update_push_driven(
     entity_push_driven, caplog: pytest.LogCaptureFixture
 ):
@@ -219,7 +219,7 @@ async def test_async_update_push_driven(
         assert "Polled" not in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_update_poll_driven_success(
     entity_poll_driven, caplog: pytest.LogCaptureFixture
 ):
@@ -255,7 +255,7 @@ async def test_async_update_poll_driven_success(
         assert "Polled 0002 for 01:123455" in caplog.text
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_update_poll_driven_failure(
     entity_poll_driven, caplog: pytest.LogCaptureFixture
 ):
@@ -283,7 +283,7 @@ async def test_async_update_poll_driven_failure(
         )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_update_no_poll_codes(
     entity_poll_driven_no_codes, caplog: pytest.LogCaptureFixture
 ):

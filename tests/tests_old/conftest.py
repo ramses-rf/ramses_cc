@@ -7,14 +7,14 @@ import contextlib
 import pytest
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
 def auto_enable_custom_integrations(
     enable_custom_integrations: pytest.fixture,
 ):  # type: ignore[no-untyped-def]
     yield
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     """Apply necessary monkeypatches before running tests."""
 

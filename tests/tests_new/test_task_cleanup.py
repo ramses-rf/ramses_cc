@@ -40,7 +40,7 @@ class MockDevice(RamsesRFEntity):
         pass
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     """Return a mock RamsesCoordinator."""
     coordinator = MagicMock()
@@ -54,7 +54,7 @@ def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_fan_device() -> MagicMock:
     """Return a mock Fan device."""
     device = MagicMock(spec=MockDevice)
@@ -65,7 +65,7 @@ def mock_fan_device() -> MagicMock:
     return device
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def number_entity(
     mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> RamsesNumberParam:

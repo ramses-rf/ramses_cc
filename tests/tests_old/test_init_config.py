@@ -91,7 +91,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     )
 
 
-@pytest.fixture()  # add hass fixture to ensure hass/rf use same event loop
+@pytest.fixture()  # type: ignore[untyped-decorator]  # add hass fixture to ensure hass/rf use same event loop
 async def rf(hass: HomeAssistant) -> AsyncGenerator[Any]:
     """Utilize a virtual evofw3-compatible gateway."""
 

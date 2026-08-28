@@ -34,7 +34,7 @@ from ramses_tx.dtos import PacketDTO
 
 
 # Mock Coordinator
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(learn_device_id: str | None = None) -> MagicMock:
     """A mock object simulating the RamsesCoordinator."""
     coordinator = MagicMock()
@@ -44,13 +44,13 @@ def mock_coordinator(learn_device_id: str | None = None) -> MagicMock:
 
 
 # Mock HomeAssistant
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_hass() -> MagicMock:
     return MagicMock(spec=HomeAssistant, data={})
 
 
 # Mock ConfigEntry
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_config_entry() -> MagicMock:
     return MagicMock(spec=ConfigEntry, entry_id="123")
 
@@ -79,7 +79,7 @@ def test_ramses_event_type() -> None:
 
 
 # Test RamsesEvent
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_event_init(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -92,7 +92,7 @@ async def test_ramses_event_init(
     assert event._type == RamsesEventType.LEARN
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_event_update_data(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -109,7 +109,7 @@ async def test_ramses_event_update_data(
     assert event._data == {"type": RamsesEventType.LEARN, "extra": "data"}
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_event_update_data_error(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -125,7 +125,7 @@ async def test_ramses_event_update_data_error(
         event.update_data({"type": RamsesEventType.REGEX, "extra": "data"})
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_event_async_added_to_hass(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -141,7 +141,7 @@ async def test_ramses_event_async_added_to_hass(
     assert event._remove is not None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_event_async_will_remove_from_hass(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -158,7 +158,7 @@ async def test_ramses_event_async_will_remove_from_hass(
 
 
 # Test RamsesLearnEvent
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_learn_event_init(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -170,7 +170,7 @@ async def test_ramses_learn_event_init(
     assert event._attr_unique_id == "learn_event"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_learn_event_async_process_msg(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -221,7 +221,7 @@ def _make_dto(src: str = "01:111111", dst: str = "01:222222") -> PacketDTO:
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_signal_update_update_data_still_synchronous(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -242,7 +242,7 @@ async def test_signal_update_update_data_still_synchronous(
 
 
 # Test RamsesRegexEvent
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_regex_event_init(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -257,7 +257,7 @@ async def test_ramses_regex_event_init(
     assert event.regex == regex
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_regex_event_async_process_msg(
     mock_hass: MagicMock, mock_coordinator: MagicMock
 ) -> None:
@@ -347,7 +347,7 @@ async def test_domain_event_platform(
     assert created_entities[0].data["type"] == "tst"
 
 
-@pytest.mark.skip  # TODO(eb): fix from bus listener to event state change listener
+@pytest.mark.skip  # type: ignore[untyped-decorator]  # TODO(eb): fix from bus listener to event state change listener
 async def test_domain_events(
     hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:
@@ -450,7 +450,7 @@ async def test_domain_events(
     assert learn_events[0].data["packet"] == expected_packet
 
 
-@pytest.mark.skip
+@pytest.mark.skip  # type: ignore[untyped-decorator]
 async def test_domain_events_no_config(
     hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:

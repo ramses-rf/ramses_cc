@@ -399,7 +399,7 @@ class TestCoordinatorDiscoveryReset:
 class TestCoordinatorUnloadFilter:
     """Tests for coordinator unload filtering discovery state."""
 
-    @pytest.fixture
+    @pytest.fixture  # type: ignore[untyped-decorator]
     def coordinator_with_empty_schema(
         self, hass: HomeAssistant
     ) -> RamsesCoordinator:

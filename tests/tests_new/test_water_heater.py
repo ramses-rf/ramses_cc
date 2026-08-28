@@ -28,7 +28,7 @@ TEST_DEVICE_ID = "10:123456"
 SZ_ACTIVE = "active"
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_device() -> MagicMock:
     """Return a mock DhwZone device."""
     # Note: Do not use spec=DhwZone here as it prevents mocking 'tcs' if not explicitly in the class
@@ -57,13 +57,13 @@ def mock_device() -> MagicMock:
     return device
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator() -> MagicMock:
     """Return a mock RamsesCoordinator."""
     return MagicMock()
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def water_heater(
     mock_coordinator: MagicMock, mock_device: MagicMock
 ) -> RamsesWaterHeater:

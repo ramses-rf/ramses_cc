@@ -75,7 +75,7 @@ def _get_schema_default(schema_key: Any) -> Any:
     return d() if callable(d) else d
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
 def bypass_setup_fixture() -> Iterator[None]:
     """Prevent actual setup of the integration during config flow tests."""
     with (
@@ -1067,7 +1067,7 @@ async def test_configure_serial_port_error_logic(hass: HomeAssistant) -> None:
     assert result.get("step_id") == "configure_serial_port"
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipif(  # type: ignore[untyped-decorator]
     HOMEASSISTANT_VERSION < "2026.5.0", reason="requires HA 2026.5.0+"
 )
 def test_get_usb_ports_full_new() -> None:
@@ -1094,7 +1094,7 @@ def test_get_usb_ports_full_new() -> None:
         assert ports == {"/dev/ttyUSB0": "USB Device"}
 
 
-@pytest.mark.skipif(
+@pytest.mark.skipif(  # type: ignore[untyped-decorator]
     HOMEASSISTANT_VERSION < "2026.5.0", reason="requires HA 2026.5.0+"
 )
 def test_get_usb_ports_logic_edge_case_new() -> None:
@@ -1124,7 +1124,7 @@ def test_get_usb_ports_logic_edge_case_new() -> None:
 
 
 # TODO: remove Q3 2026
-@pytest.mark.skipif(
+@pytest.mark.skipif(  # type: ignore[untyped-decorator]
     HOMEASSISTANT_VERSION >= "2026.5.0", reason="requires HA < 2026.5.0"
 )
 def test_get_usb_ports_full_old() -> None:
@@ -1160,7 +1160,7 @@ def test_get_usb_ports_full_old() -> None:
 
 
 # TODO: remove Q3 2026
-@pytest.mark.skipif(
+@pytest.mark.skipif(  # type: ignore[untyped-decorator]
     HOMEASSISTANT_VERSION >= "2026.5.0", reason="requires HA < 2026.5.0"
 )
 def test_get_usb_ports_logic_edge_case_old() -> None:

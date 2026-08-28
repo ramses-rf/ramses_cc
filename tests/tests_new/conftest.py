@@ -20,7 +20,7 @@ except (ImportError, ModuleNotFoundError):
     VirtualRf = None  # Windows: pty/termios unavailable
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
 def auto_enable_custom_integrations(
     enable_custom_integrations: Any,
 ) -> Generator[None]:
@@ -33,7 +33,7 @@ def auto_enable_custom_integrations(
 
 
 # NOTE: ? workaround for: https://github.com/MatthewFlamm/pytest-homeassistant-custom-component/issues/198
-@pytest.fixture  # not loading from pytest_homeassistant_custom_component.plugins
+@pytest.fixture  # type: ignore[untyped-decorator]  # not loading from pytest_homeassistant_custom_component.plugins
 def snapshot(snapshot: SnapshotAssertion) -> SnapshotAssertion:
     """Return snapshot assertion fixture with the Home Assistant extension.
 
@@ -43,7 +43,7 @@ def snapshot(snapshot: SnapshotAssertion) -> SnapshotAssertion:
     return snapshot.use_extension(HomeAssistantSnapshotExtension)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     """Apply necessary monkeypatches before running tests.
 
@@ -68,7 +68,7 @@ def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     # monkeypatch.setattr("ramses_tx.protocol._GAP_BETWEEN_WRITES", 0)
 
 
-@pytest.fixture()  # add hass fixture to ensure hass/rf use same event loop
+@pytest.fixture()  # type: ignore[untyped-decorator]  # add hass fixture to ensure hass/rf use same event loop
 async def rf(hass: HomeAssistant) -> AsyncGenerator[Any]:
     """Utilize a virtual evofw3-compatible gateway.
 

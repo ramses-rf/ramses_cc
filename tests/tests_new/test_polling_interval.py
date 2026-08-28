@@ -25,7 +25,7 @@ def test_ramses_polling_interval_native_value() -> None:
     assert entity.unique_id == "10:123456_polling_interval"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_ramses_polling_interval_set_native_value() -> None:
     # Arrange
     coordinator = MagicMock()
@@ -43,7 +43,7 @@ async def test_ramses_polling_interval_set_native_value() -> None:
     entity.async_write_ha_state.assert_called_once()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_service_set_polling_interval_success() -> None:
     # Arrange
     coordinator = MagicMock()

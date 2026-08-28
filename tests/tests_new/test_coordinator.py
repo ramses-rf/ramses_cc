@@ -73,7 +73,7 @@ SERVICE_GET_NAME = "get_fan_param"  # Name of the get service
 SERVICE_SET_NAME = SVC_SET_FAN_PARAM  # Name of the set service
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_hass() -> MagicMock:
     """Return a mock Home Assistant instance."""
     hass = MagicMock()
@@ -107,7 +107,7 @@ def mock_hass() -> MagicMock:
     return hass
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_entry(mock_hass: MagicMock) -> MagicMock:
     """Return a mock ConfigEntry."""
     entry = MagicMock()
@@ -132,7 +132,7 @@ def mock_entry(mock_hass: MagicMock) -> MagicMock:
     return entry
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(
     mock_hass: MagicMock, mock_entry: MagicMock
 ) -> RamsesCoordinator:
@@ -161,7 +161,7 @@ def mock_client():
     return client
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_fan_device() -> MagicMock:
     """Return a mock Fan device."""
     device = MagicMock()
@@ -419,7 +419,7 @@ async def test_create_client_strips_commands_from_known_list(
         assert CONF_COMMANDS not in gwy_config.known_list["37:168270"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_create_client_foreign_hgi_in_block_list(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -453,7 +453,7 @@ async def test_create_client_foreign_hgi_in_block_list(
         assert "18:072981" in block_list  # foreign HGI is blocked
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_create_client_foreign_hgi_not_in_known_list(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -481,7 +481,7 @@ async def test_create_client_foreign_hgi_not_in_known_list(
         assert "18:072981" not in dict(gwy_config.known_list or {})
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_create_client_own_hgi_not_blocked(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -509,7 +509,7 @@ async def test_create_client_own_hgi_not_blocked(
         assert "18:130140" not in block_list
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_create_client_no_root_owner_no_block_list(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -540,7 +540,7 @@ async def test_create_client_no_root_owner_no_block_list(
         assert "18:072981" not in block_list  # no root_owner → not foreign
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_create_client_hgi_no_owner_not_blocked(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -568,7 +568,7 @@ async def test_create_client_hgi_no_owner_not_blocked(
         assert "18:072981" not in block_list
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_create_client_foreign_hgi_skipped_not_duplicated(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -599,7 +599,7 @@ async def test_create_client_foreign_hgi_skipped_not_duplicated(
         assert list(block_list.keys()).count("18:072981") == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_start_with_packet_handler(
     mock_coordinator: RamsesCoordinator, mock_client
 ):
@@ -1282,7 +1282,7 @@ async def test_save_client_state_unload_uses_config_schema(
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_save_client_state_skip_topology_sync_no_suppress_reload(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -1360,7 +1360,7 @@ async def test_save_client_state_skip_topology_sync_no_suppress_reload(
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_save_client_state_topology_sync_sets_suppress_reload(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -1429,7 +1429,7 @@ async def test_save_client_state_topology_sync_sets_suppress_reload(
     ).async_update_entry.assert_called()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_schema_updated_callback_debounces_burst(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -1474,7 +1474,7 @@ async def test_schema_updated_callback_debounces_burst(
     assert mock_coordinator._schema_updated_debounce_task is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_schema_updated_callback_skipped_during_unload(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -1492,7 +1492,7 @@ async def test_schema_updated_callback_skipped_during_unload(
     assert mock_coordinator.async_save_client_state.await_count == 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_schema_updated_callback_cancelled_on_unload(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -1603,7 +1603,7 @@ async def test_create_client_mqtt_success(
         assert kwargs["config"].engine.hgi_id == DEFAULT_HGI_ID
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_create_client_zigbee_path(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -1637,7 +1637,7 @@ async def test_create_client_zigbee_path(
         assert result is mock_client
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_discover_new_entities_registration_order(
     mock_hass: MagicMock,
 ) -> None:
@@ -2401,7 +2401,7 @@ class TestFanParameterGet:
     including error handling and edge cases for parameter reading operations.
     """
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
     async def setup_get_fixture(
         self, hass: HomeAssistant
     ) -> AsyncGenerator[None]:
@@ -2458,7 +2458,7 @@ class TestFanParameterGet:
 
         yield  # Test runs here
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio  # type: ignore[untyped-decorator]
     async def test_basic_fan_param_request(self, hass: HomeAssistant) -> None:
         """Test basic fan parameter request.
 
@@ -2482,7 +2482,7 @@ class TestFanParameterGet:
         intent = self.mock_dispatcher_send.call_args[0][0]
         assert intent.action.name == "GET_FAN_PARAM"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio  # type: ignore[untyped-decorator]
     async def test_missing_required_param_id(
         self, hass: HomeAssistant, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -2509,7 +2509,7 @@ class TestFanParameterGet:
         # Verify no command was sent
         self.mock_dispatcher_send.assert_not_called()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio  # type: ignore[untyped-decorator]
     async def test_custom_fan_id(self, hass: HomeAssistant) -> None:
         """Test that a custom fan_id can be specified.
 
@@ -2532,7 +2532,7 @@ class TestFanParameterGet:
         # Assert - Verify intent was sent via the CQRS dispatcher
         self.mock_dispatcher_send.assert_awaited_once()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio  # type: ignore[untyped-decorator]
     async def test_get_fan_param_with_ha_device_selector_resolves_device_id(
         self, hass: HomeAssistant
     ) -> None:
@@ -2606,7 +2606,7 @@ class TestFanParameterSet:
     edge cases for parameter writing operations.
     """
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
     async def setup_set_fixture(
         self, hass: HomeAssistant
     ) -> AsyncGenerator[None]:
@@ -2669,7 +2669,7 @@ class TestFanParameterSet:
         # Cleanup - stop all patches
         self.sleep_patcher.stop()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio  # type: ignore[untyped-decorator]
     async def test_basic_fan_param_set(self, hass: HomeAssistant) -> None:
         """Test basic fan parameter set with all required parameters.
 
@@ -2694,7 +2694,7 @@ class TestFanParameterSet:
         intent = self.mock_dispatcher_send.call_args[0][0]
         assert intent.action.name == "SET_FAN_PARAM"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio  # type: ignore[untyped-decorator]
     async def test_set_fan_param_with_ha_device_selector(
         self, hass: HomeAssistant
     ) -> None:
@@ -2729,7 +2729,7 @@ class TestFanParameterUpdate:
     _async_run_fan_param_sequence method in the RamsesCoordinator class.
     """
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
     async def setup_update_fixture(
         self, hass: HomeAssistant
     ) -> AsyncGenerator[None]:
@@ -2792,7 +2792,7 @@ class TestFanParameterUpdate:
         # Cleanup - stop all patches
         self.sleep_patcher.stop()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio  # type: ignore[untyped-decorator]
     async def test_basic_fan_param_update(self, hass: HomeAssistant) -> None:
         """Test basic fan parameter update with all required parameters.
 

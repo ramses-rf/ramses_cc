@@ -27,13 +27,13 @@ from custom_components.ramses_cc.mqtt_bridge import RamsesMqttBridge
 TEST_DEVICE_ID = "18:123456"
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_protocol() -> MagicMock:
     """Mock an asyncio.Protocol."""
     return MagicMock(spec=asyncio.Protocol)
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_mqtt(hass: HomeAssistant) -> Iterator[dict[str, Any]]:
     """Mock the HA MQTT integration methods used by the bridge."""
     # We patch the 'mqtt' module IMPORTED inside mqtt_bridge.py.

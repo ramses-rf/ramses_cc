@@ -45,7 +45,7 @@ from ramses_tx.exceptions import ProtocolSendFailed, TransportError
 SZ_HEAT_DEMAND = "heat_demand"
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator() -> MagicMock:
     """Return a mock RamsesCoordinator.
 
@@ -60,7 +60,7 @@ def mock_coordinator() -> MagicMock:
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_description() -> MagicMock:
     """Return a mock EntityDescription.
 
@@ -1321,7 +1321,7 @@ async def test_hvac_set_fan_mode_errors(
         await hvac.async_set_fan_mode("low")
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize(  # type: ignore[untyped-decorator]
     ("fan_mode", "cmd_string", "should_succeed"),
     [
         # 1. Valid CLI shorthand (Parsed cleanly by Command.from_cli)
@@ -2191,7 +2191,7 @@ async def test_climate_cooling_support(
     assert call_kwargs["setpoint"] == 25
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize(  # type: ignore[untyped-decorator]
     ("fan_info_input", "expected_action", "expected_mode", "expected_icon"),
     [
         # 1. Standard off

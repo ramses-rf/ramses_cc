@@ -22,7 +22,7 @@ from ramses_rf.entity import Entity as RamsesRFEntity
 DEVICE_ID = "32:123456"
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(hass: HomeAssistant) -> Any:
     """Return a mock coordinator.
 
@@ -35,7 +35,7 @@ def mock_coordinator(hass: HomeAssistant) -> Any:
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_device() -> Any:
     """Return a mock RAMSES RF entity with is_available property.
 

@@ -71,7 +71,7 @@ REM_ID = "32:987654"
 PARAM_ID_HEX = "75"  # Temperature parameter
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(hass: HomeAssistant) -> RamsesCoordinator:
     """Return a mock coordinator with an entry attached.
 
@@ -110,7 +110,7 @@ def mock_coordinator(hass: HomeAssistant) -> RamsesCoordinator:
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_fan_device() -> MagicMock:
     """Return a mock Fan device.
 
@@ -2717,7 +2717,7 @@ async def test_set_fan_param_transport_error(
     mock_entity._clear_pending_after_timeout.assert_called_with(0)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_async_bind_device_routes_to_registry(
     hass: HomeAssistant,
 ) -> None:

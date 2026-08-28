@@ -19,7 +19,7 @@ REM_ID = "32:987654"
 PARAM_ID_HEX = "75"
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_gateway() -> MagicMock:
     """Return a mock Gateway."""
     gateway = MagicMock()
@@ -29,7 +29,7 @@ def mock_gateway() -> MagicMock:
     return gateway
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(
     hass: HomeAssistant, mock_gateway: MagicMock
 ) -> RamsesCoordinator:
@@ -48,7 +48,7 @@ def mock_coordinator(
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_fan_device() -> MagicMock:
     """Return a mock Fan device."""
     device = MagicMock()

@@ -308,7 +308,7 @@ async def test_store_async_load_backups(hass: HomeAssistant) -> None:
 # -- Part 2: Integration Tests for Coordinator Persistence (Existing Tests) --
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_hass(event_loop: asyncio.AbstractEventLoop) -> MagicMock:
     """Return a mock Home Assistant instance."""
     hass = MagicMock()
@@ -322,7 +322,7 @@ def mock_hass(event_loop: asyncio.AbstractEventLoop) -> MagicMock:
     return hass
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_entry() -> MagicMock:
     """Return a mock ConfigEntry."""
     entry = MagicMock()
@@ -336,7 +336,7 @@ def mock_entry() -> MagicMock:
     return entry
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(
     hass: HomeAssistant, mock_entry: MagicMock
 ) -> RamsesCoordinator:

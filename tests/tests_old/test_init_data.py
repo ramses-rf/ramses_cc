@@ -173,7 +173,7 @@ async def _test_common(
     assert created_entities == sorted(EXPECTED_ENTITIES)
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 async def rf() -> AsyncGenerator[VirtualRf]:
     """Provide a mocked standard evofw3 (e.g. /dev/ttyACM0)."""
     rf = VirtualRf(1)

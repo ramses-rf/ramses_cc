@@ -49,7 +49,7 @@ class FakeParam(RamsesNumberParam):
     _device: Any = None  # Explicitly define _device so spec allows it
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     """Return a mock RamsesCoordinator configured for entity creation."""
     coordinator = MagicMock()
@@ -79,7 +79,7 @@ def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     return coordinator
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_fan_device() -> MagicMock:
     """Return a mock Fan device with valid ID."""
     device = MagicMock(spec=MockDevice)
@@ -90,7 +90,7 @@ def mock_fan_device() -> MagicMock:
     return device
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def mock_hvac_device() -> MagicMock:
     """Return a mock DeviceHvac that does NOT have get_fan_param (pre-fingerprint)."""
     device = MagicMock(spec=["id", "_SLUG", "supports_2411"])
@@ -100,7 +100,7 @@ def mock_hvac_device() -> MagicMock:
     return device
 
 
-@pytest.fixture
+@pytest.fixture  # type: ignore[untyped-decorator]
 def number_entity(
     mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> RamsesNumberParam:
@@ -1048,7 +1048,7 @@ async def test_number_param_state_isolation(
     assert entity2._param_native_value.get("75") is None
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_number_param_request_parameter_value_when_hass_is_none(
     mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
@@ -1064,7 +1064,7 @@ async def test_number_param_request_parameter_value_when_hass_is_none(
     await entity._request_parameter_value()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio  # type: ignore[untyped-decorator]
 async def test_number_param_async_added_to_hass(
     mock_coordinator: MagicMock, mock_fan_device: MagicMock
 ) -> None:
