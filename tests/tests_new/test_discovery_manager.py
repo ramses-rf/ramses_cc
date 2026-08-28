@@ -36,7 +36,7 @@ def make_discovered_device(
     last_seen: str | None = None,
 ) -> DiscoveredDevice:
     """Create a DiscoveredDevice for testing."""
-    return DiscoveredDevice(
+    dev: DiscoveredDevice = DiscoveredDevice(
         device_id=device_id,
         first_seen="2026-01-01T00:00:00",
         last_seen=last_seen or "2026-01-01T00:00:01",
@@ -50,6 +50,7 @@ def make_discovered_device(
         source_count=3,
         destination_count=0,
     )
+    return dev
 
 
 def make_mock_scan(devices: list[DiscoveredDevice] | None = None) -> MagicMock:
@@ -245,6 +246,69 @@ class TestFakedRem:
         assert len(devices) == 1
         assert devices[0].device.device_id == "37:000001"
         assert devices[0].metadata.faked is True
+
+
+class TestDiscoveryReturnTypeNarrowing:
+    """Verify that accept/discard/remove/enable/disable/add_faked_rem
+    return DiscoveredDeviceEntry (not None).
+
+    These tests guard the `assert result is not None` narrowing added
+    in Wave 0 PR 2 (issue 967) — if get_device() ever returns None
+    after a mutation, the assert will fire rather than silently
+    returning a wrong type.
+    """
+
+    def test_accept_device_returns_entry(self) -> None:
+        dev = make_discovered_device()
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        entry = manager.accept_device("04:056053", owner="henk")
+        assert isinstance(entry.device, DiscoveredDevice)
+
+    def test_discard_device_returns_entry(self) -> None:
+        dev = make_discovered_device()
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        entry = manager.discard_device("04:056053")
+        assert isinstance(entry.device, DiscoveredDevice)
+
+    def test_remove_device_returns_entry(self) -> None:
+        dev = make_discovered_device()
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager.accept_device("04:056053")
+        entry = manager.remove_device("04:056053")
+        assert isinstance(entry.device, DiscoveredDevice)
+
+    def test_enable_device_returns_entry(self) -> None:
+        dev = make_discovered_device()
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager.accept_device("04:056053")
+        entry = manager.enable_device("04:056053")
+        assert isinstance(entry.device, DiscoveredDevice)
+
+    def test_disable_device_returns_entry(self) -> None:
+        dev = make_discovered_device()
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        manager.accept_device("04:056053")
+        entry = manager.disable_device("04:056053")
+        assert isinstance(entry.device, DiscoveredDevice)
+
+    def test_add_faked_rem_returns_entry(self) -> None:
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        entry = manager.add_faked_rem(
+            "37:000001", bound_to="32:157747", alias="Living room"
+        )
+        assert isinstance(entry.device, DiscoveredDevice)
 
 
 class TestStateExportImport:

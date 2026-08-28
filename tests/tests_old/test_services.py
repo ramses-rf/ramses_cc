@@ -397,7 +397,9 @@ def _get_entity_id(hass: HomeAssistant, unique_id: str) -> str:
         "sensor",
         "remote",
     ]:
-        entity_id = ent_reg.async_get_entity_id(domain, DOMAIN, unique_id)
+        entity_id: str | None = ent_reg.async_get_entity_id(
+            domain, DOMAIN, unique_id
+        )
         if entity_id:
             return entity_id
 
