@@ -371,6 +371,26 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
         # _derive_known_list_from_schema via strip_and_map_traits.
         if isinstance(v, dict):
             v = _strip_traits_rf(v)
+            # Preserve _name in zone entries for ramses_rf's issue 919
+            # fix (Zone._update_schema hydrates zone_state.name from
+            # _name).  strip_traits removes all _ keys recursively,
+            # but ramses_rf's zone creation uses keep_hints=True to
+            # retain _name — it needs to be present in the schema.
+            orig_zones = (
+                schema.get(k, {}).get("zones")  # type: ignore[union-attr]
+                if isinstance(schema.get(k), dict)
+                else None
+            )
+            if (
+                isinstance(orig_zones, dict)
+                and isinstance(v, dict)
+                and isinstance(v.get("zones"), dict)
+            ):
+                for z_idx, z_entry in v["zones"].items():
+                    if isinstance(z_entry, dict):
+                        orig_name = orig_zones.get(z_idx, {}).get("_name")  # type: ignore[union-attr]
+                        if orig_name is not None:
+                            z_entry["_name"] = orig_name
         # Non-heat device at root level without remotes/sensors — move
         # to orphans_hvac instead of keeping as an invalid VCS entry.
         # ramses_rf's SCH_GLOBAL_SCHEMAS treats root-level non-CTL
