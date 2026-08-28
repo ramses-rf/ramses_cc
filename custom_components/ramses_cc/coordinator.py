@@ -665,8 +665,8 @@ class RamsesCoordinator(DataUpdateCoordinator):  # type: ignore[misc]
         # coroutine runs, and the coroutine has internal await points
         # that yield to the event loop before _cqrs_ingestion_engine
         # executes.
-        @callback
-        def _on_packet(dto: PacketDTO) -> None:
+        @callback  # type: ignore[untyped-decorator]
+        def _on_packet(dto: PacketDTO) -> None:  # type: ignore[misc]
             """Emit SIGNAL_UPDATE after ramses_rf has ingested the packet."""
 
             async def _signal_after_ingestion() -> None:

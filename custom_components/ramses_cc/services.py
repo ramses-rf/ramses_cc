@@ -234,8 +234,8 @@ class RamsesServiceHandler:
         self._call_later_handles: list[Any] = []
         self._pending_timers: list[asyncio.Task[Any]] = []
 
-    @callback
-    def _schedule_refresh(self, _: Any) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    def _schedule_refresh(self, _: Any) -> None:  # type: ignore[misc]
         """Schedule a coordinator refresh.
 
         :param _: Unused argument (required for callback signature).

@@ -714,82 +714,82 @@ async def async_unload_entry(
     return True
 
 
-@callback
-def async_register_domain_services(
+@callback  # type: ignore[untyped-decorator]
+def async_register_domain_services(  # type: ignore[misc]
     hass: HomeAssistant, entry: ConfigEntry, _coordinator: RamsesCoordinator
 ) -> None:
     """Set up and register handlers for the domain-wide services."""
 
-    @verify_domain_control(DOMAIN)
-    async def async_bind_device(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_bind_device(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_bind_device(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_force_update(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_force_update(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_force_update(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_sync_topology(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_sync_topology(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_sync_topology(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_send_packet(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_send_packet(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_send_packet(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_probe_hvac_binding(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_probe_hvac_binding(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_probe_hvac_binding(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_discover_known_devices(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_discover_known_devices(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_discover_known_devices(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_get_discovered_devices(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_get_discovered_devices(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_get_discovered_devices(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_accept_discovered_device(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_accept_discovered_device(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_accept_discovered_device(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_discard_discovered_device(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_discard_discovered_device(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_discard_discovered_device(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_remove_discovered_device(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_remove_discovered_device(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_remove_discovered_device(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_enable_discovered_device(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_enable_discovered_device(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_enable_discovered_device(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_disable_discovered_device(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_disable_discovered_device(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_disable_discovered_device(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_add_faked_rem(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_add_faked_rem(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_add_faked_rem(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_remove_device(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_remove_device(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_remove_device(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_set_fan_param(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_set_fan_param(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_set_fan_param(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_get_fan_param(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_get_fan_param(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_get_fan_param(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_update_fan_params(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_update_fan_params(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator._async_run_fan_param_sequence(call)
 
-    @verify_domain_control(DOMAIN)
-    async def async_set_polling_interval(call: ServiceCall) -> None:
+    @verify_domain_control(DOMAIN)  # type: ignore[untyped-decorator]
+    async def async_set_polling_interval(call: ServiceCall) -> None:  # type: ignore[misc]
         await _coordinator.async_set_polling_interval(call)
 
     # register the handlers

@@ -155,8 +155,8 @@ async def async_setup_entry(
 
     _LOGGER.debug("Setting up number platform")
 
-    @callback
-    def add_devices(
+    @callback  # type: ignore[untyped-decorator]
+    def add_devices(  # type: ignore[misc]
         devices: RamsesRFEntity
         | RamsesNumberBase
         | Sequence[RamsesRFEntity | RamsesNumberBase],
@@ -795,8 +795,8 @@ class RamsesNumberParam(RamsesNumberBase):
 
         await self._request_parameter_value()
 
-    @callback
-    def _async_param_updated(
+    @callback  # type: ignore[untyped-decorator]
+    def _async_param_updated(  # type: ignore[misc]
         self, event: Event | dict[str, Any] | object
     ) -> None:
         """Handle parameter updates from the device.

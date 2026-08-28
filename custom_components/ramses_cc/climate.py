@@ -151,8 +151,8 @@ async def async_setup_entry(
     coordinator: RamsesCoordinator = entry.runtime_data
     platform: EntityPlatform = async_get_current_platform()
 
-    @callback
-    def add_devices(devices: Any) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    def add_devices(devices: Any) -> None:  # type: ignore[misc]
         entities = [
             description.ramses_cc_class(coordinator, device, description)
             for device in devices
@@ -417,8 +417,8 @@ class RamsesController(RamsesEntity, ClimateEntity):  # type: ignore[misc]
 
     # the following methods are integration-specific service calls
 
-    @callback
-    async def async_get_system_faults(self, num_entries: int) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    async def async_get_system_faults(self, num_entries: int) -> None:  # type: ignore[misc]
         """Get the nth latest fault log entries from the Controller.
 
         :param num_entries: Number of entries to fetch.
@@ -1449,8 +1449,8 @@ class RamsesHvac(RamsesEntity, ClimateEntity):  # type: ignore[misc]
 
     # the 2411 fan_param services, copied to numbers and to remote.py
 
-    @callback
-    async def async_get_fan_clim_param(self, **kwargs: Any) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    async def async_get_fan_clim_param(self, **kwargs: Any) -> None:  # type: ignore[misc]
         """Handle 'get_fan_param' service call.
 
         :param kwargs: Service arguments.
@@ -1476,8 +1476,8 @@ class RamsesHvac(RamsesEntity, ClimateEntity):  # type: ignore[misc]
                 f"Failed to get fan param: {err}"
             ) from err
 
-    @callback
-    async def async_set_fan_clim_param(self, **kwargs: Any) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    async def async_set_fan_clim_param(self, **kwargs: Any) -> None:  # type: ignore[misc]
         """Handle 'set_fan_param' service call.
 
         :param kwargs: Service arguments.

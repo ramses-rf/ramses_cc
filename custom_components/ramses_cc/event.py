@@ -123,8 +123,8 @@ class RamsesEvent(EventEntity):  # type: ignore[misc]
             _LOGGER.warning(warn_text)
             raise HomeAssistantError(warn_text)
 
-    @callback
-    def _async_handle_event(self, event: str) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    def _async_handle_event(self, event: str) -> None:  # type: ignore[misc]
         """Handle the RAMSES event."""
         _LOGGER.debug("handle_event %s, data: %s", self._type, self._data)
         self._trigger_event(
@@ -180,8 +180,8 @@ class RamsesLearnEvent(RamsesEvent):
         self._attr_unique_id = "learn_event"
         self._attr_translation_key = "learn_event"
 
-        @callback
-        def async_process_msg(
+        @callback  # type: ignore[untyped-decorator]
+        def async_process_msg(  # type: ignore[misc]
             dto: PacketDTO, *args: Any, **kwargs: Any
         ) -> None:
             """Process a message from the event bus and pass it on."""
@@ -233,8 +233,8 @@ class RamsesRegexEvent(RamsesEvent):
         self._attr_unique_id = "regex_event"
         self._attr_translation_key = "regex_event"
 
-        @callback
-        def async_process_msg(
+        @callback  # type: ignore[untyped-decorator]
+        def async_process_msg(  # type: ignore[misc]
             dto: PacketDTO, *args: Any, **kwargs: Any
         ) -> None:
             """Process a message from the event bus and pass it on."""

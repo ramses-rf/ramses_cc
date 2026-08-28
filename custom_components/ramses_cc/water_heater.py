@@ -69,8 +69,8 @@ async def async_setup_entry(
     coordinator: RamsesCoordinator = entry.runtime_data
     platform: EntityPlatform = async_get_current_platform()
 
-    @callback
-    def add_devices(
+    @callback  # type: ignore[untyped-decorator]
+    def add_devices(  # type: ignore[misc]
         devices: RamsesRFEntity | Sequence[RamsesRFEntity],
     ) -> None:
         # 1. Safely wrap a single device into a list, or keep it as a sequence

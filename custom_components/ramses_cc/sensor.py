@@ -116,8 +116,8 @@ async def async_setup_entry(
     coordinator: RamsesCoordinator = entry.runtime_data
     platform: EntityPlatform = async_get_current_platform()
 
-    @callback
-    def add_devices(
+    @callback  # type: ignore[untyped-decorator]
+    def add_devices(  # type: ignore[misc]
         devices: RamsesRFEntity | Sequence[RamsesRFEntity],
     ) -> None:
         # 1. Safely wrap a single device into a list, or keep it as a sequence
@@ -214,8 +214,8 @@ class RamsesSensor(RamsesEntity, SensorEntity):  # type: ignore[misc]
 
     # the following methods are integration-specific service calls
 
-    @callback
-    def async_put_co2_level(self, co2_level: int) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    def async_put_co2_level(self, co2_level: int) -> None:  # type: ignore[misc]
         """Cast the CO2 level (if faked).
 
         :param co2_level: The CO2 concentration in parts per million (ppm).
@@ -252,8 +252,8 @@ class RamsesSensor(RamsesEntity, SensorEntity):  # type: ignore[misc]
         await device.set_temperature(temperature)
         self.async_write_ha_state()
 
-    @callback
-    def async_put_indoor_humidity(self, indoor_humidity: float) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    def async_put_indoor_humidity(self, indoor_humidity: float) -> None:  # type: ignore[misc]
         """Cast the indoor humidity level (if faked).
 
         :param indoor_humidity: The humidity percentage (0-100).

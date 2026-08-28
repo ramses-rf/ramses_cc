@@ -167,8 +167,8 @@ class RamsesMqttBridge:
                 exc_info=True,
             )
 
-    @callback
-    def _handle_rx_message(self, msg: ReceiveMessage) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    def _handle_rx_message(self, msg: ReceiveMessage) -> None:  # type: ignore[misc]
         """Process incoming radio packets."""
         if self._transport is None:
             _LOGGER.warning(
@@ -222,8 +222,8 @@ class RamsesMqttBridge:
                 exc_info=True,
             )
 
-    @callback
-    def _handle_cmd_message(self, msg: ReceiveMessage) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    def _handle_cmd_message(self, msg: ReceiveMessage) -> None:  # type: ignore[misc]
         """Process incoming MQTT messages and inject into ramses_rf."""
         if self._transport is None:
             _LOGGER.warning(
@@ -328,8 +328,8 @@ class RamsesMqttBridge:
         )
         _LOGGER.debug("MqttBridge: CMD -> %s, on topic: %s", payload, topic)
 
-    @callback
-    def _handle_connection_status(self, connected: bool) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    def _handle_connection_status(self, connected: bool) -> None:  # type: ignore[misc]
         """Handle MQTT broker connection/disconnection."""
         status_str = "online" if connected else "offline"
         _LOGGER.debug(

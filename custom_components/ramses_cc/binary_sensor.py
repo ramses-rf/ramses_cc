@@ -90,8 +90,8 @@ async def async_setup_entry(
     coordinator: RamsesCoordinator = entry.runtime_data
     platform = entity_platform.async_get_current_platform()
 
-    @callback
-    def add_devices(
+    @callback  # type: ignore[untyped-decorator]
+    def add_devices(  # type: ignore[misc]
         devices: RamsesRFEntity | Sequence[RamsesRFEntity],
     ) -> None:
         """Add new devices to the platform.

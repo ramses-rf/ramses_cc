@@ -231,8 +231,8 @@ async def async_setup_entry(
     coordinator: RamsesCoordinator = entry.runtime_data
     platform: EntityPlatform = async_get_current_platform()
 
-    @callback
-    def add_devices(
+    @callback  # type: ignore[untyped-decorator]
+    def add_devices(  # type: ignore[misc]
         devices: RamsesRFEntity | Sequence[RamsesRFEntity],
     ) -> None:
         # 1. Safely wrap a single device into a list, or keep it as a sequence
@@ -459,8 +459,8 @@ class RamsesRemote(RamsesEntity, RemoteEntity):  # type: ignore[misc]
         # Event to signal when the command is received, TODO not thread safe!
         learning_session = asyncio.Event()
 
-        @callback
-        async def _async_on_change(event: Event) -> None:
+        @callback  # type: ignore[untyped-decorator]
+        async def _async_on_change(event: Event) -> None:  # type: ignore[misc]
             """Save the new command to storage.
 
             For REM entities: listens to ``src == self._device.id``,
@@ -742,8 +742,8 @@ class RamsesRemote(RamsesEntity, RemoteEntity):  # type: ignore[misc]
 
     # 2411 fan_param services, adapted from climate.py (no REM update_all)
 
-    @callback
-    async def async_get_fan_rem_param(self, **kwargs: Any) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    async def async_get_fan_rem_param(self, **kwargs: Any) -> None:  # type: ignore[misc]
         """Handle 'get_fan_param' service call.
 
         :param kwargs: Arbitrary keyword arguments.
@@ -766,8 +766,8 @@ class RamsesRemote(RamsesEntity, RemoteEntity):  # type: ignore[misc]
         else:
             _LOGGER.warning("REM %s not bound to a FAN", self._device.id)
 
-    @callback
-    async def async_set_fan_rem_param(self, **kwargs: Any) -> None:
+    @callback  # type: ignore[untyped-decorator]
+    async def async_set_fan_rem_param(self, **kwargs: Any) -> None:  # type: ignore[misc]
         """Handle 'set_fan_param' service call.
 
         :param kwargs: Arbitrary keyword arguments.

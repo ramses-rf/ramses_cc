@@ -263,8 +263,8 @@ class BaseRamsesFlow:
             self.hass.loop.create_future()
         )
 
-        @callback
-        def _msg_callback(msg: Any) -> None:
+        @callback  # type: ignore[untyped-decorator]
+        def _msg_callback(msg: Any) -> None:  # type: ignore[misc]
             """Handle incoming MQTT discovery messages.
 
             :param msg: The incoming MQTT message.
@@ -1533,8 +1533,8 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
         return self._async_save()
 
     @staticmethod
-    @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+    @callback  # type: ignore[untyped-decorator]
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:  # type: ignore[misc]
         """Options callback for Ramses.
 
         :param config_entry: The loaded configuration entry.
