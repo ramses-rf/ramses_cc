@@ -110,7 +110,7 @@ directory = "coverage_html"
 
   # These shouldn't be too much additional work, but may be tricky to
   # get passing if you use a lot of untyped libraries
-  # disallow_subclassing_any = true                                                    # excl. for HA
+  disallow_subclassing_any = true                                                      # was: excl. for HA (Wave 0, PR 3)
   # disallow_untyped_decorators = true                                                 # excl. for HA
   disallow_any_generics = true
 

@@ -86,7 +86,7 @@ async def async_setup_entry(
     )
 
 
-class RamsesEvent(EventEntity):
+class RamsesEvent(EventEntity):  # type: ignore[misc]
     """Representation of a RAMSES RF event."""
 
     _attr_event_types = [

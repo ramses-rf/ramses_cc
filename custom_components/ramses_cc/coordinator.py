@@ -199,7 +199,7 @@ def _normalize_class_slug(value: str) -> str:
 _T_Entity = TypeVar("_T_Entity", bound=RamsesRFEntity)
 
 
-class RamsesCoordinator(DataUpdateCoordinator):
+class RamsesCoordinator(DataUpdateCoordinator):  # type: ignore[misc]
     """Central coordinator for the RAMSES integration."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:

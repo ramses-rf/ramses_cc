@@ -254,7 +254,7 @@ async def async_setup_entry(
     coordinator.async_register_platform(platform, add_devices)
 
 
-class RamsesRemote(RamsesEntity, RemoteEntity):
+class RamsesRemote(RamsesEntity, RemoteEntity):  # type: ignore[misc]
     """Representation of a RAMSES RF remote.
 
     Phase 3b: This entity is created on both REMs (``HvacRemote``) and
@@ -798,7 +798,8 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesRemoteEntityDescription(
-    RamsesEntityDescription, RemoteEntityDescription
+    RamsesEntityDescription,
+    RemoteEntityDescription,  # type: ignore[misc]
 ):
     """Class describing Ramses remote entities."""
 

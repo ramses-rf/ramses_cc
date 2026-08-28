@@ -88,7 +88,7 @@ async def async_setup_entry(
     coordinator.async_register_platform(platform, add_devices)
 
 
-class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
+class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):  # type: ignore[misc]
     """Representation of a Ramses DHW controller.
 
     This class provides control over RAMSES domestic hot water (DHW) zones,
@@ -500,7 +500,8 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesWaterHeaterEntityDescription(
-    RamsesEntityDescription, WaterHeaterEntityDescription
+    RamsesEntityDescription,
+    WaterHeaterEntityDescription,  # type: ignore[misc]
 ):
     """Class describing Ramses water heater entities."""
 

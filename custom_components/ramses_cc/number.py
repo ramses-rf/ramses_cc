@@ -380,7 +380,7 @@ async def async_setup_entry(
         add_devices(entities)
 
 
-class RamsesNumberBase(RamsesEntity, NumberEntity):
+class RamsesNumberBase(RamsesEntity, NumberEntity):  # type: ignore[misc]
     """Base class for all RAMSES number entities.
 
     This abstract base class provides common functionality for all RAMSES
@@ -1129,7 +1129,8 @@ class RamsesNumberParam(RamsesNumberBase):
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesNumberEntityDescription(
-    RamsesEntityDescription, NumberEntityDescription
+    RamsesEntityDescription,
+    NumberEntityDescription,  # type: ignore[misc]
 ):
     """Description for RAMSES number entities.
 

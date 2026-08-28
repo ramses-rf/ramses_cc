@@ -164,7 +164,7 @@ async def async_setup_entry(
     coordinator.async_register_platform(platform, add_devices)
 
 
-class RamsesController(RamsesEntity, ClimateEntity):
+class RamsesController(RamsesEntity, ClimateEntity):  # type: ignore[misc]
     """Representation of a Ramses controller."""
 
     _device: Evohome
@@ -516,7 +516,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
             ) from err
 
 
-class RamsesZone(RamsesEntity, ClimateEntity):
+class RamsesZone(RamsesEntity, ClimateEntity):  # type: ignore[misc]
     """Representation of a Ramses zone."""
 
     _device: Zone
@@ -1082,7 +1082,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             ) from err
 
 
-class RamsesHvac(RamsesEntity, ClimateEntity):
+class RamsesHvac(RamsesEntity, ClimateEntity):  # type: ignore[misc]
     """Base for a Honeywell HVAC unit (Fan, HRU, MVHR, PIV, etc)."""
 
     _device: HvacVentilator
@@ -1511,7 +1511,8 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesClimateEntityDescription(
-    RamsesEntityDescription, ClimateEntityDescription
+    RamsesEntityDescription,
+    ClimateEntityDescription,  # type: ignore[misc]
 ):
     """Class describing Ramses binary sensor entities."""
 

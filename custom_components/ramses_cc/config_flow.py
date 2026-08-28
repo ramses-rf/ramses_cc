@@ -1428,7 +1428,7 @@ class BaseRamsesFlow:
         )
 
 
-class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
+class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,misc]
     """Config flow for Ramses."""
 
     VERSION = 3
@@ -1543,7 +1543,7 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
         return RamsesOptionsFlowHandler(config_entry)
 
 
-class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
+class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):  # type: ignore[misc]
     """Options config flow handler for Ramses."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:

@@ -136,7 +136,7 @@ async def async_setup_entry(
     coordinator.async_register_platform(platform, add_devices)
 
 
-class RamsesSensor(RamsesEntity, SensorEntity):
+class RamsesSensor(RamsesEntity, SensorEntity):  # type: ignore[misc]
     """Representation of a generic sensor."""
 
     entity_description: RamsesSensorEntityDescription
@@ -293,7 +293,8 @@ class RamsesSensor(RamsesEntity, SensorEntity):
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesSensorEntityDescription(
-    RamsesEntityDescription, SensorEntityDescription
+    RamsesEntityDescription,
+    SensorEntityDescription,  # type: ignore[misc]
 ):
     """Class describing Ramses binary sensor entities."""
 

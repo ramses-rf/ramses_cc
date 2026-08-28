@@ -30,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
-class RamsesEntityDescription(EntityDescription):
+class RamsesEntityDescription(EntityDescription):  # type: ignore[misc]
     """Class describing Ramses entities."""
 
     has_entity_name: bool = True
@@ -39,7 +39,7 @@ class RamsesEntityDescription(EntityDescription):
     ramses_cc_extra_attributes: dict[str, str] | None = None
 
 
-class RamsesEntity(CoordinatorEntity):
+class RamsesEntity(CoordinatorEntity):  # type: ignore[misc]
     """Base for any RAMSES II-compatible entity (e.g. Climate, Sensor).
 
     This class handles the connection between the Home Assistant entity

@@ -29,7 +29,7 @@ _MAX_BACKUPS: Final[int] = 5
 _BACKUP_DIR: Final[str] = "ramses_cc_backups"
 
 
-class RamsesCcStore(Store[dict[str, Any]]):
+class RamsesCcStore(Store[dict[str, Any]]):  # type: ignore[misc]
     """HA Store subclass with a migration hook for ramses_cc .storage.
 
     STORAGE_VERSION stays at 1 — the store format hasn't changed.

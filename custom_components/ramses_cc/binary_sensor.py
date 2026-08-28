@@ -113,7 +113,7 @@ async def async_setup_entry(
     coordinator.async_register_platform(platform, add_devices)
 
 
-class RamsesBinarySensor(RamsesEntity, BinarySensorEntity):
+class RamsesBinarySensor(RamsesEntity, BinarySensorEntity):  # type: ignore[misc]
     """Representation of a Ramses binary sensor."""
 
     entity_description: RamsesBinarySensorEntityDescription
@@ -362,7 +362,8 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
 
 @dataclass(frozen=True, kw_only=True)
 class RamsesBinarySensorEntityDescription(
-    RamsesEntityDescription, BinarySensorEntityDescription
+    RamsesEntityDescription,
+    BinarySensorEntityDescription,  # type: ignore[misc]
 ):
     """Class describing Ramses binary sensor entities."""
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 from homeassistant.exceptions import HomeAssistantError
 
 
-class RamsesError(HomeAssistantError):
+class RamsesError(HomeAssistantError):  # type: ignore[misc]
     """Base exception class for all RAMSES CC integration errors."""
 
 
