@@ -377,7 +377,7 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
             # but ramses_rf's zone creation uses keep_hints=True to
             # retain _name — it needs to be present in the schema.
             orig_zones = (
-                schema.get(k, {}).get("zones")  # type: ignore[union-attr]
+                schema.get(k, {}).get("zones")
                 if isinstance(schema.get(k), dict)
                 else None
             )
@@ -388,7 +388,7 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
             ):
                 for z_idx, z_entry in v["zones"].items():
                     if isinstance(z_entry, dict):
-                        orig_name = orig_zones.get(z_idx, {}).get("_name")  # type: ignore[union-attr]
+                        orig_name = orig_zones.get(z_idx, {}).get("_name")
                         if orig_name is not None:
                             z_entry["_name"] = orig_name
         # Non-heat device at root level without remotes/sensors — move
