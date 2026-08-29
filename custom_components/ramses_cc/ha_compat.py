@@ -181,22 +181,22 @@ def make_entity_service_schema(
 ) -> VolSchemaType:
     """Drop-in replacement for ``cv.make_entity_service_schema``.
 
-    Converts probatio ``Required``/``Optional`` markers in *schema* to
-    voluptuous markers before delegating to
-    ``cv.make_entity_service_schema``.  On HA 2026.9+ (where voluptuous
-    is aliased to probatio) the conversion is a no-op.
+    ``schemas.py`` uses ``import voluptuous as vol`` — the same module
+    that ``cv`` uses internally.  On HA 2026.9+ both are probatio (via
+    ``install_as_voluptuous``); on pre-2026.9 both are real voluptuous.
+    In either case the markers are already compatible with
+    ``cv.make_entity_service_schema``, so no conversion is needed.
 
-    :param schema: Service schema dict, possibly with probatio markers.
+    This wrapper exists for forward-compatibility: if a future PR
+    switches ``schemas.py`` to ``import probatio as vol`` while
+    ``cv`` still uses real voluptuous, the conversion logic can be
+    re-enabled here.
+
+    :param schema: Service schema dict.
     :type schema: dict[str, Any] | None
     :param extra: Voluptuous extra-keys policy (default: PREVENT_EXTRA).
     :type extra: int
     :returns: Compiled entity service schema.
     :rtype: VolSchemaType
     """
-    if not schema:
-        return cv.make_entity_service_schema(schema, extra=extra)
-
-    converted: dict[Any, Any] = {
-        _convert_marker(key): value for key, value in schema.items()
-    }
-    return cv.make_entity_service_schema(converted, extra=extra)
+    return cv.make_entity_service_schema(schema, extra=extra)

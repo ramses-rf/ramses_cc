@@ -89,6 +89,13 @@ repos:
       types: [python]
       exclude: .pre-commit-config.yaml  # avoid false +ve
 
+    - id: yaml_bool_lowercase
+      name: check YAML bools are lowercase (true/false, not True/False)
+      entry: ': (True|False)\b'
+      language: pygrep
+      files: \.(yaml|yml)$
+      exclude: .pre-commit-config.yaml  # avoid false +ve
+
     # - id: private imports
     #   name: check for private imports
     #   entry: 'from .* import _.*'
