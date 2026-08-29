@@ -208,7 +208,8 @@ directory = "coverage_html"
 
 
 [tool.ruff.lint.flake8-import-conventions.extend-aliases]
-  probatio = "vol"
+  voluptuous = "vol"
+  probatio = "prob"
   "homeassistant.helpers.area_registry" = "ar"
   "homeassistant.helpers.config_validation" = "cv"
   "homeassistant.helpers.device_registry" = "dr"

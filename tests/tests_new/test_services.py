@@ -6,7 +6,7 @@ from datetime import datetime as dt, timedelta as td
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import probatio as vol
+import probatio as prob
 import pytest
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -1508,7 +1508,7 @@ async def test_setup_schema_merge_failure(hass: HomeAssistant) -> None:
 
         # First call fails (merged schema), second call succeeds (config schema)
         mock_create_client.side_effect = [
-            vol.MultipleInvalid([vol.Invalid("Invalid schema")]),
+            prob.MultipleInvalid([prob.Invalid("Invalid schema")]),
             mock_client,
         ]
 

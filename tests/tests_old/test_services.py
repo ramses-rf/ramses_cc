@@ -7,7 +7,7 @@ from datetime import timedelta as td
 from typing import Any, Final, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import probatio as vol
+import probatio as prob
 import pytest
 from homeassistant.components.climate.const import HVACMode
 from homeassistant.config_entries import ConfigEntry
@@ -446,7 +446,7 @@ async def _test_service_call(
     service: str,
     data: dict[str, Any],
     *,
-    schemas: dict[str, vol.Schema] | None = None,
+    schemas: dict[str, prob.Schema] | None = None,
 ) -> None:
     """Test a service call."""
 
@@ -844,10 +844,10 @@ async def test_set_dhw_mode_fail(
         await _test_entity_service_call(
             hass, SVC_SET_DHW_MODE, data, schemas=SVCS_RAMSES_WATER_HEATER
         )
-    except vol.MultipleInvalid:
+    except prob.MultipleInvalid:
         pass
     else:
-        raise AssertionError("Expected vol.MultipleInvalid")
+        raise AssertionError("Expected prob.MultipleInvalid")
 
 
 @pytest.mark.parametrize("index", TESTS_SET_DHW_MODE_FAIL2)
@@ -865,7 +865,7 @@ async def test_set_dhw_mode_fail2(
         await _test_entity_service_call(
             hass, SVC_SET_DHW_MODE, data, schemas=SVCS_RAMSES_WATER_HEATER
         )
-    except vol.MultipleInvalid:
+    except prob.MultipleInvalid:
         pass
     else:
         raise AssertionError("Expected Wrong Argument exception")
@@ -988,10 +988,10 @@ async def test_set_system_mode_fail(
         await _test_entity_service_call(
             hass, SVC_SET_SYSTEM_MODE, data, schemas=SVCS_RAMSES_CLIMATE
         )
-    except vol.MultipleInvalid:
+    except prob.MultipleInvalid:
         pass
     else:
-        raise AssertionError("Expected vol.MultipleInvalid")
+        raise AssertionError("Expected prob.MultipleInvalid")
 
 
 @pytest.mark.parametrize("index", TESTS_SET_SYSTEM_MODE_FAIL2)
@@ -1011,7 +1011,7 @@ async def test_set_system_mode_fail2(
         await _test_entity_service_call(
             hass, SVC_SET_SYSTEM_MODE, data, schemas=SVCS_RAMSES_CLIMATE
         )
-    except ServiceValidationError:  # WAS: vol.MultipleInvalid
+    except ServiceValidationError:  # WAS: prob.MultipleInvalid
         pass
     else:
         raise AssertionError("Expected Wrong Argument exception")
@@ -1197,10 +1197,10 @@ async def test_set_zone_mode_fail(
         await _test_entity_service_call(
             hass, SVC_SET_ZONE_MODE, data, schemas=SVCS_RAMSES_CLIMATE
         )
-    except vol.MultipleInvalid:
+    except prob.MultipleInvalid:
         pass
     else:
-        raise AssertionError("Expected vol.MultipleInvalid")
+        raise AssertionError("Expected prob.MultipleInvalid")
 
 
 @pytest.mark.parametrize("index", TESTS_SET_ZONE_MODE_FAIL2)
@@ -1218,7 +1218,7 @@ async def test_set_zone_mode_fail2(
         await _test_entity_service_call(
             hass, SVC_SET_ZONE_MODE, data, schemas=SVCS_RAMSES_CLIMATE
         )
-    except ServiceValidationError:  # WAS: vol.MultipleInvalid
+    except ServiceValidationError:  # WAS: prob.MultipleInvalid
         pass
     else:
         raise AssertionError("Expected Wrong Argument exception")
@@ -1420,7 +1420,7 @@ async def test_controller_validation_error(
     entity._device = mock_evohome
 
     # Mock set_mode to raise probatio error
-    mock_evohome.set_mode.side_effect = vol.Invalid("Invalid mode")
+    mock_evohome.set_mode.side_effect = prob.Invalid("Invalid mode")
 
     with pytest.raises(ServiceValidationError):
         await entity.async_set_hvac_mode(HVACMode.HEAT)

@@ -16,7 +16,7 @@ from functools import lru_cache
 from threading import Semaphore
 from typing import TYPE_CHECKING, Any, Final, TypeVar
 
-import probatio as vol  # type: ignore[import-untyped, unused-ignore]
+import probatio as prob
 import serial  # type: ignore[import-untyped]
 from homeassistant.components.persistent_notification import (
     async_create as async_create_notification,
@@ -557,7 +557,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         ):
             try:
                 self.client = self._create_client(merged_schema)
-            except (LookupError, vol.MultipleInvalid) as err:
+            except (LookupError, prob.MultipleInvalid) as err:
                 _LOGGER.warning(
                     "Failed to initialise with merged schema: %s", err
                 )
@@ -566,7 +566,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if not self.client:
             try:
                 self.client = self._create_client(config_schema)
-            except (ValueError, vol.Invalid) as err:
+            except (ValueError, prob.Invalid) as err:
                 _LOGGER.error(
                     "Critical error: Failed to initialise client with "
                     "config schema: %s",
@@ -908,7 +908,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         """Validate the schema against ramses_rf's strict validator.
 
         Strips ramses_cc-only extension keys and validates the result
-        against ``SCH_GLOBAL_SCHEMAS`` (which uses ``vol.PREVENT_EXTRA``).
+        against ``SCH_GLOBAL_SCHEMAS`` (which uses ``prob.PREVENT_EXTRA``).
         Logs a warning and raises ``ValueError`` if the schema is invalid,
         so the caller can decide whether to save the (invalid) schema or
         skip the save to avoid corrupting the config entry.
@@ -945,7 +945,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             from ramses_rf.schemas import SCH_GLOBAL_SCHEMAS
 
             SCH_GLOBAL_SCHEMAS(stripped)
-        except vol.Invalid as err:
+        except prob.Invalid as err:
             _LOGGER.error(
                 "Schema validation failed before save: %s. Stripped: %s",
                 err,

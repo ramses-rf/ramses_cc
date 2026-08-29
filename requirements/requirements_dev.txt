@@ -23,6 +23,7 @@
     mypy >= 2.3.1                                # latest: 2.1.0
     types-PyYAML >= 6.0.12.20260815
     probatio >= 0.11.2
+    voluptuous >= 0.16.0                         # latest: 0.16.0 = HA
 
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest

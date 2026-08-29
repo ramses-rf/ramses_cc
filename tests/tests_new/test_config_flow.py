@@ -11,7 +11,7 @@ from importlib.metadata import version
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import probatio as vol
+import probatio as prob
 import pytest
 from homeassistant.components.usb.models import USBDevice
 from homeassistant.config_entries import (
@@ -71,7 +71,7 @@ def _get_schema_default(schema_key: Any) -> Any:
     desc = getattr(schema_key, "description", {}) or {}
     if "suggested_value" in desc:
         return desc["suggested_value"]
-    d = getattr(schema_key, "default", vol.UNDEFINED)
+    d = getattr(schema_key, "default", prob.UNDEFINED)
     return d() if callable(d) else d
 
 
@@ -275,7 +275,7 @@ async def test_validation_errors(hass: HomeAssistant) -> None:
     # 2. Serial Port Validation (Line 298-299)
     with patch(
         "custom_components.ramses_cc.config_flow.SCH_SERIAL_PORT_CONFIG",
-        side_effect=vol.Invalid("Invalid Config"),
+        side_effect=prob.Invalid("Invalid Config"),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -1260,8 +1260,8 @@ async def test_configure_serial_port_missing_port_name(
     old_schema = current_step.get("data_schema")
     assert old_schema is not None
     # Apply a schema where everything is optional
-    # new_schema = vol.Schema(
-    #     {vol.Optional(k): v for k, v in old_schema.schema.items()}
+    # new_schema = prob.Schema(
+    #     {prob.Optional(k): v for k, v in old_schema.schema.items()}
     # )
     # not accepted by probatio in 0.60.2
     new_schema = current_step.get("_optional_schema")

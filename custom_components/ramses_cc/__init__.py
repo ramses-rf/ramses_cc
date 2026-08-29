@@ -49,7 +49,7 @@ if ENABLE_DEV_HOOK and os.path.isdir(DEV_LIB_PATH):  # pragma: no cover
     )
 # ------------------------
 
-import probatio as vol  # type: ignore[import-untyped, unused-ignore]
+import probatio as prob
 from homeassistant import config_entries
 from homeassistant.components.climate.const import (
     DOMAIN as CLIMATE_ENTITY_DOMAIN,
@@ -151,9 +151,9 @@ def _get_ramses_tx_exceptions() -> ModuleType:
     return _RAMSES_TX_EXC
 
 
-CONFIG_SCHEMA = vol.All(
+CONFIG_SCHEMA = prob.All(
     cv.deprecated(DOMAIN, raise_if_present=False),
-    vol.Schema({DOMAIN: SCH_DOMAIN_CONFIG}, extra=vol.ALLOW_EXTRA),
+    prob.Schema({DOMAIN: SCH_DOMAIN_CONFIG}, extra=prob.ALLOW_EXTRA),
 )
 
 PLATFORMS = [Platform.EVENT]

@@ -4,7 +4,7 @@ from datetime import datetime as dt, timedelta as td
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import probatio as vol
+import probatio as prob
 import pytest
 from homeassistant.components.climate.const import (
     FAN_AUTO,
@@ -982,23 +982,23 @@ async def test_service_validation_errors(
     with pytest.raises(ServiceValidationError, match="invalid_preset_mode"):
         await controller.async_set_preset_mode("invalid_preset")
 
-    # 3. vol.Invalid in async_set_hvac_mode
+    # 3. prob.Invalid in async_set_hvac_mode
     with (
         patch.object(
             controller,
             "async_set_system_mode",
-            side_effect=vol.Invalid("Boom"),
+            side_effect=prob.Invalid("Boom"),
         ),
         pytest.raises(ServiceValidationError, match="validation_error"),
     ):
         await controller.async_set_hvac_mode(HVACMode.HEAT)
 
-    # 4. vol.Invalid in async_set_preset_mode
+    # 4. prob.Invalid in async_set_preset_mode
     with (
         patch.object(
             controller,
             "async_set_system_mode",
-            side_effect=vol.Invalid("Boom"),
+            side_effect=prob.Invalid("Boom"),
         ),
         pytest.raises(ServiceValidationError, match="validation_error"),
     ):
@@ -1009,27 +1009,27 @@ async def test_service_validation_errors(
     mock_zone_dev.id = "04:123456"
     zone = RamsesZone(mock_coordinator, mock_zone_dev, mock_description)
 
-    # 5. vol.Invalid in async_set_hvac_mode
+    # 5. prob.Invalid in async_set_hvac_mode
     # We patch async_set_zone_mode, which is called by async_set_hvac_mode
     with (
         patch.object(
-            zone, "async_set_zone_mode", side_effect=vol.Invalid("Boom")
+            zone, "async_set_zone_mode", side_effect=prob.Invalid("Boom")
         ),
         pytest.raises(ServiceValidationError, match="validation_error"),
     ):
         await zone.async_set_hvac_mode(HVACMode.HEAT)
 
-    # 6. vol.Invalid in async_set_preset_mode (Zone mode fallback)
+    # 6. prob.Invalid in async_set_preset_mode (Zone mode fallback)
     with (
         patch.object(
-            zone, "async_set_zone_mode", side_effect=vol.Invalid("Boom")
+            zone, "async_set_zone_mode", side_effect=prob.Invalid("Boom")
         ),
         pytest.raises(ServiceValidationError, match="validation_error"),
     ):
         await zone.async_set_preset_mode(PRESET_NONE)
 
-    # 6a. vol.Invalid in async_set_preset_mode (TCS system routing)
-    mock_zone_dev.tcs.set_mode = AsyncMock(side_effect=vol.Invalid("Boom"))
+    # 6a. prob.Invalid in async_set_preset_mode (TCS system routing)
+    mock_zone_dev.tcs.set_mode = AsyncMock(side_effect=prob.Invalid("Boom"))
     with pytest.raises(ServiceValidationError, match="validation_error"):
         await zone.async_set_preset_mode(PRESET_AWAY)
 
@@ -1037,10 +1037,10 @@ async def test_service_validation_errors(
     with pytest.raises(ServiceValidationError, match="invalid_preset_mode"):
         await zone.async_set_preset_mode("invalid_unmapped_preset")
 
-    # 7. vol.Invalid in async_set_temperature
+    # 7. prob.Invalid in async_set_temperature
     with (
         patch.object(
-            zone, "async_set_zone_mode", side_effect=vol.Invalid("Boom")
+            zone, "async_set_zone_mode", side_effect=prob.Invalid("Boom")
         ),
         pytest.raises(ServiceValidationError, match="validation_error"),
     ):
@@ -1235,7 +1235,7 @@ async def test_extra_schema_validation(
     with (
         patch(
             "custom_components.ramses_cc.climate.SCH_SET_SYSTEM_MODE_EXTRA",
-            side_effect=vol.Invalid("Invalid system mode extra"),
+            side_effect=prob.Invalid("Invalid system mode extra"),
         ),
         pytest.raises(ServiceValidationError, match="validation_error"),
     ):
@@ -1249,7 +1249,7 @@ async def test_extra_schema_validation(
     with (
         patch(
             "custom_components.ramses_cc.climate.SCH_SET_ZONE_MODE_EXTRA",
-            side_effect=vol.Invalid("Invalid zone mode extra"),
+            side_effect=prob.Invalid("Invalid zone mode extra"),
         ),
         pytest.raises(ServiceValidationError, match="validation_error"),
     ):

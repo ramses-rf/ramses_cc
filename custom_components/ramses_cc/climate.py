@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace as dc_replace
 from datetime import datetime as dt, timedelta as td
 from typing import Any, Final
 
-import probatio as vol
+import probatio as prob
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityDescription,
@@ -385,7 +385,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
 
         try:
             await self.async_set_system_mode(target_mode)
-        except vol.Invalid as err:
+        except prob.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="validation_error",
@@ -408,7 +408,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
 
         try:
             await self.async_set_system_mode(target_mode)
-        except vol.Invalid as err:
+        except prob.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="validation_error",
@@ -479,7 +479,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
         # strict, non-entity schema check
         try:
             SCH_SET_SYSTEM_MODE_EXTRA(entry)  # result not used
-        except vol.Invalid as err:
+        except prob.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="validation_error",
@@ -776,7 +776,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             raise HomeAssistantError(
                 f"Failed to set hvac mode: {err}"
             ) from err
-        except vol.Invalid as err:
+        except prob.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="validation_error",
@@ -802,7 +802,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             try:
                 await self._device.tcs.set_mode(target_mode)
                 self.async_write_ha_state()
-            except vol.Invalid as err:
+            except prob.Invalid as err:
                 raise ServiceValidationError(
                     translation_domain=DOMAIN,
                     translation_key="validation_error",
@@ -823,7 +823,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
                     td(hours=1) if preset_mode == PRESET_TEMPORARY else None
                 ),
             )
-        except vol.Invalid as err:
+        except prob.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="validation_error",
@@ -864,7 +864,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             await self.async_set_zone_mode(
                 mode=mode, setpoint=temperature, duration=duration, until=until
             )
-        except vol.Invalid as err:
+        except prob.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="validation_error",
@@ -980,7 +980,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         # strict, non-entity schema check
         try:
             checked_entry = SCH_SET_ZONE_MODE_EXTRA(entry)
-        except vol.Invalid as err:
+        except prob.Invalid as err:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="validation_error",

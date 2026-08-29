@@ -8,7 +8,7 @@ from copy import deepcopy
 from datetime import timedelta as td
 from typing import Any, Final
 
-import probatio as vol  # type: ignore[import-untyped, unused-ignore]
+import probatio as prob
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers import config_validation as cv
 
@@ -143,29 +143,29 @@ SCAN_INTERVAL_MINIMUM = td(seconds=3)
 _SCH_DEVICE_ID = cv.matches_regex(r"^[0-9]{2}:[0-9]{6}$")
 _SCH_CMD_CODE = cv.matches_regex(r"^[0-9A-F]{4}$")
 _SCH_DOM_INDEX = cv.matches_regex(r"^[0-9A-F]{2}$")
-_SCH_PARAM_ID = vol.All(cv.string, cv.matches_regex(r"^[0-9A-F]{2}$"))
+_SCH_PARAM_ID = prob.All(cv.string, cv.matches_regex(r"^[0-9A-F]{2}$"))
 _SCH_COMMAND = cv.matches_regex(COMMAND_REGEX.pattern)
 
-SCH_ADVANCED_FEATURES = vol.Schema(
+SCH_ADVANCED_FEATURES = prob.Schema(
     {
-        vol.Optional(CONF_SEND_PACKET, default=False): cv.boolean,
-        vol.Optional(CONF_MESSAGE_EVENTS, default=None): vol.Any(
+        prob.Optional(CONF_SEND_PACKET, default=False): cv.boolean,
+        prob.Optional(CONF_MESSAGE_EVENTS, default=None): prob.Any(
             None, cv.is_regex
         ),
-        vol.Optional(CONF_DEV_MODE): cv.boolean,
-        vol.Optional(CONF_UNKNOWN_CODES): cv.boolean,
-        vol.Optional(CONF_PASSIVE_SCAN, default=True): cv.boolean,
-        vol.Optional(CONF_AUTO_NOTIFY, default=True): cv.boolean,
-        vol.Optional(CONF_LOST_THRESHOLD, default=7): vol.All(
-            cv.positive_int, vol.Range(min=1, max=90)
+        prob.Optional(CONF_DEV_MODE): cv.boolean,
+        prob.Optional(CONF_UNKNOWN_CODES): cv.boolean,
+        prob.Optional(CONF_PASSIVE_SCAN, default=True): cv.boolean,
+        prob.Optional(CONF_AUTO_NOTIFY, default=True): cv.boolean,
+        prob.Optional(CONF_LOST_THRESHOLD, default=7): prob.All(
+            cv.positive_int, prob.Range(min=1, max=90)
         ),
     }
 )
 
 # Define the traits for FAN devices
 FAN_TRAITS = {
-    vol.Optional(SZ_BOUND_TO): vol.Any(None, _SCH_DEVICE_ID),
-    vol.Optional(CONF_COMMANDS): dict,
+    prob.Optional(SZ_BOUND_TO): prob.Any(None, _SCH_DEVICE_ID),
+    prob.Optional(CONF_COMMANDS): dict,
 }
 
 SCH_GLOBAL_TRAITS_DICT, SCH_TRAITS = sch_global_traits_dict_factory(
@@ -174,23 +174,23 @@ SCH_GLOBAL_TRAITS_DICT, SCH_TRAITS = sch_global_traits_dict_factory(
 
 SCH_GATEWAY_CONFIG = SCH_GATEWAY_CONFIG.extend(
     SCH_ENGINE_DICT,
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 SCH_PACKET_LOG = sch_packet_log_dict_factory(default_backups=7)
 
 SCH_DOMAIN_CONFIG = (
-    vol.Schema(
+    prob.Schema(
         {
-            vol.Optional(CONF_RAMSES_RF, default={}): SCH_GATEWAY_CONFIG,
-            vol.Optional(
+            prob.Optional(CONF_RAMSES_RF, default={}): SCH_GATEWAY_CONFIG,
+            prob.Optional(
                 CONF_SCAN_INTERVAL, default=SCAN_INTERVAL_DEFAULT
-            ): vol.All(cv.time_period, vol.Range(min=SCAN_INTERVAL_MINIMUM)),
-            vol.Optional(
+            ): prob.All(cv.time_period, prob.Range(min=SCAN_INTERVAL_MINIMUM)),
+            prob.Optional(
                 CONF_ADVANCED_FEATURES, default={}
             ): SCH_ADVANCED_FEATURES,
         },
-        extra=vol.PREVENT_EXTRA,  # system/orphan schemas for ramses_rf
+        extra=prob.PREVENT_EXTRA,  # system/orphan schemas for ramses_rf
     )
     .extend(SCH_GLOBAL_SCHEMAS_DICT)
     .extend(SCH_GLOBAL_TRAITS_DICT)
@@ -199,20 +199,20 @@ SCH_DOMAIN_CONFIG = (
     .extend(sch_serial_port_dict_factory())
 )
 
-SCH_MINIMUM_TCS = vol.Schema(
+SCH_MINIMUM_TCS = prob.Schema(
     {
-        vol.Optional(SZ_SYSTEM): vol.Schema(
-            {vol.Required(SZ_APPLIANCE_CONTROL): vol.Match(r"^10:[0-9]{6}$")}
+        prob.Optional(SZ_SYSTEM): prob.Schema(
+            {prob.Required(SZ_APPLIANCE_CONTROL): prob.Match(r"^10:[0-9]{6}$")}
         ),
-        vol.Optional(SZ_ZONES, default={}): vol.Schema(
+        prob.Optional(SZ_ZONES, default={}): prob.Schema(
             {
-                vol.Required(str): vol.Schema(
-                    {vol.Required(SZ_SENSOR): vol.Match(r"^01:[0-9]{6}$")}
+                prob.Required(str): prob.Schema(
+                    {prob.Required(SZ_SENSOR): prob.Match(r"^01:[0-9]{6}$")}
                 )
             }
         ),
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 
@@ -2736,38 +2736,40 @@ def sync_learned_topology(
     return order_schema(new_schema)
 
 
-SCH_NO_SVC_PARAMS = vol.Schema({}, extra=vol.PREVENT_EXTRA)
+SCH_NO_SVC_PARAMS = prob.Schema({}, extra=prob.PREVENT_EXTRA)
 SCH_NO_ENTITY_SVC_PARAMS = cv.make_entity_service_schema(
     {},
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 
 # services for ramses_cc integration
 
-_SCH_BINDING = vol.Schema(
-    {vol.Required(_SCH_CMD_CODE): vol.Any(None, _SCH_DOM_INDEX)}
+_SCH_BINDING = prob.Schema(
+    {prob.Required(_SCH_CMD_CODE): prob.Any(None, _SCH_DOM_INDEX)}
 )
 
-SCH_BIND_DEVICE = vol.Schema(
+SCH_BIND_DEVICE = prob.Schema(
     {
-        vol.Required("device_id"): _SCH_DEVICE_ID,
-        vol.Required("offer"): vol.All(_SCH_BINDING, vol.Length(min=1)),
-        vol.Optional("confirm", default={}): vol.Any(
-            {}, vol.All(_SCH_BINDING, vol.Length(min=1))
+        prob.Required("device_id"): _SCH_DEVICE_ID,
+        prob.Required("offer"): prob.All(_SCH_BINDING, prob.Length(min=1)),
+        prob.Optional("confirm", default={}): prob.Any(
+            {}, prob.All(_SCH_BINDING, prob.Length(min=1))
         ),
-        vol.Optional("device_info", default=None): vol.Any(None, _SCH_COMMAND),
+        prob.Optional("device_info", default=None): prob.Any(
+            None, _SCH_COMMAND
+        ),
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_SEND_PACKET = vol.Schema(
+SCH_SEND_PACKET = prob.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
-        vol.Required("verb"): vol.In((" I", "I", "RQ", "RP", " W", "W")),
-        vol.Required("code"): cv.matches_regex(r"^[0-9A-F]{4}$"),
-        vol.Required("payload"): cv.matches_regex(
+        prob.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        prob.Optional("from_id"): _SCH_DEVICE_ID,
+        prob.Required("verb"): prob.In((" I", "I", "RQ", "RP", " W", "W")),
+        prob.Required("code"): cv.matches_regex(r"^[0-9A-F]{4}$"),
+        prob.Required("payload"): cv.matches_regex(
             r"^([0-9A-F][0-9A-F]){1,48}$"
         ),
     }
@@ -2779,84 +2781,84 @@ SVC_SEND_PACKET: Final = "send_packet"
 SVC_SYNC_TOPOLOGY: Final = "sync_topology"
 SVC_PROBE_HVAC_BINDING: Final = "probe_hvac_binding"
 
-SCH_PROBE_HVAC_BINDING = vol.Schema(
+SCH_PROBE_HVAC_BINDING = prob.Schema(
     {
-        vol.Optional("device_id"): _SCH_DEVICE_ID,
-        vol.Optional("fan_id"): _SCH_DEVICE_ID,
+        prob.Optional("device_id"): _SCH_DEVICE_ID,
+        prob.Optional("fan_id"): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_DISCOVER_KNOWN_DEVICES = vol.Schema(
+SCH_DISCOVER_KNOWN_DEVICES = prob.Schema(
     {
-        vol.Optional("device_id"): _SCH_DEVICE_ID,
+        prob.Optional("device_id"): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 # Discovery scan service schemas
 
-SCH_GET_DISCOVERED_DEVICES = vol.Schema(
+SCH_GET_DISCOVERED_DEVICES = prob.Schema(
     {
-        vol.Optional("status"): vol.In(
+        prob.Optional("status"): prob.In(
             ("new", "accepted", "discarded", "removed", "lost")
         ),
-        vol.Optional("enabled"): cv.boolean,
+        prob.Optional("enabled"): cv.boolean,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_ACCEPT_DISCOVERED_DEVICE = vol.Schema(
+SCH_ACCEPT_DISCOVERED_DEVICE = prob.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
-        vol.Optional("owner"): vol.All(str, vol.Length(max=50)),
-        vol.Optional("schema_entry"): dict,
+        prob.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        prob.Optional("owner"): prob.All(str, prob.Length(max=50)),
+        prob.Optional("schema_entry"): dict,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_DISCARD_DISCOVERED_DEVICE = vol.Schema(
+SCH_DISCARD_DISCOVERED_DEVICE = prob.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        prob.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_REMOVE_DISCOVERED_DEVICE = vol.Schema(
+SCH_REMOVE_DISCOVERED_DEVICE = prob.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        prob.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_ENABLE_DISCOVERED_DEVICE = vol.Schema(
+SCH_ENABLE_DISCOVERED_DEVICE = prob.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        prob.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_DISABLE_DISCOVERED_DEVICE = vol.Schema(
+SCH_DISABLE_DISCOVERED_DEVICE = prob.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        prob.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_ADD_FAKED_REM = vol.Schema(
+SCH_ADD_FAKED_REM = prob.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
-        vol.Required("bound_to"): _SCH_DEVICE_ID,
-        vol.Optional("alias"): vol.All(str, vol.Length(max=50)),
+        prob.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        prob.Required("bound_to"): _SCH_DEVICE_ID,
+        prob.Optional("alias"): prob.All(str, prob.Length(max=50)),
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_REMOVE_DEVICE = vol.Schema(
+SCH_REMOVE_DEVICE = prob.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
+        prob.Required(ATTR_DEVICE_ID): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 
@@ -2868,12 +2870,12 @@ MAX_CO2_LEVEL: Final[int] = 9999
 SVC_PUT_CO2_LEVEL: Final = "put_co2_level"
 SCH_PUT_CO2_LEVEL = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_CO2_LEVEL): vol.All(
+        prob.Required(ATTR_CO2_LEVEL): prob.All(
             cv.positive_int,
-            vol.Range(min=MIN_CO2_LEVEL, max=MAX_CO2_LEVEL),
+            prob.Range(min=MIN_CO2_LEVEL, max=MAX_CO2_LEVEL),
         ),
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 MIN_DHW_TEMP: Final[float] = 0
@@ -2882,12 +2884,12 @@ MAX_DHW_TEMP: Final[float] = 99
 SVC_PUT_DHW_TEMP: Final = "put_dhw_temp"
 SCH_PUT_DHW_TEMP = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_TEMPERATURE): vol.All(
-            vol.Coerce(float),
-            vol.Range(min=MIN_DHW_TEMP, max=MAX_DHW_TEMP),
+        prob.Required(ATTR_TEMPERATURE): prob.All(
+            prob.Coerce(float),
+            prob.Range(min=MIN_DHW_TEMP, max=MAX_DHW_TEMP),
         ),
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 MIN_INDOOR_HUMIDITY: Final[float] = 0
@@ -2896,12 +2898,12 @@ MAX_INDOOR_HUMIDITY: Final[float] = 100
 SVC_PUT_INDOOR_HUMIDITY: Final = "put_indoor_humidity"
 SCH_PUT_INDOOR_HUMIDITY = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_INDOOR_HUMIDITY): vol.All(
+        prob.Required(ATTR_INDOOR_HUMIDITY): prob.All(
             cv.positive_float,
-            vol.Range(min=MIN_INDOOR_HUMIDITY, max=MAX_INDOOR_HUMIDITY),
+            prob.Range(min=MIN_INDOOR_HUMIDITY, max=MAX_INDOOR_HUMIDITY),
         ),
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 MIN_ROOM_TEMP: Final[float] = -20
@@ -2910,12 +2912,12 @@ MAX_ROOM_TEMP: Final[float] = 60
 SVC_PUT_ROOM_TEMP: Final = "put_room_temp"
 SCH_PUT_ROOM_TEMP = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_TEMPERATURE): vol.All(
-            vol.Coerce(float),
-            vol.Range(min=MIN_ROOM_TEMP, max=MAX_ROOM_TEMP),
+        prob.Required(ATTR_TEMPERATURE): prob.All(
+            prob.Coerce(float),
+            prob.Range(min=MIN_ROOM_TEMP, max=MAX_ROOM_TEMP),
         ),
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 SVCS_RAMSES_SENSOR = {
@@ -2927,40 +2929,40 @@ SVCS_RAMSES_SENSOR = {
 
 # services for climate platform
 
-SCH_DURATION = vol.All(  # of time (<=24h)
+SCH_DURATION = prob.All(  # of time (<=24h)
     cv.time_period,
-    vol.Range(min=td(hours=1), max=td(hours=24)),
+    prob.Range(min=td(hours=1), max=td(hours=24)),
 )
-SCH_PERIOD = vol.All(  # of days (0-99)
-    cv.time_period, vol.Range(min=td(days=0), max=td(days=99))
+SCH_PERIOD = prob.All(  # of days (0-99)
+    cv.time_period, prob.Range(min=td(days=0), max=td(days=99))
 )
 
 SVC_SET_SYSTEM_MODE: Final = "set_system_mode"
 SCH_SET_SYSTEM_MODE = cv.make_entity_service_schema(
     # nested schemas not allowed after HA 2025.9, check in climate.py
     {
-        vol.Required(ATTR_MODE): vol.In(SystemMode),
-        vol.Optional(ATTR_DURATION): vol.Any(SCH_DURATION, None),
+        prob.Required(ATTR_MODE): prob.In(SystemMode),
+        prob.Optional(ATTR_DURATION): prob.Any(SCH_DURATION, None),
         # canBeTemporary: true, timingMode: Duration
-        vol.Optional(ATTR_PERIOD): vol.Any(SCH_PERIOD, None),
+        prob.Optional(ATTR_PERIOD): prob.Any(SCH_PERIOD, None),
         # Period: None indefinitely; 0 end of today, 1 end tomorrow
     }
 )
 
-SCH_SET_SYSTEM_MODE_EXTRA = vol.Schema(  # Entity Service schema
-    # vol.Msg(  # TODO turn on if good checks are working 8-2025
-    vol.Any(
+SCH_SET_SYSTEM_MODE_EXTRA = prob.Schema(  # Entity Service schema
+    # prob.Msg(  # TODO turn on if good checks are working 8-2025
+    prob.Any(
         {  # A also: Off, Heat, Cool (for pre-evohome)
-            vol.Required(ATTR_MODE): vol.In(
+            prob.Required(ATTR_MODE): prob.In(
                 [SystemMode.AUTO, SystemMode.HEAT_OFF, SystemMode.RESET]
             )
         },
         {  # B
-            vol.Required(ATTR_MODE): vol.In([SystemMode.ECO_BOOST]),
-            vol.Optional(ATTR_DURATION): vol.Any(SCH_DURATION, None),
+            prob.Required(ATTR_MODE): prob.In([SystemMode.ECO_BOOST]),
+            prob.Optional(ATTR_DURATION): prob.Any(SCH_DURATION, None),
         },  # duration: : None is indefinitely; 0 is invalid
         {  # C canBeTemporary: true, timingMode: Period
-            vol.Required(ATTR_MODE): vol.In(
+            prob.Required(ATTR_MODE): prob.In(
                 [
                     SystemMode.AWAY,
                     SystemMode.CUSTOM,
@@ -2968,12 +2970,12 @@ SCH_SET_SYSTEM_MODE_EXTRA = vol.Schema(  # Entity Service schema
                     SystemMode.DAY_OFF_ECO,
                 ]
             ),
-            vol.Optional(ATTR_PERIOD): vol.Any(SCH_PERIOD, None),
+            prob.Optional(ATTR_PERIOD): prob.Any(SCH_PERIOD, None),
         },  # Period: None indefinitely; 0 end of today, 1 end tomorrow
     ),
     #     msg="Invalid ramses_cc Zone Mode entry in Entity Service call",
     # ),
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 DEFAULT_MIN_TEMP: Final[float] = 5
@@ -2987,15 +2989,15 @@ MAX_MAX_TEMP: Final[float] = 35
 SVC_SET_ZONE_CONFIG: Final = "set_zone_config"
 SCH_SET_ZONE_CONFIG = cv.make_entity_service_schema(
     {
-        vol.Optional(ATTR_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.All(
-            cv.positive_float, vol.Range(min=MIN_MAX_TEMP, max=MAX_MAX_TEMP)
+        prob.Optional(ATTR_MAX_TEMP, default=DEFAULT_MAX_TEMP): prob.All(
+            cv.positive_float, prob.Range(min=MIN_MAX_TEMP, max=MAX_MAX_TEMP)
         ),
-        vol.Optional(ATTR_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.All(
-            cv.positive_float, vol.Range(min=MIN_MIN_TEMP, max=MAX_MIN_TEMP)
+        prob.Optional(ATTR_MIN_TEMP, default=DEFAULT_MIN_TEMP): prob.All(
+            cv.positive_float, prob.Range(min=MIN_MIN_TEMP, max=MAX_MIN_TEMP)
         ),
-        vol.Optional(ATTR_LOCAL_OVERRIDE, default=True): cv.boolean,
-        vol.Optional(ATTR_OPENWINDOW, default=True): cv.boolean,
-        vol.Optional(ATTR_MULTIROOM, default=True): cv.boolean,
+        prob.Optional(ATTR_LOCAL_OVERRIDE, default=True): cv.boolean,
+        prob.Optional(ATTR_OPENWINDOW, default=True): cv.boolean,
+        prob.Optional(ATTR_MULTIROOM, default=True): cv.boolean,
     }
 )
 
@@ -3003,7 +3005,7 @@ SVC_SET_ZONE_MODE: Final = "set_zone_mode"
 SCH_SET_ZONE_MODE = cv.make_entity_service_schema(
     # nested schemas not allowed after HA 2025.9, check in climate.py
     {
-        vol.Required(ATTR_MODE): vol.In(
+        prob.Required(ATTR_MODE): prob.In(
             [
                 ZoneMode.SCHEDULE,
                 ZoneMode.PERMANENT,
@@ -3011,61 +3013,61 @@ SCH_SET_ZONE_MODE = cv.make_entity_service_schema(
                 ZoneMode.TEMPORARY,
             ]
         ),
-        vol.Optional(ATTR_SETPOINT): vol.All(
-            cv.positive_float, vol.Range(min=5, max=35)
+        prob.Optional(ATTR_SETPOINT): prob.All(
+            cv.positive_float, prob.Range(min=5, max=35)
         ),
-        vol.Optional(ATTR_UNTIL): cv.datetime,
-        vol.Optional(ATTR_DURATION): vol.All(
+        prob.Optional(ATTR_UNTIL): cv.datetime,
+        prob.Optional(ATTR_DURATION): prob.All(
             cv.time_period,
-            vol.Range(min=td(minutes=5), max=td(days=1)),
+            prob.Range(min=td(minutes=5), max=td(days=1)),
         ),
     }
 )
 
 SCH_SET_ZONE_MODE_EXTRA = (
-    vol.Schema(  # original Entity Service action validation schema
-        # vol.Msg(  # TODO turn msg on if checks are working 10-2025
-        vol.Any(
+    prob.Schema(  # original Entity Service action validation schema
+        # prob.Msg(  # TODO turn msg on if checks are working 10-2025
+        prob.Any(
             {  # A
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.SCHEDULE]),
+                prob.Required(ATTR_MODE): prob.In([ZoneMode.SCHEDULE]),
                 # only mode with no setpoint
             },
             {  # B
-                vol.Required(ATTR_MODE): vol.In(
+                prob.Required(ATTR_MODE): prob.In(
                     [ZoneMode.PERMANENT, ZoneMode.ADVANCED]
                 ),
-                vol.Required(ATTR_SETPOINT): vol.All(
-                    cv.positive_float, vol.Range(min=5, max=35)
+                prob.Required(ATTR_SETPOINT): prob.All(
+                    cv.positive_float, prob.Range(min=5, max=35)
                 ),
             },
             {  # C
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_SETPOINT): vol.All(
-                    cv.positive_float, vol.Range(min=5, max=35)
+                prob.Required(ATTR_MODE): prob.In([ZoneMode.TEMPORARY]),
+                prob.Required(ATTR_SETPOINT): prob.All(
+                    cv.positive_float, prob.Range(min=5, max=35)
                 ),
-                vol.Required(ATTR_DURATION, default=td(hours=1)): vol.All(
+                prob.Required(ATTR_DURATION, default=td(hours=1)): prob.All(
                     cv.time_period,
-                    vol.Range(min=td(minutes=5), max=td(days=1)),
+                    prob.Range(min=td(minutes=5), max=td(days=1)),
                 ),
             },
             {  # D
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_SETPOINT): vol.All(
-                    cv.positive_float, vol.Range(min=5, max=35)
+                prob.Required(ATTR_MODE): prob.In([ZoneMode.TEMPORARY]),
+                prob.Required(ATTR_SETPOINT): prob.All(
+                    cv.positive_float, prob.Range(min=5, max=35)
                 ),
-                vol.Required(ATTR_UNTIL): cv.datetime,
+                prob.Required(ATTR_UNTIL): cv.datetime,
             },
         ),
         #     msg="Invalid ramses_cc Zone Mode entry in Entity Service call",
         # ),
-        extra=vol.PREVENT_EXTRA,
+        extra=prob.PREVENT_EXTRA,
     )
 )
 
 SVC_SET_ZONE_SCHEDULE: Final = "set_zone_schedule"
 SCH_SET_ZONE_SCHEDULE = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_SCHEDULE): vol.Any(cv.string, dict, list),
+        prob.Required(ATTR_SCHEDULE): prob.Any(cv.string, dict, list),
     }
 )
 
@@ -3076,9 +3078,9 @@ MAX_NUM_ENTRIES: Final[float] = 64
 SVC_GET_SYSTEM_FAULTS: Final = "get_system_faults"
 SCH_GET_SYSTEM_FAULTS = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_NUM_ENTRIES, default=DEFAULT_NUM_ENTRIES): vol.All(
+        prob.Required(ATTR_NUM_ENTRIES, default=DEFAULT_NUM_ENTRIES): prob.All(
             cv.positive_int,
-            vol.Range(min=MIN_NUM_ENTRIES, max=MAX_NUM_ENTRIES),
+            prob.Range(min=MIN_NUM_ENTRIES, max=MAX_NUM_ENTRIES),
         ),
     }
 )
@@ -3093,92 +3095,94 @@ SVC_SET_FAN_REM_PARAM: Final = "set_fan_rem_param"
 SVC_UPDATE_FAN_PARAMS: Final = "update_fan_params"
 
 _TARGET_FIELDS = {
-    vol.Optional("entity_id"): cv.entity_ids,
-    vol.Optional("device_id"): cv.ensure_list_csv,
-    vol.Optional("area_id"): cv.ensure_list_csv,
-    vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
+    prob.Optional("entity_id"): cv.entity_ids,
+    prob.Optional("device_id"): cv.ensure_list_csv,
+    prob.Optional("area_id"): cv.ensure_list_csv,
+    prob.Optional("device"): prob.Any(None, cv.ensure_list_csv),
 }
 
 SCH_GET_FAN_PARAM = cv.make_entity_service_schema(
     {
         **_TARGET_FIELDS,
-        vol.Required("param_id"): _SCH_PARAM_ID,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        prob.Required("param_id"): _SCH_PARAM_ID,
+        prob.Optional("from_id"): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 SCH_GET_FAN_REM_PARAM = cv.make_entity_service_schema(
     {
         **_TARGET_FIELDS,
-        vol.Required("param_id"): _SCH_PARAM_ID,
+        prob.Required("param_id"): _SCH_PARAM_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 SCH_SET_FAN_PARAM = cv.make_entity_service_schema(
     {
         **_TARGET_FIELDS,
-        vol.Required("param_id"): _SCH_PARAM_ID,
-        vol.Required("value"): cv.string,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        prob.Required("param_id"): _SCH_PARAM_ID,
+        prob.Required("value"): cv.string,
+        prob.Optional("from_id"): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 SCH_SET_FAN_REM_PARAM = cv.make_entity_service_schema(
     {
         **_TARGET_FIELDS,
-        vol.Required("param_id"): _SCH_PARAM_ID,
-        vol.Required("value"): cv.string,
+        prob.Required("param_id"): _SCH_PARAM_ID,
+        prob.Required("value"): cv.string,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 SCH_UPDATE_FAN_PARAMS = cv.make_entity_service_schema(
     {
         **_TARGET_FIELDS,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        prob.Optional("from_id"): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
-SCH_GET_FAN_PARAM_DOMAIN = vol.Schema(
+SCH_GET_FAN_PARAM_DOMAIN = prob.Schema(
     {
-        vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
-        vol.Optional("device_id"): vol.Any(None, cv.string),
-        vol.Required("param_id"): _SCH_PARAM_ID,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        prob.Optional("device"): prob.Any(None, cv.ensure_list_csv),
+        prob.Optional("device_id"): prob.Any(None, cv.string),
+        prob.Required("param_id"): _SCH_PARAM_ID,
+        prob.Optional("from_id"): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
-SCH_SET_FAN_PARAM_DOMAIN = vol.Schema(
+SCH_SET_FAN_PARAM_DOMAIN = prob.Schema(
     {
-        vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
-        vol.Optional("device_id"): vol.Any(None, cv.string),
-        vol.Required("param_id"): _SCH_PARAM_ID,
-        vol.Required("value"): cv.string,
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        prob.Optional("device"): prob.Any(None, cv.ensure_list_csv),
+        prob.Optional("device_id"): prob.Any(None, cv.string),
+        prob.Required("param_id"): _SCH_PARAM_ID,
+        prob.Required("value"): cv.string,
+        prob.Optional("from_id"): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
-SCH_UPDATE_FAN_PARAMS_DOMAIN = vol.Schema(
+SCH_UPDATE_FAN_PARAMS_DOMAIN = prob.Schema(
     {
-        vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
-        vol.Optional("device_id"): vol.Any(None, cv.string),
-        vol.Optional("from_id"): _SCH_DEVICE_ID,
+        prob.Optional("device"): prob.Any(None, cv.ensure_list_csv),
+        prob.Optional("device_id"): prob.Any(None, cv.string),
+        prob.Optional("from_id"): _SCH_DEVICE_ID,
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 SVC_SET_POLLING_INTERVAL: Final = "set_polling_interval"
-SCH_SET_POLLING_INTERVAL = vol.Schema(
+SCH_SET_POLLING_INTERVAL = prob.Schema(
     {
-        vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
-        vol.Optional("device_id"): vol.Any(None, cv.string),
-        vol.Optional(ATTR_POLLING_INTERVAL): vol.Any(None, vol.Coerce(float)),
+        prob.Optional("device"): prob.Any(None, cv.ensure_list_csv),
+        prob.Optional("device_id"): prob.Any(None, cv.string),
+        prob.Optional(ATTR_POLLING_INTERVAL): prob.Any(
+            None, prob.Coerce(float)
+        ),
     },
-    extra=vol.PREVENT_EXTRA,
+    extra=prob.PREVENT_EXTRA,
 )
 
 
@@ -3217,7 +3221,7 @@ SVC_SET_DHW_MODE: Final = "set_dhw_mode"
 SCH_SET_DHW_MODE = cv.make_entity_service_schema(
     # nested schemas not allowed after HA 2025.9, check in climate.py
     {
-        vol.Required(ATTR_MODE): vol.In(
+        prob.Required(ATTR_MODE): prob.In(
             [
                 ZoneMode.SCHEDULE,
                 ZoneMode.PERMANENT,
@@ -3225,54 +3229,54 @@ SCH_SET_DHW_MODE = cv.make_entity_service_schema(
                 ZoneMode.TEMPORARY,
             ]
         ),
-        vol.Optional(ATTR_ACTIVE): cv.boolean,
-        vol.Optional(ATTR_UNTIL): cv.datetime,
-        vol.Optional(ATTR_DURATION): vol.All(
+        prob.Optional(ATTR_ACTIVE): cv.boolean,
+        prob.Optional(ATTR_UNTIL): cv.datetime,
+        prob.Optional(ATTR_DURATION): prob.All(
             cv.time_period,
-            vol.Range(min=td(minutes=5), max=td(days=1)),
+            prob.Range(min=td(minutes=5), max=td(days=1)),
         ),
     }
 )
 
 SCH_SET_DHW_MODE_EXTRA = (
-    vol.Schema(  # original Entity Service action validation schema
-        # vol.Msg(  # TODO turn on if good checks are working 8-2025
-        vol.Any(
+    prob.Schema(  # original Entity Service action validation schema
+        # prob.Msg(  # TODO turn on if good checks are working 8-2025
+        prob.Any(
             {  # A
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.SCHEDULE]),
+                prob.Required(ATTR_MODE): prob.In([ZoneMode.SCHEDULE]),
                 # only mode with no active
             },
             {
-                vol.Required(ATTR_MODE): vol.In(
+                prob.Required(ATTR_MODE): prob.In(
                     [ZoneMode.PERMANENT, ZoneMode.ADVANCED]
                 ),
-                vol.Required(ATTR_ACTIVE): cv.boolean,
+                prob.Required(ATTR_ACTIVE): cv.boolean,
             },
             {  # B a.k.a DHW boost
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_ACTIVE): True,  # TODO: vol.Any(truthy)
-                vol.Required(ATTR_DURATION, default=td(hours=1)): vol.All(
+                prob.Required(ATTR_MODE): prob.In([ZoneMode.TEMPORARY]),
+                prob.Required(ATTR_ACTIVE): True,  # TODO: prob.Any(truthy)
+                prob.Required(ATTR_DURATION, default=td(hours=1)): prob.All(
                     cv.time_period,
-                    vol.Range(min=td(minutes=5), max=td(days=1)),
+                    prob.Range(min=td(minutes=5), max=td(days=1)),
                 ),
             },
             {  # C
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_ACTIVE): cv.boolean,
-                vol.Required(ATTR_DURATION): vol.All(
+                prob.Required(ATTR_MODE): prob.In([ZoneMode.TEMPORARY]),
+                prob.Required(ATTR_ACTIVE): cv.boolean,
+                prob.Required(ATTR_DURATION): prob.All(
                     cv.time_period,
-                    vol.Range(min=td(minutes=5), max=td(days=1)),
+                    prob.Range(min=td(minutes=5), max=td(days=1)),
                 ),
             },
             {  # D
-                vol.Required(ATTR_MODE): vol.In([ZoneMode.TEMPORARY]),
-                vol.Required(ATTR_ACTIVE): cv.boolean,
-                vol.Required(ATTR_UNTIL): cv.datetime,
+                prob.Required(ATTR_MODE): prob.In([ZoneMode.TEMPORARY]),
+                prob.Required(ATTR_ACTIVE): cv.boolean,
+                prob.Required(ATTR_UNTIL): cv.datetime,
             },
         ),
         #     msg="Invalid ramses_cc Zone Mode entry in Entity Service call",
         # ),
-        extra=vol.PREVENT_EXTRA,
+        extra=prob.PREVENT_EXTRA,
     )
 )
 
@@ -3291,16 +3295,18 @@ MAX_DIFFERENTIAL: Final[float] = 10
 SVC_SET_DHW_PARAMS: Final = "set_dhw_params"
 SCH_SET_DHW_PARAMS = cv.make_entity_service_schema(
     {
-        vol.Optional(ATTR_SETPOINT, default=DEFAULT_DHW_SETPOINT): vol.All(
+        prob.Optional(ATTR_SETPOINT, default=DEFAULT_DHW_SETPOINT): prob.All(
             cv.positive_float,
-            vol.Range(min=MIN_DHW_SETPOINT, max=MAX_DHW_SETPOINT),
+            prob.Range(min=MIN_DHW_SETPOINT, max=MAX_DHW_SETPOINT),
         ),
-        vol.Optional(ATTR_OVERRUN, default=DEFAULT_OVERRUN): vol.All(
-            cv.positive_int, vol.Range(min=MIN_OVERRUN, max=MAX_OVERRUN)
+        prob.Optional(ATTR_OVERRUN, default=DEFAULT_OVERRUN): prob.All(
+            cv.positive_int, prob.Range(min=MIN_OVERRUN, max=MAX_OVERRUN)
         ),
-        vol.Optional(ATTR_DIFFERENTIAL, default=DEFAULT_DIFFERENTIAL): vol.All(
+        prob.Optional(
+            ATTR_DIFFERENTIAL, default=DEFAULT_DIFFERENTIAL
+        ): prob.All(
             cv.positive_float,
-            vol.Range(min=MIN_DIFFERENTIAL, max=MAX_DIFFERENTIAL),
+            prob.Range(min=MIN_DIFFERENTIAL, max=MAX_DIFFERENTIAL),
         ),
     }
 )
@@ -3308,7 +3314,7 @@ SCH_SET_DHW_PARAMS = cv.make_entity_service_schema(
 SVC_SET_DHW_SCHEDULE: Final = "set_dhw_schedule"
 SCH_SET_DHW_SCHEDULE = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_SCHEDULE): vol.Any(cv.string, dict, list),
+        prob.Required(ATTR_SCHEDULE): prob.Any(cv.string, dict, list),
     }
 )
 
@@ -3338,9 +3344,9 @@ MAX_TIMEOUT: Final[int] = 300
 SVC_LEARN_COMMAND: Final = "learn_command"
 SCH_LEARN_COMMAND = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_COMMAND): cv.string,
-        vol.Required(ATTR_TIMEOUT, default=DEFAULT_TIMEOUT): vol.All(
-            cv.positive_int, vol.Range(min=MIN_TIMEOUT, max=MAX_TIMEOUT)
+        prob.Required(ATTR_COMMAND): cv.string,
+        prob.Required(ATTR_TIMEOUT, default=DEFAULT_TIMEOUT): prob.All(
+            cv.positive_int, prob.Range(min=MIN_TIMEOUT, max=MAX_TIMEOUT)
         ),
     },
 )
@@ -3351,22 +3357,22 @@ SCH_LEARN_COMMAND = cv.make_entity_service_schema(
 SVC_ADD_COMMAND: Final = "add_command"
 SCH_ADD_COMMAND = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_COMMAND): cv.string,
-        vol.Required("packet_string"): cv.string,
+        prob.Required(ATTR_COMMAND): cv.string,
+        prob.Required("packet_string"): cv.string,
     }
 )
 
 SVC_SEND_COMMAND: Final = "send_command"
 SCH_SEND_COMMAND = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_COMMAND): cv.string,
-        vol.Required(ATTR_NUM_REPEATS, default=3): vol.All(
+        prob.Required(ATTR_COMMAND): cv.string,
+        prob.Required(ATTR_NUM_REPEATS, default=3): prob.All(
             cv.positive_int,
-            vol.Range(min=MIN_NUM_REPEATS, max=MAX_NUM_REPEATS),
+            prob.Range(min=MIN_NUM_REPEATS, max=MAX_NUM_REPEATS),
         ),
-        vol.Required(ATTR_DELAY_SECS, default=DEFAULT_GAP_DURATION): vol.All(
+        prob.Required(ATTR_DELAY_SECS, default=DEFAULT_GAP_DURATION): prob.All(
             cv.positive_float,
-            vol.Range(min=MIN_GAP_DURATION, max=MAX_GAP_DURATION),
+            prob.Range(min=MIN_GAP_DURATION, max=MAX_GAP_DURATION),
         ),
     },
 )
@@ -3374,7 +3380,7 @@ SCH_SEND_COMMAND = cv.make_entity_service_schema(
 SVC_DELETE_COMMAND: Final = "delete_command"
 SCH_DELETE_COMMAND = cv.make_entity_service_schema(
     {
-        vol.Required(ATTR_COMMAND): cv.string,
+        prob.Required(ATTR_COMMAND): cv.string,
     },
 )
 
