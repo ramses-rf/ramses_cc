@@ -104,6 +104,7 @@ from .const import (
     SystemMode,
     ZoneMode,
 )
+from .ha_compat import make_entity_service_schema
 
 _SchemaT = dict[str, Any]
 
@@ -2737,7 +2738,7 @@ def sync_learned_topology(
 
 
 SCH_NO_SVC_PARAMS = vol.Schema({}, extra=vol.PREVENT_EXTRA)
-SCH_NO_ENTITY_SVC_PARAMS = cv.make_entity_service_schema(
+SCH_NO_ENTITY_SVC_PARAMS = make_entity_service_schema(
     {},
     extra=vol.PREVENT_EXTRA,
 )
@@ -2866,7 +2867,7 @@ MIN_CO2_LEVEL: Final[int] = 300
 MAX_CO2_LEVEL: Final[int] = 9999
 
 SVC_PUT_CO2_LEVEL: Final = "put_co2_level"
-SCH_PUT_CO2_LEVEL = cv.make_entity_service_schema(
+SCH_PUT_CO2_LEVEL = make_entity_service_schema(
     {
         vol.Required(ATTR_CO2_LEVEL): vol.All(
             cv.positive_int,
@@ -2880,7 +2881,7 @@ MIN_DHW_TEMP: Final[float] = 0
 MAX_DHW_TEMP: Final[float] = 99
 
 SVC_PUT_DHW_TEMP: Final = "put_dhw_temp"
-SCH_PUT_DHW_TEMP = cv.make_entity_service_schema(
+SCH_PUT_DHW_TEMP = make_entity_service_schema(
     {
         vol.Required(ATTR_TEMPERATURE): vol.All(
             vol.Coerce(float),
@@ -2894,7 +2895,7 @@ MIN_INDOOR_HUMIDITY: Final[float] = 0
 MAX_INDOOR_HUMIDITY: Final[float] = 100
 
 SVC_PUT_INDOOR_HUMIDITY: Final = "put_indoor_humidity"
-SCH_PUT_INDOOR_HUMIDITY = cv.make_entity_service_schema(
+SCH_PUT_INDOOR_HUMIDITY = make_entity_service_schema(
     {
         vol.Required(ATTR_INDOOR_HUMIDITY): vol.All(
             cv.positive_float,
@@ -2908,7 +2909,7 @@ MIN_ROOM_TEMP: Final[float] = -20
 MAX_ROOM_TEMP: Final[float] = 60
 
 SVC_PUT_ROOM_TEMP: Final = "put_room_temp"
-SCH_PUT_ROOM_TEMP = cv.make_entity_service_schema(
+SCH_PUT_ROOM_TEMP = make_entity_service_schema(
     {
         vol.Required(ATTR_TEMPERATURE): vol.All(
             vol.Coerce(float),
@@ -2936,7 +2937,7 @@ SCH_PERIOD = vol.All(  # of days (0-99)
 )
 
 SVC_SET_SYSTEM_MODE: Final = "set_system_mode"
-SCH_SET_SYSTEM_MODE = cv.make_entity_service_schema(
+SCH_SET_SYSTEM_MODE = make_entity_service_schema(
     # nested schemas not allowed after HA 2025.9, check in climate.py
     {
         vol.Required(ATTR_MODE): vol.In(SystemMode),
@@ -2985,7 +2986,7 @@ MIN_MAX_TEMP: Final[float] = 21
 MAX_MAX_TEMP: Final[float] = 35
 
 SVC_SET_ZONE_CONFIG: Final = "set_zone_config"
-SCH_SET_ZONE_CONFIG = cv.make_entity_service_schema(
+SCH_SET_ZONE_CONFIG = make_entity_service_schema(
     {
         vol.Optional(ATTR_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.All(
             cv.positive_float, vol.Range(min=MIN_MAX_TEMP, max=MAX_MAX_TEMP)
@@ -3000,7 +3001,7 @@ SCH_SET_ZONE_CONFIG = cv.make_entity_service_schema(
 )
 
 SVC_SET_ZONE_MODE: Final = "set_zone_mode"
-SCH_SET_ZONE_MODE = cv.make_entity_service_schema(
+SCH_SET_ZONE_MODE = make_entity_service_schema(
     # nested schemas not allowed after HA 2025.9, check in climate.py
     {
         vol.Required(ATTR_MODE): vol.In(
@@ -3063,7 +3064,7 @@ SCH_SET_ZONE_MODE_EXTRA = (
 )
 
 SVC_SET_ZONE_SCHEDULE: Final = "set_zone_schedule"
-SCH_SET_ZONE_SCHEDULE = cv.make_entity_service_schema(
+SCH_SET_ZONE_SCHEDULE = make_entity_service_schema(
     {
         vol.Required(ATTR_SCHEDULE): vol.Any(cv.string, dict, list),
     }
@@ -3074,7 +3075,7 @@ MIN_NUM_ENTRIES: Final[float] = 1
 MAX_NUM_ENTRIES: Final[float] = 64
 
 SVC_GET_SYSTEM_FAULTS: Final = "get_system_faults"
-SCH_GET_SYSTEM_FAULTS = cv.make_entity_service_schema(
+SCH_GET_SYSTEM_FAULTS = make_entity_service_schema(
     {
         vol.Required(ATTR_NUM_ENTRIES, default=DEFAULT_NUM_ENTRIES): vol.All(
             cv.positive_int,
@@ -3099,7 +3100,7 @@ _TARGET_FIELDS = {
     vol.Optional("device"): vol.Any(None, cv.ensure_list_csv),
 }
 
-SCH_GET_FAN_PARAM = cv.make_entity_service_schema(
+SCH_GET_FAN_PARAM = make_entity_service_schema(
     {
         **_TARGET_FIELDS,
         vol.Required("param_id"): _SCH_PARAM_ID,
@@ -3108,7 +3109,7 @@ SCH_GET_FAN_PARAM = cv.make_entity_service_schema(
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_GET_FAN_REM_PARAM = cv.make_entity_service_schema(
+SCH_GET_FAN_REM_PARAM = make_entity_service_schema(
     {
         **_TARGET_FIELDS,
         vol.Required("param_id"): _SCH_PARAM_ID,
@@ -3116,7 +3117,7 @@ SCH_GET_FAN_REM_PARAM = cv.make_entity_service_schema(
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_SET_FAN_PARAM = cv.make_entity_service_schema(
+SCH_SET_FAN_PARAM = make_entity_service_schema(
     {
         **_TARGET_FIELDS,
         vol.Required("param_id"): _SCH_PARAM_ID,
@@ -3126,7 +3127,7 @@ SCH_SET_FAN_PARAM = cv.make_entity_service_schema(
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_SET_FAN_REM_PARAM = cv.make_entity_service_schema(
+SCH_SET_FAN_REM_PARAM = make_entity_service_schema(
     {
         **_TARGET_FIELDS,
         vol.Required("param_id"): _SCH_PARAM_ID,
@@ -3135,7 +3136,7 @@ SCH_SET_FAN_REM_PARAM = cv.make_entity_service_schema(
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_UPDATE_FAN_PARAMS = cv.make_entity_service_schema(
+SCH_UPDATE_FAN_PARAMS = make_entity_service_schema(
     {
         **_TARGET_FIELDS,
         vol.Optional("from_id"): _SCH_DEVICE_ID,
@@ -3214,7 +3215,7 @@ SVCS_RAMSES_CLIMATE = {
 # services for water_heater platform
 
 SVC_SET_DHW_MODE: Final = "set_dhw_mode"
-SCH_SET_DHW_MODE = cv.make_entity_service_schema(
+SCH_SET_DHW_MODE = make_entity_service_schema(
     # nested schemas not allowed after HA 2025.9, check in climate.py
     {
         vol.Required(ATTR_MODE): vol.In(
@@ -3289,7 +3290,7 @@ MIN_DIFFERENTIAL: Final[float] = 1
 MAX_DIFFERENTIAL: Final[float] = 10
 
 SVC_SET_DHW_PARAMS: Final = "set_dhw_params"
-SCH_SET_DHW_PARAMS = cv.make_entity_service_schema(
+SCH_SET_DHW_PARAMS = make_entity_service_schema(
     {
         vol.Optional(ATTR_SETPOINT, default=DEFAULT_DHW_SETPOINT): vol.All(
             cv.positive_float,
@@ -3306,7 +3307,7 @@ SCH_SET_DHW_PARAMS = cv.make_entity_service_schema(
 )
 
 SVC_SET_DHW_SCHEDULE: Final = "set_dhw_schedule"
-SCH_SET_DHW_SCHEDULE = cv.make_entity_service_schema(
+SCH_SET_DHW_SCHEDULE = make_entity_service_schema(
     {
         vol.Required(ATTR_SCHEDULE): vol.Any(cv.string, dict, list),
     }
@@ -3336,7 +3337,7 @@ MIN_TIMEOUT: Final[int] = 30
 MAX_TIMEOUT: Final[int] = 300
 
 SVC_LEARN_COMMAND: Final = "learn_command"
-SCH_LEARN_COMMAND = cv.make_entity_service_schema(
+SCH_LEARN_COMMAND = make_entity_service_schema(
     {
         vol.Required(ATTR_COMMAND): cv.string,
         vol.Required(ATTR_TIMEOUT, default=DEFAULT_TIMEOUT): vol.All(
@@ -3349,7 +3350,7 @@ SCH_LEARN_COMMAND = cv.make_entity_service_schema(
 
 # add_command (inject a packet without RF learning loop)
 SVC_ADD_COMMAND: Final = "add_command"
-SCH_ADD_COMMAND = cv.make_entity_service_schema(
+SCH_ADD_COMMAND = make_entity_service_schema(
     {
         vol.Required(ATTR_COMMAND): cv.string,
         vol.Required("packet_string"): cv.string,
@@ -3357,7 +3358,7 @@ SCH_ADD_COMMAND = cv.make_entity_service_schema(
 )
 
 SVC_SEND_COMMAND: Final = "send_command"
-SCH_SEND_COMMAND = cv.make_entity_service_schema(
+SCH_SEND_COMMAND = make_entity_service_schema(
     {
         vol.Required(ATTR_COMMAND): cv.string,
         vol.Required(ATTR_NUM_REPEATS, default=3): vol.All(
@@ -3372,7 +3373,7 @@ SCH_SEND_COMMAND = cv.make_entity_service_schema(
 )
 
 SVC_DELETE_COMMAND: Final = "delete_command"
-SCH_DELETE_COMMAND = cv.make_entity_service_schema(
+SCH_DELETE_COMMAND = make_entity_service_schema(
     {
         vol.Required(ATTR_COMMAND): cv.string,
     },
