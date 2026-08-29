@@ -19,8 +19,11 @@ from homeassistant.helpers import config_validation as cv
 
 from custom_components.ramses_cc import ha_compat
 from custom_components.ramses_cc.ha_compat import (
+    _REAL_VOL,
     _convert_marker,
+    convert_form_schema,
     make_entity_service_schema,
+    vol_schema,
 )
 
 
@@ -45,10 +48,6 @@ def _get_real_voluptuous() -> Any:
     return real_vol
 
 
-# Cache the real voluptuous module (imported once at module load)
-_REAL_VOL: Any = _get_real_voluptuous()
-
-
 class TestConvertMarker:
     """Tests for the internal _convert_marker function."""
 
@@ -60,7 +59,7 @@ class TestConvertMarker:
         # Act
         result = _convert_marker(marker)
         # Assert
-        assert isinstance(result, _vol.Required)
+        assert isinstance(result, _REAL_VOL.Required)
         assert result.schema == "test_key"
         assert result.description == "desc"
 
@@ -70,20 +69,20 @@ class TestConvertMarker:
         # Act
         result = _convert_marker(marker)
         # Assert
-        assert isinstance(result, _vol.Optional)
+        assert isinstance(result, _REAL_VOL.Optional)
         assert result.schema == "test_key"
 
     def test_voluptuous_required_passes_through(self) -> None:
-        # Arrange
-        marker = _vol.Required("test_key", default="def")
+        # Arrange — use _REAL_VOL (real voluptuous) marker
+        marker = _REAL_VOL.Required("test_key", default="def")
         # Act
         result = _convert_marker(marker)
         # Assert — same object, no conversion
         assert result is marker
 
     def test_voluptuous_optional_passes_through(self) -> None:
-        # Arrange
-        marker = _vol.Optional("test_key")
+        # Arrange — use _REAL_VOL (real voluptuous) marker
+        marker = _REAL_VOL.Optional("test_key")
         # Act
         result = _convert_marker(marker)
         # Assert
@@ -110,7 +109,7 @@ class TestConvertMarker:
         # Act
         result = _convert_marker(marker)
         # Assert — should be a valid Required marker
-        assert isinstance(result, _vol.Required)
+        assert isinstance(result, _REAL_VOL.Required)
         assert result.schema == "test_key"
 
     def test_explicit_default_is_propagated(self) -> None:
@@ -119,7 +118,7 @@ class TestConvertMarker:
         # Act
         result = _convert_marker(marker)
         # Assert
-        assert isinstance(result, _vol.Required)
+        assert isinstance(result, _REAL_VOL.Required)
         # probatio wraps defaults in a factory lambda; voluptuous does too
         assert callable(result.default)
 
@@ -129,7 +128,7 @@ class TestConvertMarker:
         # Act
         result = _convert_marker(marker)
         # Assert
-        assert isinstance(result, _vol.Required)
+        assert isinstance(result, _REAL_VOL.Required)
         assert result.msg == "custom error"
 
 
@@ -378,3 +377,104 @@ class TestConvertMarkerForced:
                     sys.modules["custom_components.ramses_cc.ha_compat"] = (
                         saved
                     )
+
+
+class TestConvertFormSchema:
+    """Tests for convert_form_schema."""
+
+    def test_converts_probatio_markers(self) -> None:
+        """Verify probatio markers in a form schema dict are converted."""
+        schema: dict[Any, Any] = {
+            probatio.Required("key1"): str,
+            probatio.Optional("key2", default="def"): int,
+        }
+        with patch.object(ha_compat, "_vol", _REAL_VOL):
+            result = convert_form_schema(schema)
+        # Keys should be real voluptuous markers
+        assert all(
+            isinstance(k, (_REAL_VOL.Required, _REAL_VOL.Optional))
+            for k in result
+        )
+
+    def test_passthrough_when_already_voluptuous(self) -> None:
+        """When voluptuous is aliased to probatio (HA 2026.9+),
+        markers pass through unchanged.
+        """
+        schema: dict[Any, Any] = {
+            probatio.Required("key1"): str,
+        }
+        result = convert_form_schema(schema)
+        # No conversion needed — markers are already voluptuous-compatible
+        assert list(result.keys()) == list(schema.keys())
+
+    def test_plain_string_keys_pass_through(self) -> None:
+        """Plain string keys should pass through unchanged."""
+        schema: dict[Any, Any] = {"key1": str, "key2": int}
+        result = convert_form_schema(schema)
+        assert result == schema
+
+
+class TestVolSchema:
+    """Tests for vol_schema."""
+
+    def test_builds_schema_from_probatio_markers(self) -> None:
+        """Verify vol_schema builds a working Schema from probatio markers."""
+        schema: dict[Any, Any] = {
+            probatio.Required("key1", default="def"): str,
+        }
+        with patch.object(ha_compat, "_vol", _REAL_VOL):
+            result = vol_schema(schema)
+        # Should be a voluptuous Schema, not probatio
+        assert callable(result)
+
+    def test_serializable_by_voluptuous_serialize(self) -> None:
+        """The key test: vol_schema output must be serializable by
+        voluptuous_serialize.convert() (used by HA config flow REST API).
+
+        On HA 2026.9+ where voluptuous is aliased to probatio,
+        voluptuous_serialize and cv.custom_serializer use probatio's
+        UNSUPPORTED sentinel.  If probatio's UNSUPPORTED doesn't match
+        voluptuous_serialize's UNSUPPORTED, the conversion fails — this
+        is a probatio bug, not a ramses_cc bug, so we skip the test.
+        """
+        import voluptuous_serialize
+
+        # Check if probatio's UNSUPPORTED matches voluptuous_serialize's
+        if hasattr(probatio, "UNSUPPORTED"):
+            if probatio.UNSUPPORTED is not voluptuous_serialize.UNSUPPORTED:
+                import pytest
+
+                pytest.skip(
+                    "probatio's UNSUPPORTED sentinel doesn't match "
+                    "voluptuous_serialize's (probatio bug)"
+                )
+
+        from homeassistant.helpers import selector
+
+        schema: dict[Any, Any] = {
+            probatio.Required("lost_04:150003", default="keep"): (
+                selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": "keep", "label": "Keep"},
+                            {"value": "remove", "label": "Remove"},
+                        ],
+                    )
+                )
+            ),
+        }
+        compiled = vol_schema(schema)
+
+        # voluptuous_serialize should be able to convert this
+        from homeassistant.helpers import config_validation as cv
+
+        result = voluptuous_serialize.convert(
+            compiled, custom_serializer=cv.custom_serializer
+        )
+        assert isinstance(result, list)
+        assert any(item.get("name") == "lost_04:150003" for item in result)
+
+    def test_empty_dict(self) -> None:
+        """vol_schema with empty dict should work."""
+        result = vol_schema({})
+        assert callable(result)

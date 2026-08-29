@@ -20,6 +20,8 @@ imports ``voluptuous`` or ``probatio`` as ``vol``.
 
 from __future__ import annotations
 
+import importlib
+import sys
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as _vol  # real voluptuous (or probatio if aliased by HA 2026.9+)
@@ -38,6 +40,40 @@ except ImportError:  # probatio not installed (pre-2026.9 HA Core without it)
     _PROBATIO_UNDEFINED = object()  # unique sentinel, never matched
 
 
+def _get_real_voluptuous() -> Any:
+    """Return the real voluptuous module, bypassing the probatio alias.
+
+    HA 2026.9+ calls ``install_as_voluptuous()`` which replaces
+    ``sys.modules['voluptuous']`` with probatio.  ``voluptuous_serialize``
+    (used by HA's config flow REST API) only recognises real voluptuous
+    ``Schema`` objects, so form schemas must be built with real
+    voluptuous — not the probatio alias.
+
+    On pre-2026.9 HA (no aliasing), ``_vol`` is already real voluptuous
+    and this function returns the same module.
+    """
+    # If _vol is already real voluptuous (not probatio), return it.
+    if (
+        not hasattr(_vol, "UNDEFINED") or _vol.__name__ == "voluptuous"
+    ):  # pragma: no cover
+        return _vol
+
+    # _vol is probatio — temporarily remove the alias and import real voluptuous.
+    saved: dict[str, Any] = {}
+    for key in list(sys.modules):
+        if key == "voluptuous" or key.startswith("voluptuous."):
+            saved[key] = sys.modules.pop(key)
+    try:
+        return importlib.import_module("voluptuous")
+    finally:
+        sys.modules.update(saved)
+
+
+# Real voluptuous module (resolved once at import time).
+# On HA 2026.9+ this is the actual voluptuous, not the probatio alias.
+_REAL_VOL: Any = _get_real_voluptuous()
+
+
 def _convert_marker(marker: Any) -> Any:
     """Convert a probatio Required/Optional marker to a voluptuous marker.
 
@@ -53,7 +89,7 @@ def _convert_marker(marker: Any) -> Any:
     # Already a voluptuous marker — no conversion needed.  On HA 2026.9+
     # voluptuous IS probatio (via install_as_voluptuous), so probatio
     # markers pass this check too.
-    if isinstance(marker, (_vol.Required, _vol.Optional)):
+    if isinstance(marker, (_REAL_VOL.Required, _REAL_VOL.Optional)):
         return marker
 
     cls_name = type(marker).__name__
@@ -73,13 +109,64 @@ def _convert_marker(marker: Any) -> Any:
         kwargs["msg"] = msg
 
     if cls_name == "Required":
-        return _vol.Required(marker.schema, **kwargs)
-    return _vol.Optional(marker.schema, **kwargs)
+        return _REAL_VOL.Required(marker.schema, **kwargs)
+    return _REAL_VOL.Optional(marker.schema, **kwargs)
 
 
 def _is_undefined(value: Any) -> bool:
     """Check whether *value* is a probatio UNDEFINED sentinel."""
     return value is _PROBATIO_UNDEFINED
+
+
+def convert_form_schema(schema: dict[Any, Any]) -> dict[Any, Any]:
+    """Convert probatio markers in a form schema dict to voluptuous markers.
+
+    HA's config flow framework calls ``voluptuous_serialize.convert()`` on
+    the ``data_schema`` passed to ``async_show_form()``.  If the schema
+    dict has probatio ``Required``/``Optional`` markers as keys,
+    ``voluptuous_serialize`` (which uses real voluptuous) cannot recognise
+    them and raises ``ValueError: Unable to convert schema``.
+
+    This function walks the dict keys and converts any probatio markers
+    to their voluptuous equivalents.  On HA 2026.9+ (where voluptuous is
+    aliased to probatio) the conversion is a no-op.
+
+    :param schema: Form schema dict, possibly with probatio markers.
+    :type schema: dict[Any, Any]
+    :returns: A new dict with voluptuous-compatible markers.
+    :rtype: dict[Any, Any]
+    """
+    return {_convert_marker(key): value for key, value in schema.items()}
+
+
+def vol_schema(schema: dict[Any, Any], *, extra: int = 0) -> Any:
+    """Build a schema from a dict that may contain probatio markers.
+
+    This is a drop-in replacement for ``vol.Schema(schema)`` when *schema*
+    may contain probatio ``Required``/``Optional`` markers as keys.
+
+    HA's config flow framework calls ``voluptuous_serialize.convert()`` on
+    the ``data_schema`` passed to ``async_show_form()``.  On HA 2026.9+
+    (where voluptuous is aliased to probatio), ``voluptuous_serialize``
+    checks ``isinstance(schema, vol.Schema)`` using probatio's ``Schema``,
+    so the compiled schema must be a probatio ``Schema`` — not a real
+    voluptuous ``Schema``.
+
+    The probatio markers are preserved as-is (they are already compatible
+    with ``voluptuous_serialize`` which uses probatio's ``vol.Marker``).
+
+    On pre-2026.9 HA (no aliasing), ``_vol`` is already real voluptuous
+    and markers pass through unchanged.
+
+    :param schema: Schema dict, possibly with probatio markers.
+    :type schema: dict[Any, Any]
+    :param extra: Voluptuous extra-keys policy (default: 0 = ALLOW_EXTRA).
+    :type extra: int
+    :returns: A compiled Schema (probatio or voluptuous, depending on HA).
+    :rtype: Any
+    """
+    converted = convert_form_schema(schema)
+    return _vol.Schema(converted, extra=extra)
 
 
 def make_entity_service_schema(

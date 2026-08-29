@@ -78,6 +78,7 @@ from .const import (
     SZ_TR_OWNER,
     SZ_TR_SKIPPED,
 )
+from .ha_compat import vol_schema
 from .schemas import migrate_known_list_traits, order_schema
 
 _LOGGER = logging.getLogger(__name__)
@@ -443,7 +444,7 @@ class BaseRamsesFlow:
 
         return self.async_show_form(
             step_id="choose_serial_port",
-            data_schema=vol.Schema(data_schema),
+            data_schema=vol_schema(data_schema),
             errors=errors,
             last_step=False,
         )
@@ -537,7 +538,7 @@ class BaseRamsesFlow:
 
         return self.async_show_form(
             step_id="mqtt_config",
-            data_schema=vol.Schema(data_schema),
+            data_schema=vol_schema(data_schema),
             errors={},
             last_step=False,
         )
@@ -563,7 +564,7 @@ class BaseRamsesFlow:
                 if not isinstance(device_id, str):
                     return self.async_show_form(
                         step_id="zigbee_device",
-                        data_schema=vol.Schema(
+                        data_schema=vol_schema(
                             {vol.Required("device"): selector.DeviceSelector()}
                         ),
                         errors={"device": "invalid_device"},
@@ -575,7 +576,7 @@ class BaseRamsesFlow:
                 if not device_entry:
                     return self.async_show_form(
                         step_id="zigbee_device",
-                        data_schema=vol.Schema(
+                        data_schema=vol_schema(
                             {vol.Required("device"): selector.DeviceSelector()}
                         ),
                         errors={"device": "device_not_found"},
@@ -587,7 +588,7 @@ class BaseRamsesFlow:
                 if not ieee:
                     return self.async_show_form(
                         step_id="zigbee_device",
-                        data_schema=vol.Schema(
+                        data_schema=vol_schema(
                             {vol.Required("device"): selector.DeviceSelector()}
                         ),
                         errors={"device": "no_ieee_identifier"},
@@ -615,7 +616,7 @@ class BaseRamsesFlow:
             if len(matches) == 0:
                 return self.async_show_form(
                     step_id="zigbee_device",
-                    data_schema=vol.Schema(
+                    data_schema=vol_schema(
                         {
                             vol.Required(
                                 "retry", default=False
@@ -633,7 +634,7 @@ class BaseRamsesFlow:
                 if not ieee:
                     return self.async_show_form(
                         step_id="zigbee_device",
-                        data_schema=vol.Schema(
+                        data_schema=vol_schema(
                             {
                                 vol.Required(
                                     "retry", default=False
@@ -665,7 +666,7 @@ class BaseRamsesFlow:
             ]
             return self.async_show_form(
                 step_id="zigbee_device",
-                data_schema=vol.Schema(
+                data_schema=vol_schema(
                     {
                         vol.Required("device"): selector.SelectSelector(
                             selector.SelectSelectorConfig(options=options)
@@ -758,7 +759,7 @@ class BaseRamsesFlow:
 
         return self.async_show_form(
             step_id="configure_serial_port",
-            data_schema=vol.Schema(data_schema),
+            data_schema=vol_schema(data_schema),
             description_placeholders=description_placeholders,
             errors=errors,
             last_step=not self._initial_setup,
@@ -925,7 +926,7 @@ class BaseRamsesFlow:
 
         return self.async_show_form(
             step_id="config",
-            data_schema=vol.Schema(data_schema),
+            data_schema=vol_schema(data_schema),
             description_placeholders=description_placeholders,
             errors=errors,
             last_step=not self._initial_setup,
@@ -1180,7 +1181,7 @@ class BaseRamsesFlow:
 
         return self.async_show_form(
             step_id="schema",
-            data_schema=vol.Schema(
+            data_schema=vol_schema(
                 # cv.deprecated(
                 #     "sqlite_index", raise_if_present=False
                 # ),  # Deprecated Q3 2026
@@ -1271,7 +1272,7 @@ class BaseRamsesFlow:
 
         return self.async_show_form(
             step_id="advanced_features",
-            data_schema=vol.Schema(data_schema),
+            data_schema=vol_schema(data_schema),
             description_placeholders=description_placeholders,
             errors=errors,
             last_step=not self._initial_setup,
@@ -1415,7 +1416,7 @@ class BaseRamsesFlow:
 
         return self.async_show_form(
             step_id="packet_log",
-            data_schema=vol.Schema(
+            data_schema=vol_schema(
                 # cv.deprecated(
                 #     "file_name", raise_if_present=False
                 # ),  # Deprecated Q3 2026
@@ -2349,7 +2350,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
         return self.async_show_form(
             step_id="review_discovered",
-            data_schema=vol.Schema(form_fields),
+            data_schema=vol_schema(form_fields),
             description_placeholders={"message": summary},
             last_step=True,
         )
@@ -2677,7 +2678,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
         return self.async_show_form(
             step_id="review_device_health",
-            data_schema=vol.Schema(form_fields),
+            data_schema=vol_schema(form_fields),
             description_placeholders={"message": summary},
             last_step=True,
         )
@@ -2861,5 +2862,5 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
         return self.async_show_form(
             step_id="clear_cache",
-            data_schema=vol.Schema(data_schema),
+            data_schema=vol_schema(data_schema),
         )
