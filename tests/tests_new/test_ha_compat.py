@@ -8,16 +8,45 @@ that ``cv.make_entity_service_schema`` accepts them on HA pre-2026.9
 
 from __future__ import annotations
 
+import importlib
+import sys
 from typing import Any
+from unittest.mock import patch
 
 import probatio
 import voluptuous as _vol
 from homeassistant.helpers import config_validation as cv
 
+from custom_components.ramses_cc import ha_compat
 from custom_components.ramses_cc.ha_compat import (
     _convert_marker,
     make_entity_service_schema,
 )
+
+
+def _get_real_voluptuous() -> Any:
+    """Get the real voluptuous module (not the probatio alias).
+
+    HA 2026.9+ calls ``install_as_voluptuous()`` which replaces
+    ``sys.modules['voluptuous']`` with probatio.  We can still access
+    the real voluptuous by temporarily removing the alias and
+    importing the real module.
+    """
+    # Save and remove the current alias + all submodules
+    saved: dict[str, Any] = {}
+    for key in list(sys.modules):
+        if key == "voluptuous" or key.startswith("voluptuous."):
+            saved[key] = sys.modules.pop(key)
+    try:
+        real_vol = importlib.import_module("voluptuous")
+    finally:
+        # Restore the alias
+        sys.modules.update(saved)
+    return real_vol
+
+
+# Cache the real voluptuous module (imported once at module load)
+_REAL_VOL: Any = _get_real_voluptuous()
 
 
 class TestConvertMarker:
@@ -219,3 +248,133 @@ class TestMakeEntityServiceSchema:
             )
         except Exception:
             pass  # Expected — the bug we're fixing
+
+
+class TestConvertMarkerForced:
+    """Tests that force the conversion path by patching ha_compat._vol
+    to the real voluptuous module (not the probatio alias).
+
+    On HA 2026.9+ ``install_as_voluptuous()`` aliases voluptuous to
+    probatio, so ``_convert_marker`` sees probatio markers as already-
+    voluptuous and returns early.  These tests patch ``_vol`` to the
+    real voluptuous so the conversion logic (lines 59-77) is exercised.
+    """
+
+    def test_probatio_required_converts_with_real_voluptuous(self) -> None:
+        """Force conversion: patch _vol to real voluptuous, then verify
+        a probatio Required marker is converted to a real voluptuous
+        Required marker with default and description propagated.
+        """
+        marker = probatio.Required(
+            "test_key", default="def", description="desc"
+        )
+        with patch.object(ha_compat, "_vol", _REAL_VOL):
+            result = _convert_marker(marker)
+        # Assert — should be a REAL voluptuous Required, not probatio
+        assert isinstance(result, _REAL_VOL.Required)
+        assert not isinstance(result, probatio.Required)
+        assert result.schema == "test_key"
+        assert result.description == "desc"
+
+    def test_probatio_optional_converts_with_real_voluptuous(self) -> None:
+        """Force conversion: patch _vol to real voluptuous, then verify
+        a probatio Optional marker is converted to a real voluptuous
+        Optional marker.
+        """
+        marker = probatio.Optional("test_key", default=42)
+        with patch.object(ha_compat, "_vol", _REAL_VOL):
+            result = _convert_marker(marker)
+        assert isinstance(result, _REAL_VOL.Optional)
+        assert not isinstance(result, probatio.Optional)
+        assert result.schema == "test_key"
+
+    def test_undefined_default_not_passed_to_voluptuous(self) -> None:
+        """When probatio marker has no default (UNDEFINED), the
+        converted voluptuous marker should not receive a default kwarg.
+        """
+        marker = probatio.Required("test_key")  # no default
+        with patch.object(ha_compat, "_vol", _REAL_VOL):
+            result = _convert_marker(marker)
+        assert isinstance(result, _REAL_VOL.Required)
+        # voluptuous uses Ellipsis as its "no default" sentinel
+        assert (
+            result.default is _REAL_VOL.UNDEFINED or result.default is Ellipsis
+        )
+
+    def test_msg_propagated_to_real_voluptuous(self) -> None:
+        """Verify msg kwarg is propagated during forced conversion."""
+        marker = probatio.Required("test_key", msg="custom error")
+        with patch.object(ha_compat, "_vol", _REAL_VOL):
+            result = _convert_marker(marker)
+        assert isinstance(result, _REAL_VOL.Required)
+        assert result.msg == "custom error"
+
+    def test_description_propagated_to_real_voluptuous(self) -> None:
+        """Verify description kwarg is propagated during forced conversion."""
+        marker = probatio.Optional("test_key", description="my desc")
+        with patch.object(ha_compat, "_vol", _REAL_VOL):
+            result = _convert_marker(marker)
+        assert isinstance(result, _REAL_VOL.Optional)
+        assert result.description == "my desc"
+
+    def test_is_undefined_with_real_sentinel(self) -> None:
+        """Verify _is_undefined returns True for probatio's UNDEFINED
+        and False for other values.
+        """
+        from custom_components.ramses_cc.ha_compat import _is_undefined
+
+        assert _is_undefined(probatio.UNDEFINED) is True
+        assert _is_undefined(None) is False
+        assert _is_undefined("something") is False
+
+    def test_make_entity_service_schema_with_forced_conversion(self) -> None:
+        """End-to-end: patch _vol to real voluptuous and verify
+        make_entity_service_schema still works with probatio markers.
+        """
+        schema: dict[Any, Any] = {
+            probatio.Required("temperature"): probatio.All(
+                probatio.Coerce(float), probatio.Range(min=0, max=99)
+            ),
+            probatio.Optional("duration", default=30): probatio.All(
+                probatio.Coerce(int), probatio.Range(min=1, max=1440)
+            ),
+        }
+        with patch.object(ha_compat, "_vol", _REAL_VOL):
+            result = make_entity_service_schema(
+                schema, extra=probatio.PREVENT_EXTRA
+            )
+        assert result is not None
+
+    def test_import_error_fallback_sentinel(self) -> None:
+        """Verify the ImportError fallback for _PROBATIO_UNDEFINED.
+
+        When probatio is not installed, ``_PROBATIO_UNDEFINED`` should
+        be a unique sentinel object.  We simulate this by reloading
+        ha_compat with probatio blocked from import.
+        """
+        import builtins
+
+        original_import = builtins.__import__
+
+        def _blocked_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "probatio":
+                raise ImportError("blocked for test")
+            return original_import(name, *args, **kwargs)
+
+        with patch.object(builtins, "__import__", _blocked_import):
+            # Force reimport of ha_compat with probatio blocked
+            saved = sys.modules.pop(
+                "custom_components.ramses_cc.ha_compat", None
+            )
+            try:
+                reloaded = importlib.import_module(
+                    "custom_components.ramses_cc.ha_compat"
+                )
+                # The fallback sentinel should be a plain object
+                assert reloaded._PROBATIO_UNDEFINED is not probatio.UNDEFINED
+                assert isinstance(reloaded._PROBATIO_UNDEFINED, object)
+            finally:
+                if saved is not None:
+                    sys.modules["custom_components.ramses_cc.ha_compat"] = (
+                        saved
+                    )
