@@ -27,7 +27,10 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.device_registry import ChildDeviceInfo, DeviceInfo
+from homeassistant.helpers.device_registry import (
+    ChildDeviceInfo,
+    DeviceInfo,
+)
 from homeassistant.helpers.dispatcher import (
     async_dispatcher_connect,
     async_dispatcher_send,
@@ -2606,23 +2609,26 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if suggested_area is not None:
             kwargs["suggested_area"] = suggested_area
         if parent_device_id is not None:
-            parent = device_registry.async_get_device_by_identifier(
-                (DOMAIN, parent_device_id), self.entry.entry_id
-            )
-            if parent is None:
+            # parent must exist
+            parent = device_registry.async_get(parent_device_id)
+            if parent not in device_registry.devices:
                 _LOGGER.warning(
                     "Parent %s does not exist. Must create it first",
                     parent_device_id,
                 )
-                # create parent first
-                await self._async_create_device(parent_device_id, None, None)
-            elif (
-                parent.__class__ == ChildDeviceInfo
-            ):  # children can't be nested
+                # update/create parent first
+                await self._async_update_device_info(
+                    parent_device_id, None, None
+                )
+
+            # children can't be nested
+            if parent in device_registry.child_devices:
                 _LOGGER.warning(
                     "Parent %s is itself a Child, can't nest", parent_device_id
                 )
                 return
+
+            # update Info attr
             kwargs["parent_device_id"] = parent_device_id
             if (
                 isinstance(device, UfhCircuit)
@@ -2646,9 +2652,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 config_entry_id=self.entry.entry_id, **device_info
             )
         else:
-            await self._async_create_device(device.id, device_name, model)
+            await self._async_update_device_info(device.id, device_name, model)
 
-    async def _async_create_device(
+    async def _async_update_device_info(
         self,
         dev_id: str,
         dev_name: str | None,
