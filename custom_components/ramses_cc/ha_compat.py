@@ -145,28 +145,33 @@ def vol_schema(schema: dict[Any, Any], *, extra: int = 0) -> Any:
     This is a drop-in replacement for ``vol.Schema(schema)`` when *schema*
     may contain probatio ``Required``/``Optional`` markers as keys.
 
-    HA's config flow framework calls ``voluptuous_serialize.convert()`` on
-    the ``data_schema`` passed to ``async_show_form()``.  On HA 2026.9+
-    (where voluptuous is aliased to probatio), ``voluptuous_serialize``
-    checks ``isinstance(schema, vol.Schema)`` using probatio's ``Schema``,
-    so the compiled schema must be a probatio ``Schema`` — not a real
-    voluptuous ``Schema``.
+    HA's config flow framework serialises the ``data_schema`` passed to
+    ``async_show_form()`` via ``voluptuous_serialize.convert()``, which
+    uses **real voluptuous** markers.  It also validates user input by
+    calling ``data_schema(user_input)``.
 
-    The probatio markers are preserved as-is (they are already compatible
-    with ``voluptuous_serialize`` which uses probatio's ``vol.Marker``).
+    Two scenarios:
 
-    On pre-2026.9 HA (no aliasing), ``_vol`` is already real voluptuous
-    and markers pass through unchanged.
+    - **HA 2026.9+** (``install_as_voluptuous`` active): ``_vol`` is
+      probatio, ``_REAL_VOL`` is real voluptuous.  Probatio markers are
+      NOT instances of real voluptuous markers, so
+      ``voluptuous_serialize`` cannot serialise them.  We convert them
+      to real voluptuous markers and build a **real voluptuous Schema**
+      so both serialisation and validation work.
+
+    - **Pre-2026.9 HA** (no aliasing): ``_vol`` is already real
+      voluptuous, so ``_vol is _REAL_VOL`` and conversion is a no-op.
+      We build a real voluptuous Schema (same as before).
 
     :param schema: Schema dict, possibly with probatio markers.
     :type schema: dict[Any, Any]
     :param extra: Voluptuous extra-keys policy (default: 0 = ALLOW_EXTRA).
     :type extra: int
-    :returns: A compiled Schema (probatio or voluptuous, depending on HA).
+    :returns: A real voluptuous Schema with voluptuous-compatible markers.
     :rtype: Any
     """
     converted = convert_form_schema(schema)
-    return _vol.Schema(converted, extra=extra)
+    return _REAL_VOL.Schema(converted, extra=extra)
 
 
 def make_entity_service_schema(

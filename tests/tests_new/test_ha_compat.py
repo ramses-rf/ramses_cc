@@ -27,27 +27,6 @@ from custom_components.ramses_cc.ha_compat import (
 )
 
 
-def _get_real_voluptuous() -> Any:
-    """Get the real voluptuous module (not the probatio alias).
-
-    HA 2026.9+ calls ``install_as_voluptuous()`` which replaces
-    ``sys.modules['voluptuous']`` with probatio.  We can still access
-    the real voluptuous by temporarily removing the alias and
-    importing the real module.
-    """
-    # Save and remove the current alias + all submodules
-    saved: dict[str, Any] = {}
-    for key in list(sys.modules):
-        if key == "voluptuous" or key.startswith("voluptuous."):
-            saved[key] = sys.modules.pop(key)
-    try:
-        real_vol = importlib.import_module("voluptuous")
-    finally:
-        # Restore the alias
-        sys.modules.update(saved)
-    return real_vol
-
-
 class TestConvertMarker:
     """Tests for the internal _convert_marker function."""
 
@@ -437,7 +416,12 @@ class TestVolSchema:
         voluptuous_serialize's UNSUPPORTED, the conversion fails — this
         is a probatio bug, not a ramses_cc bug, so we skip the test.
         """
-        import voluptuous_serialize
+        try:
+            import voluptuous_serialize  # type: ignore[import-not-found]
+        except ModuleNotFoundError:
+            import pytest
+
+            pytest.skip("voluptuous_serialize not installed")
 
         # Check if probatio's UNSUPPORTED matches voluptuous_serialize's
         if hasattr(probatio, "UNSUPPORTED"):
