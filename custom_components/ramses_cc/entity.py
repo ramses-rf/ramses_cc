@@ -74,7 +74,7 @@ class RamsesEntity(CoordinatorEntity):
         self.entity_description = entity_description
 
         self._attr_unique_id = device.id
-        # basic device_info, TODO use ChildDeviceInfo if applicable
+        # base DeviceInfo TODO use ChildDeviceInfo if applicable
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, device.id)})
         self._update_lock = asyncio.Lock()
         self._dropped_updates: int = 0

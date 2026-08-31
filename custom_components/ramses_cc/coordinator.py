@@ -2570,9 +2570,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         device_registry = dr.async_get(self.hass)
 
-        parent_device_id: tuple[str, str] | None = None
+        parent_device_id: str | None = None
         if isinstance(device, Zone) and device.tcs:
-            _LOGGER.info("ZONE %s parent_device_id SET to %s", model, device.tcs.id)
+            _LOGGER.info(
+                "ZONE %s parent_device_id SET to %s", model, device.tcs.id
+            )
             parent_device_id = str(device.tcs.id)
         elif isinstance(device, UfhCircuit) and device.ufc:
             ufc_id = str(device.ufc.id)
@@ -2611,7 +2613,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if parent_device_id is not None:
             # parent must exist
             parent = device_registry.async_get(parent_device_id)
-            if parent not in device_registry.devices:
+            if parent is None:
                 _LOGGER.warning(
                     "Parent %s does not exist. Must create it first",
                     parent_device_id,
@@ -2622,7 +2624,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 )
 
             # children can't be nested
-            if parent in device_registry.child_devices:
+            elif parent in device_registry.child_devices:
                 _LOGGER.warning(
                     "Parent %s is itself a Child, can't nest", parent_device_id
                 )
@@ -2637,13 +2639,13 @@ class RamsesCoordinator(DataUpdateCoordinator):
             ):
                 kwargs["parent_device_id"] = parent_device_id
 
-            kwargs["parent_device_id"] = parent_device_id
             device_info = ChildDeviceInfo(
                 identifiers={(DOMAIN, str(device.id))},
                 name=device_name,
                 **kwargs,
             )
             if self._device_info.get(str(device.id)) == device_info:
+                # already known and set
                 return
 
             self._device_info[str(device.id)] = device_info
@@ -2659,7 +2661,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         dev_id: str,
         dev_name: str | None,
         dev_model: str | None,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ) -> None:
 
         device_info = DeviceInfo(
@@ -2672,6 +2674,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         )
 
         if self._device_info.get(str(dev_id)) == device_info:
+            # already known and set
             return
 
         self._device_info[str(dev_id)] = device_info
