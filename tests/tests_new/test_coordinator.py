@@ -258,7 +258,7 @@ async def test_update_device_relationships(
 
     # We patch the class in the BROKER module so it checks against our dummy
     with patch("custom_components.ramses_cc.coordinator.Zone", DummyZone):
-        # 1. Test Zone with TCS (hits parent_device logic for Zones)
+        # 1. Test Zone with TCS (hits parent_device_id logic for Zones)
         mock_zone = MagicMock(spec=DummyZone)
         mock_zone.id = "04:123456"
         mock_zone.tcs = MagicMock()
@@ -6461,7 +6461,7 @@ async def test_async_update_device_ufh_circuit_metadata_and_parent(
     assert dev_info is not None
     assert dev_info["name"] == "UFH Circuit 02:123456_00"
     assert dev_info["model"] == "UFH Circuit 00"
-    assert dev_info["via_device"] == (DOMAIN, "02:123456")
+    assert dev_info["parent_device_id"] == "02:123456"
     assert dev_info.get("parent_device") is None
     assert dev_info.get("suggested_area") == "Kitchen Diner"
 
@@ -6498,5 +6498,4 @@ async def test_async_update_device_ufh_circuit_future_parent_device(
     # Assert
     dev_info = mock_coordinator._device_info.get("02:123456_00")
     assert dev_info is not None
-    assert dev_info["via_device"] == (DOMAIN, "02:123456")
-    assert dev_info.get("parent_device") == (DOMAIN, "02:123456")
+    assert dev_info.get("parent_device_id") == "02:123456"
