@@ -67,32 +67,21 @@ def ha_device_id_to_ramses_device_id(
 
 
 def ramses_device_id_to_ha_device_id(
-    hass: HomeAssistant, ramses_device_id: str, entry_id: str | None = None
+    hass: HomeAssistant, ramses_device_id: str
 ) -> str | None:
     """Return a HA device registry id for a RAMSES device_id.
 
     :param hass: The Home Assistant instance.
     :param ramses_device_id: The RAMSES device ID (e.g., '01:123456').
-    :param entry_id: The entry ID (e.g., '1234567890').
     :return: The Home Assistant device registry ID or None if not found.
     """
     if not ramses_device_id:
         return None
 
     dev_reg = dr.async_get(hass)
-    if entry_id is None:  # TODO: remove Q2 2027
-        device_entry = dev_reg.async_get_device(
-            identifiers={(DOMAIN, ramses_device_id)}
-        )
-        # deprecated since 2026.6. Use single config entry.
-        _LOGGER.warning(
-            "dev_reg.async_get_device() is deprecated. Use async_get_device_by_identifier() instead"
-        )
-    else:
-        device_entry = dev_reg.async_get_device_by_identifier(
-            (DOMAIN, ramses_device_id), entry_id
-        )
-    # add entry to method args
+    device_entry = dev_reg.async_get_device(
+        identifiers={(DOMAIN, ramses_device_id)}
+    )
     if not device_entry:
         return None
 
