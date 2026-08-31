@@ -258,7 +258,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         self._platform_setup_tasks: dict[str, asyncio.Task[Any]] = {}
         self._entities: dict[str, RamsesEntity] = {}  # domain entities
-        self._device_info: dict[str, DeviceInfo] = {}
+        self._device_info: dict[str, DeviceInfo | ChildDeviceInfo] = {}
         self._disabled_device_ids: set[str] = (
             set()
         )  # _disabled devices (no entities)
@@ -2531,11 +2531,12 @@ class RamsesCoordinator(DataUpdateCoordinator):
             device_name = str(raw_name) if raw_name else None
 
         suggested_area: str | None = None
+        model: str | None = None
 
         # Fallback names if the device doesn't supply a valid one
         if isinstance(device, UfhCircuit):
             device_name = f"UFH Circuit {device.id}"
-            model: str | None = f"UFH Circuit {device.ufh_index}"
+            model = f"UFH Circuit {device.ufh_index}"  # not used for Child
             if device.zone and getattr(device.zone, SZ_NAME, None):
                 suggested_area = str(device.zone.name)
         elif not device_name:

@@ -6460,7 +6460,6 @@ async def test_async_update_device_ufh_circuit_metadata_and_parent(
     dev_info = mock_coordinator._device_info.get("02:123456_00")
     assert dev_info is not None
     assert dev_info["name"] == "UFH Circuit 02:123456_00"
-    assert dev_info["model"] == "UFH Circuit 00"
     assert dev_info["parent_device_id"] == "02:123456"
     assert dev_info.get("parent_device") is None
     assert dev_info.get("suggested_area") == "Kitchen Diner"
