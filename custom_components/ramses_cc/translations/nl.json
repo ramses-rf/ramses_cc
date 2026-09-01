@@ -17,7 +17,7 @@
         "step": {
             "init": {
                 "menu_options": {
-                    "choose_serial_port": "Seriële poort",
+                    "choose_serial_port": "Primaire poort",
                     "config": "Gateway-configuratie",
                     "schema": "Systeemschema",
                     "advanced_features": "Geavanceerde instellingen",
@@ -145,7 +145,8 @@
         "step": {
             "init": {
                 "menu_options": {
-                    "choose_serial_port": "Seriële poort",
+                    "choose_serial_port": "Primaire poort",
+                    "manage_pool": "Beheer gateway pool",
                     "config": "Gateway-configuratie",
                     "schema": "Systeemschema",
                     "advanced_features": "Geavanceerde opties",
@@ -255,11 +256,17 @@
                 "title": "Bekijk device-status",
                 "description": "{message}",
                 "data": {}
+            },
+            "manage_pool": {
+                "title": "Gateway Pool Beheer",
+                "description": "Primary port: {primary_port}\nCurrent additional ports: {current_count}",
+                "data": {
+                    "additional_ports": "Extra poorten"
+                }
             }
         }
     },
     "services": {
-
         "bind_device": {
             "name": "Koppel een apparaat",
             "description": "Koppel een apparaat aan een CH/DHW controller of aan een fan/WTW-eenheid. Het te koppelen apparaat is een sensor (bijv. temperatuur, relatieve vochtigheid, etc.) of een afstandsbediening (bijv. een 4-knops RF-schakelaar). En het moet vermeld staan in het `Systeemschema`, correct geconfigureerd met de juiste apparaat-klasse en met `faking` ingeschakeld.",
@@ -282,17 +289,14 @@
                 }
             }
         },
-
         "force_update": {
             "name": "Werk systeemstatus bij",
             "description": "Werk nu de systeemstatus bij i.p.v. wachten tot de eerstvolgende geplande update."
         },
-
         "sync_topology": {
             "name": "Synchroniseer geleerde topologie",
             "description": "Synchroniseer nu de geleerde topologie (zones, DHW, orphans) van ramses_rf terug naar de config entry, zonder te wachten op het 5-minuten interval."
         },
-
         "discover_known_devices": {
             "name": "Ontdek bekende apparaten",
             "description": "Stuur RQ discovery berichten vanuit de HGI naar apparaten in het Systeemschema die nog niet geregistreerd of nog niet gepromoveerd zijn naar hun verwachte klasse. Handig na cache wis of bij nieuwe installatie.",
@@ -313,7 +317,6 @@
                 }
             }
         },
-
         "get_discovered_devices": {
             "name": "Ontdekte apparaten ophalen",
             "description": "Haal de lijst op van apparaten die door de passieve scan zijn ontdekt, optioneel gefilterd op status of enabled-vlag. Vuurt een ramses_cc_discovered_devices event met de resultaten.",
@@ -328,7 +331,6 @@
                 }
             }
         },
-
         "accept_discovered_device": {
             "name": "Ontdekt apparaat accepteren",
             "description": "Accepteer een ontdekt apparaat en voeg het toe aan het schema. Het apparaat wordt aangemaakt bij de volgende discover_known_devices aanroep.",
@@ -347,7 +349,6 @@
                 }
             }
         },
-
         "discard_discovered_device": {
             "name": "Ontdekt apparaat afwijzen",
             "description": "Wijs een ontdekt apparaat af. Het blijft in de lijst voor spam-preventie maar wordt niet aangemaakt.",
@@ -358,7 +359,6 @@
                 }
             }
         },
-
         "remove_discovered_device": {
             "name": "Ontdekt apparaat verwijderen",
             "description": "Markeer een eerder geaccepteerd apparaat als verwijderd (het bestaat niet meer). Discovery-info wordt bewaard om hernotificatie te voorkomen.",
@@ -369,7 +369,6 @@
                 }
             }
         },
-
         "enable_discovered_device": {
             "name": "Ontdekt apparaat inschakelen",
             "description": "Schakel een uitgeschakeld of afgewezen apparaat in zonder de status te wijzigen.",
@@ -380,7 +379,6 @@
                 }
             }
         },
-
         "disable_discovered_device": {
             "name": "Ontdekt apparaat uitschakelen",
             "description": "Schakel een geaccepteerd apparaat tijdelijk uit (bijv. voor onderhoud) zonder de status te wijzigen.",
@@ -391,7 +389,6 @@
                 }
             }
         },
-
         "add_faked_rem": {
             "name": "Faked REM toevoegen",
             "description": "Maak een faked REM (virtuele afstandsbediening) aan voor het versturen van commando's naar een FAN. Geen RF-verkeer nodig.",
@@ -410,7 +407,6 @@
                 }
             }
         },
-
         "get_fan_clim_param": {
             "name": "Fan-parameter opvragen",
             "description": "Vraag de huidige waarde op van een specifieke instelling (2411) van een FAN-apparaat.",
@@ -425,18 +421,16 @@
                 }
             }
         },
-
         "get_fan_rem_param": {
             "name": "Fan-parameter opvragen via REM",
             "description": "Vraag de huidige waarde op van een specifieke instelling (2411) van een FAN-apparaat via de gekoppelde Remote.",
             "fields": {
                 "param_id": {
-                  "name": "Parameter-ID",
-                  "description": "De parameter (code) om op te vragen). Vul een geldige parameter ID in (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
+                    "name": "Parameter-ID",
+                    "description": "De parameter (code) om op te vragen). Vul een geldige parameter ID in (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
                 }
             }
         },
-
         "set_fan_clim_param": {
             "name": "Fan-parameter instellen",
             "description": "Stel de waarde van een specifieke instelling (2411) in op een FAN-apparaat.",
@@ -455,22 +449,20 @@
                 }
             }
         },
-
         "set_fan_rem_param": {
             "name": "Fan-parameter instellen via REM",
             "description": "Stel de waarde van een specifieke instelling (2411) in op een FAN-apparaatvia de gekoppelde Remote.",
             "fields": {
                 "param_id": {
-                  "name": "Parameter-ID",
-                  "description": "De parameter identifier om in te stellen. Vul een geldige parameter-ID in (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
+                    "name": "Parameter-ID",
+                    "description": "De parameter identifier om in te stellen. Vul een geldige parameter-ID in (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
                 },
                 "value": {
-                  "name": "Waarde",
-                  "description": "De in te stellen waarde voor deze parameter (bereik hangt af van parametertype). Voorbeelden: Sensorgevoeligheid (52): 0-25, Comforttemperatuur (75): 5-35°C, Fansnelheid (31): 0-100%"
+                    "name": "Waarde",
+                    "description": "De in te stellen waarde voor deze parameter (bereik hangt af van parametertype). Voorbeelden: Sensorgevoeligheid (52): 0-25, Comforttemperatuur (75): 5-35°C, Fansnelheid (31): 0-100%"
                 }
             }
         },
-
         "set_fan_param": {
             "name": "Fan-parameter instellen (apparaat)",
             "description": "Stel de waarde van een specifieke instelling (2411) in op een FAN-apparaat. Geef óf een RAMSES device_id (XX:XXXXXX) op, óf selecteer een apparaat in de UI.",
@@ -497,7 +489,6 @@
                 }
             }
         },
-
         "update_fan_params": {
             "name": "Fan-parameters bijwerken",
             "description": "Vraag alle beschikbare instellingen (2411) op van een FAN. Werkt alle parameter entiteiten bij voor het apparaat. Selecteer de FAN climate-entiteit als doel, of geef een RAMSES device_id (XX:XXXXXX) op.",
@@ -512,7 +503,6 @@
                 }
             }
         },
-
         "send_packet": {
             "name": "Verstuur een maatwerkbericht",
             "description": "Verstuur een op maat gemaakt RAMSES II commando-bericht (bytes) vanaf de gateway/dongel.",
@@ -539,7 +529,6 @@
                 }
             }
         },
-
         "get_system_faults": {
             "name": "Haal foutenlog van een TCS (Controller) op",
             "description": "Verzamelt het meest recente foutenlog van een Controller.",
@@ -550,12 +539,10 @@
                 }
             }
         },
-
         "reset_system_mode": {
             "name": "Reset TCS (Controller)",
             "description": "Het systeem gaat in `Auto` modus en alle zones gaan naar `follow_schedule` modus, incl. (voor zover ondersteund) zones die nu in `permanent_override` modus staan."
         },
-
         "set_system_mode": {
             "name": "Stel modus van een TCS (Controller) in",
             "description": "Het systeem gaat in de nieuwe modus en alle zones die nu niet in `permanent_override` modus staan worden aangepast. Sommige modi bevatten de optie om een periode (dagen), of een duur (uren/minuten) mee te geven.",
@@ -574,27 +561,22 @@
                 }
             }
         },
-
         "get_zone_schedule": {
             "name": "Haal weekschema van een Zone op",
             "description": "Leest het laatste weekschema van een zone uit de Controller en werkt met die data de device-status bij. Het weekschema is op te vragen als: '{{' state_attr('climate.main_room', 'schedule') '}}'. Noot: alleen evohome-compatibele zones hebben een weekschema en in Ramses RF hebben niet alle klimaat-entiteiten zulke zones (er volgt een `TypeError`)."
         },
-
         "put_zone_temp": {
             "name": "Imiteer sensortemperatuur van een Zone",
             "description": "Niet mee gebruikt. Gebruik `fake_zone_temp` of `put_room_temp`."
         },
-
         "reset_zone_config": {
             "name": "Reset Configuratie van een Zone",
             "description": "Reset de configuratie van de zone."
         },
-
         "reset_zone_mode": {
             "name": "Reset Modus van een Zone",
             "description": "Reset de werkmodus van de zone."
         },
-
         "set_zone_config": {
             "name": "Stel Configuratie van een Zone in",
             "description": "Stel de configuratie van de zone in als:",
@@ -609,7 +591,6 @@
                 }
             }
         },
-
         "set_zone_mode": {
             "name": "Stel Modus van een Zone in",
             "description": "Stel de werkmodus van de zone in, permanent of voor een bepaalde periode.",
@@ -632,7 +613,6 @@
                 }
             }
         },
-
         "set_zone_schedule": {
             "name": "Stel weekschema van een Zone in",
             "description": "Upload het weekschema voor een zone in JSON formaat.",
@@ -643,27 +623,22 @@
                 }
             }
         },
-
         "get_dhw_schedule": {
             "name": "Haal weekschema warmtapwater op",
             "description": "Haalt het laatste weekschema van een warmtapwaterapparaat op en werkt met die data de device-status bij. Het weekschema is op te vragen als: '{{' state_attr('water_heater.stored_hw', 'schedule') '}}'"
         },
-
         "reset_dhw_mode": {
             "name": "Reset Modus Warmtapwater",
             "description": "Reset de werkmodus van een warmtapwaterapparaat."
         },
-
         "reset_dhw_params": {
             "name": "Reset de Configuratie Warmtapwater",
             "description": "Reset the configuratie van een warmtapwaterapparaat."
         },
-
         "set_dhw_boost": {
             "name": "Boost Warmtapwater",
             "description": "Activeer een warmtapwaterapparaat voor 1 uur."
         },
-
         "set_dhw_mode": {
             "name": "Stel Modus voor Warmtapwater in",
             "description": "Stel de werkmodus van een warmtapwaterapparaat in, optioneel voor een bepaalde tijd.",
@@ -686,7 +661,6 @@
                 }
             }
         },
-
         "set_dhw_params": {
             "name": "Stel Configuratie van Warmtapwater in",
             "description": "Instellingen voor warmtapwater-apparaat.",
@@ -705,7 +679,6 @@
                 }
             }
         },
-
         "set_dhw_schedule": {
             "name": "Stel weekschema Warmtapwater in",
             "description": "Upload het weekschema voor Warmtapwaterverwarming in JSON formaat.",
@@ -716,7 +689,6 @@
                 }
             }
         },
-
         "fake_zone_temp": {
             "name": "Pas Kamertemperatuur aan",
             "description": "Stel een nieuwe ruimtetemperatuur in (niet het instelpunt) voor een evohome zone. Dit is een makkelijke versie van de `Meld Ruimtetemperatuur` actie.",
@@ -727,7 +699,6 @@
                 }
             }
         },
-
         "fake_dhw_temp": {
             "name": "Pas warmtapwater-temperatuur aan",
             "description": "Stel een nieuwe watertemperatuur in (niet het instelpunt) voor een evohome warmtapwaterapparaat. Dit is een makkelijke versie van de `Meld Warmtapwatertemperatuur` actie.",
@@ -738,7 +709,6 @@
                 }
             }
         },
-
         "put_room_temp": {
             "name": "Pas Ruimtetemperatuur aan",
             "description": "Stel een nieuwe ruimtetemperatuur in (niet het instelpunt) voor een evohome zone-thermostaat. De thermostaat moet als `_faked: true` in het `Systeemschema` staan, en als zone-sensor zijn gekoppeld aan een Verwarming/Warmtapwater-controller.",
@@ -749,7 +719,6 @@
                 }
             }
         },
-
         "put_dhw_temp": {
             "name": "Pas Warmtapwatertemperatuur aan",
             "description": "Stel een nieuwe temperatuur in voor een evohome warmwater-sensor. De sensor moet als `_faked: true` in het `Systeemschema` staan, en als warmwater-sensor zijn gekoppeld aan een Verwarming/Warmtapwater-controller.",
@@ -760,7 +729,6 @@
                 }
             }
         },
-
         "put_co2_level": {
             "name": "Pas CO2-waarde aan",
             "description": "Stel een nieuwe CO2-waarde in voor een ruimtesensor (experimenteel). De sensor moet als `_faked: true` in het `Systeemschema` staan, en als CO2-sensor zijn gekoppeld aan een fan/ventilatie-eenheid.",
@@ -793,7 +761,6 @@
                 }
             }
         },
-
         "delete_command": {
             "name": "Wis commando van Afstandsbediening",
             "description": "Verwijdert een RAMSES commando uit de database. Dit is en makkelijke actie voor HA's eigen `delete_command` actie.",
@@ -804,7 +771,6 @@
                 }
             }
         },
-
         "learn_command": {
             "name": "Leer een Afstandsbediening-commando",
             "description": "Vangt een RAMSES commando op en voegt het toe aan de database. Dit is een makkelijke actie voor HA's eigen `learn_command` actie. De afstandsbediening moet als schakelaar al gekoppeld zijn aan een fan/ventilator.",
@@ -819,7 +785,6 @@
                 }
             }
         },
-
         "add_command": {
             "name": "Voeg een Remote commando toe",
             "description": "Voegt een RAMSES commando toe aan de database tot herstart. Vooral gebruikt in code, niet handmatig.",
@@ -834,7 +799,6 @@
                 }
             }
         },
-
         "send_command": {
             "name": "Verstuur Afstandsbediening-commando",
             "description": "Verstuurt een RAMSES commando alsof afkomstig van een afstandsbediening. Dit is een makkelijke actie voor HA's eigen `send_command` actie. Het apparaat moet in het 'Systeemschema' staan als _faked: true en als schakelaar zijn gekoppeld aan een fan/ventilatie-unit.",
@@ -853,7 +817,6 @@
                 }
             }
         }
-
     },
     "entity": {
         "event": {
@@ -883,9 +846,9 @@
                     },
                     "event_type": {
                         "state": {
-                          "completed": "Voltooid",
-                          "failed": "Mislukt",
-                          "in_progress": "Bezig"
+                            "completed": "Voltooid",
+                            "failed": "Mislukt",
+                            "in_progress": "Bezig"
                         }
                     },
                     "failed_reason": {
@@ -895,5 +858,4 @@
             }
         }
     }
-
 }
