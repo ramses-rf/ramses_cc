@@ -3249,11 +3249,23 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # Use self.entry.options (live) — see _async_discovery_checkpoint.
             schema = self.entry.options.get(CONF_SCHEMA, {})
             if isinstance(schema, dict):
+                # Sync discovery metadata with schema (same as checkpoint)
+                schema_device_ids = self._extract_schema_device_ids(schema)
+                foreign_device_ids = self._extract_foreign_device_ids(schema)
+                self.discovery_manager.sync_with_schema(
+                    schema_device_ids, foreign_device_ids
+                )
                 self.discovery_manager.check_all_mismatches(
                     schema,
                     zones=self._zones,
                     devices=self._devices if self.client else None,
                 )
+                # Check for new devices — a new HGI may have been
+                # registered by _register_pool_hgis above (issue 1119).
+                # This creates a notification so the user can confirm
+                # or reject the new HGI (e.g. neighbour's ESP on the
+                # same broker).
+                self.discovery_manager.check_for_new_devices()
 
     async def async_send_packet(self, call: ServiceCall) -> None:
         """Delegate to Service Handler.
