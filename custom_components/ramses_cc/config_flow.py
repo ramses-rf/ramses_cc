@@ -55,6 +55,7 @@ from ramses_tx.schemas import (
 )
 
 from .const import (
+    CONF_ADDITIONAL_PORTS,
     CONF_ADVANCED_FEATURES,
     CONF_AUTO_NOTIFY,
     CONF_FRESH_START,
@@ -1692,6 +1693,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             step_id="init",
             menu_options=[
                 "choose_serial_port",
+                "manage_pool",
                 "config",
                 "schema",
                 "advanced_features",
@@ -1721,6 +1723,79 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             )
 
         return result
+
+    async def async_step_manage_pool(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the gateway pool (multi-HGI, issue 1119).
+
+        Shows the current primary port and any additional pool members.
+        The user can add or remove additional ports.  The primary port
+        is managed via ``choose_serial_port``.
+
+        :param user_input: Dict containing user-provided input data.
+        :return: The generated config flow result.
+        """
+        self.get_options()  # not available during init
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            additional: list[str] = user_input.get(CONF_ADDITIONAL_PORTS, [])
+            # Validate: no duplicates, primary port not in additional
+            primary = self.options.get(SZ_SERIAL_PORT, {}).get(SZ_PORT_NAME)
+            if primary and primary in additional:
+                errors["base"] = "pool_duplicate_primary"
+            else:
+                self.options[CONF_ADDITIONAL_PORTS] = additional
+                return self._async_save()
+
+        # Build the current state for display
+        primary_port = self.options.get(SZ_SERIAL_PORT, {}).get(
+            SZ_PORT_NAME, "(not set)"
+        )
+        current_additional = self.options.get(CONF_ADDITIONAL_PORTS, [])
+
+        # Build a port list for the multi-select dropdown
+        ports = await async_get_usb_ports(self.hass)
+        port_options: list[selector.SelectOptionDict] = [
+            selector.SelectOptionDict(value=k, label=v)
+            for k, v in ports.items()
+        ]
+        # Add MQTT and Zigbee as selectable additional ports
+        port_options.append(
+            selector.SelectOptionDict(
+                value=CONF_MQTT_PATH, label="MQTT Broker..."
+            )
+        )
+        port_options.append(
+            selector.SelectOptionDict(
+                value=CONF_ZIGBEE_DEVICE, label="Zigbee device"
+            )
+        )
+
+        data_schema = {
+            prob.Optional(
+                CONF_ADDITIONAL_PORTS,
+                default=current_additional,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=port_options,
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=True,
+                )
+            )
+        }
+
+        return self.async_show_form(
+            step_id="manage_pool",
+            data_schema=vol_schema(data_schema),
+            errors=errors,
+            description_placeholders={
+                "primary_port": str(primary_port),
+                "current_count": str(len(current_additional)),
+            },
+            last_step=False,
+        )
 
     async def async_step_review_discovered(
         self, user_input: dict[str, Any] | None = None

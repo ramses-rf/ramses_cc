@@ -39,6 +39,7 @@ from custom_components.ramses_cc.config_flow import (
     get_usb_ports,
 )
 from custom_components.ramses_cc.const import (
+    CONF_ADDITIONAL_PORTS,
     CONF_FRESH_START,
     CONF_GATEWAY_TIMEOUT,
     CONF_MESSAGE_EVENTS,
@@ -683,6 +684,79 @@ async def test_options_flow_serial_port_save(hass: HomeAssistant) -> None:
     data = result.get("data")
     assert data is not None
     assert data[SZ_SERIAL_PORT][SZ_PORT_NAME] == "/dev/ttyUSB_NEW"
+
+
+async def test_options_flow_manage_pool_add_port(hass: HomeAssistant) -> None:
+    """Test manage_pool step adds additional ports (issue 1119)."""
+
+    # Arrange
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    # Act — navigate to manage_pool
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={"/dev/ttyUSB1": "USB Serial 1"},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+        # Assert — form is shown
+        assert result.get("type") == FlowResultType.FORM
+        assert result.get("step_id") == "manage_pool"
+
+        # Act — add an additional port
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB1"]},
+        )
+
+    # Assert — saved with additional port
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    data = result.get("data")
+    assert data is not None
+    assert data[CONF_ADDITIONAL_PORTS] == ["/dev/ttyUSB1"]
+
+
+async def test_options_flow_manage_pool_duplicate_primary(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool rejects primary port in additional (issue 1119)."""
+
+    # Arrange
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+    )
+    config_entry.add_to_hass(hass)
+
+    # Act — navigate to manage_pool and try to add primary as additional
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={"/dev/ttyUSB0": "USB 0", "/dev/ttyUSB1": "USB 1"},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB0"]},
+        )
+
+    # Assert — error shown, not saved
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "pool_duplicate_primary"}
 
 
 async def test_options_flow_schema_save_preserves_serial_port(
