@@ -8,7 +8,7 @@ import inspect
 import logging
 import re
 import time
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime as dt, timedelta as td
@@ -78,8 +78,11 @@ from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_ACTIVE_HGI, Code
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.schemas import extract_serial_port
+from ramses_tx.transport import pooled_transport_factory
 
 from .const import (
+    CONF_ACCEPTED_HGIS,
+    CONF_ADDITIONAL_PORTS,
     CONF_ADVANCED_FEATURES,
     CONF_AUTO_NOTIFY,
     CONF_COMMANDS,
@@ -1894,6 +1897,35 @@ class RamsesCoordinator(DataUpdateCoordinator):
         )
         engine_kwargs["port_config"] = port_config
 
+        # Gateway pool (multi-HGI) — issue 1119.
+        # When additional_ports is set, use a pooled_transport_factory
+        # that wraps the primary port and all additional ports into a
+        # single PooledTransport.  The pool handles dedup, RSSI-based
+        # routing, and accepted_hgis filtering.
+        additional_ports: list[str] = self.options.get(
+            CONF_ADDITIONAL_PORTS, []
+        )
+        if additional_ports:
+            accepted_hgis: list[str] | None = self.options.get(
+                CONF_ACCEPTED_HGIS
+            )
+            pool_constructor = self._create_pool_transport_constructor(
+                port_name=port_name,
+                port_config=port_config,
+                additional_ports=additional_ports,
+                accepted_hgis=accepted_hgis,
+            )
+            engine_config = EngineConfig(**engine_kwargs)
+            gwy_config = GatewayConfig(
+                engine=engine_config, **gateway_kwargs
+            )
+            return Gateway(
+                port_name=port_name,
+                config=gwy_config,
+                loop=self.hass.loop,
+                transport_constructor=pool_constructor,
+            )
+
         engine_config = EngineConfig(**engine_kwargs)
         gwy_config = GatewayConfig(engine=engine_config, **gateway_kwargs)
 
@@ -1902,6 +1934,78 @@ class RamsesCoordinator(DataUpdateCoordinator):
             config=gwy_config,
             loop=self.hass.loop,
         )
+
+    def _create_pool_transport_constructor(
+        self,
+        *,
+        port_name: str,
+        port_config: dict[str, Any],
+        additional_ports: list[str],
+        accepted_hgis: list[str] | None,
+    ) -> Callable[..., Awaitable[Any]]:
+        """Create a transport_constructor for the gateway pool.
+
+        Returns an async callable compatible with ramses_rf's
+        ``Gateway(transport_constructor=...)`` interface.  The callable
+        delegates to :func:`pooled_transport_factory` with the primary
+        port and all additional ports.
+
+        :param port_name: The primary serial port name.
+        :type port_name: str
+        :param port_config: The primary port configuration dict.
+        :type port_config: dict[str, Any]
+        :param additional_ports: List of additional port names.
+        :type additional_ports: list[str]
+        :param accepted_hgis: Optional list of accepted HGI IDs for
+            packet filtering.  When ``None``, all HGIs are accepted.
+        :type accepted_hgis: list[str] | None
+        :returns: An async transport constructor callable.
+        :rtype: Callable[..., Awaitable[Any]]
+        """
+
+        async def _pool_constructor(
+            protocol: Any,
+            *,
+            config: Any,
+            extra: dict[str, object] | None = None,
+            loop: asyncio.AbstractEventLoop | None = None,
+            **kwargs: Any,
+        ) -> Any:
+            """Create a PooledTransport wrapping all pool members."""
+            all_ports = [port_name, *additional_ports]
+            # All children share the same port_config for now.
+            # Per-child configs can be added when the config flow supports
+            # per-port settings.
+            all_configs: list[dict[str, Any]] | None = [
+                port_config
+            ] * len(all_ports)
+
+            _LOGGER.debug(
+                "PooledTransport: creating pool with %d ports: %s",
+                len(all_ports),
+                all_ports,
+            )
+
+            transport = await pooled_transport_factory(
+                protocol,
+                config=config,
+                port_names=all_ports,
+                port_configs=all_configs,
+                extra=extra,
+                loop=loop or self.hass.loop,
+            )
+
+            # Apply accepted_hgis filter if configured
+            if accepted_hgis and hasattr(transport, "set_accepted_hgis"):
+                transport.set_accepted_hgis(accepted_hgis)
+                _LOGGER.debug(
+                    "PooledTransport: accepted_hgis set to %s",
+                    accepted_hgis,
+                )
+
+            return transport
+
+        return _pool_constructor
 
     async def _async_stop_client(self) -> None:
         """Safely stop RAMSES client, catching transport exceptions."""
