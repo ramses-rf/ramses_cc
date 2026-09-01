@@ -1694,7 +1694,7 @@ async def test_create_client_pool_transport(
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
         patch(
-            "ramses_tx.transport.pooled_transport_factory"
+            "ramses_tx.transport.pooled_transport_factory", create=True
         ) as mock_pool_factory,
     ):
         mock_client = mock_gwy.return_value
@@ -1747,7 +1747,7 @@ async def test_create_client_no_pool_without_additional_ports(
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
         patch(
-            "ramses_tx.transport.pooled_transport_factory"
+            "ramses_tx.transport.pooled_transport_factory", create=True
         ) as mock_pool_factory,
     ):
         mock_coordinator._create_client({})
