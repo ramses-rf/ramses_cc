@@ -6585,3 +6585,4 @@ async def test_async_update_device_ufh_circuit_future_parent_device(
     assert dev_info is not None
     assert dev_info["via_device"] == (DOMAIN, "02:123456")
     assert dev_info.get("parent_device") == (DOMAIN, "02:123456")
+# trigger CI
