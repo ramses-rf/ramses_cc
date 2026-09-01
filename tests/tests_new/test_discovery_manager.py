@@ -2460,6 +2460,7 @@ class TestCheckCommunicationQuality:
         device = MagicMock()
         device.id = device_id
         device.communication_quality = quality
+        device.is_faked = False  # not faked by default
         return device
 
     def test_stale_alone_does_not_set_flag(self) -> None:
@@ -2538,6 +2539,28 @@ class TestCheckCommunicationQuality:
         schema = {"18:001234": {}}
         count = manager.check_communication_quality(schema, [device])
         assert count == 0
+
+    def test_faked_device_skipped(self) -> None:
+        """Faked devices are skipped — their RSSI reflects the HGI's
+        own transmissions, not a real device's signal (issue 1119).
+        """
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        device = self._make_device("37:168270", "weak")
+        device.is_faked = True
+        schema = {"37:168270": {"_class": "REM", "_faked": True}}
+        count = manager.check_communication_quality(schema, [device])
+        assert count == 0
+
+    def test_non_faked_device_with_weak_signal_flagged(self) -> None:
+        """Non-faked devices with weak signal are still flagged."""
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        device = self._make_device("37:168270", "weak")
+        device.is_faked = False
+        schema = {"37:168270": {"_class": "REM"}}
+        count = manager.check_communication_quality(schema, [device])
+        assert count == 1
 
     def test_no_devices_skips_check(self) -> None:
         scan = make_mock_scan([])
