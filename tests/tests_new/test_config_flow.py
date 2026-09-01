@@ -712,10 +712,13 @@ async def test_options_flow_manage_pool_add_port(hass: HomeAssistant) -> None:
         assert result.get("type") == FlowResultType.FORM
         assert result.get("step_id") == "manage_pool"
 
-        # Act — add an additional port
+        # Act — add an additional port via the add_new_port dropdown
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
-            user_input={CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB1"]},
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": "/dev/ttyUSB1",
+            },
         )
 
     # Assert — saved with additional port
@@ -730,14 +733,17 @@ async def test_options_flow_manage_pool_duplicate_primary(
 ) -> None:
     """Test manage_pool rejects primary port in additional (issue 1119)."""
 
-    # Arrange
+    # Arrange — primary is /dev/ttyUSB0, already in additional_ports
     config_entry = MockConfigEntry(
         domain=DOMAIN,
-        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB0"],
+        },
     )
     config_entry.add_to_hass(hass)
 
-    # Act — navigate to manage_pool and try to add primary as additional
+    # Act — navigate to manage_pool and submit with primary still checked
     with patch(
         "custom_components.ramses_cc.config_flow.async_get_usb_ports",
         return_value={"/dev/ttyUSB0": "USB 0", "/dev/ttyUSB1": "USB 1"},
@@ -751,7 +757,10 @@ async def test_options_flow_manage_pool_duplicate_primary(
 
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
-            user_input={CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB0"]},
+            user_input={
+                CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB0"],
+                "add_new_port": "__none__",
+            },
         )
 
     # Assert — error shown, not saved
