@@ -78,7 +78,6 @@ from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_ACTIVE_HGI, Code
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.schemas import extract_serial_port
-from ramses_tx.transport import pooled_transport_factory
 
 from .const import (
     CONF_ACCEPTED_HGIS,
@@ -1916,9 +1915,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 accepted_hgis=accepted_hgis,
             )
             engine_config = EngineConfig(**engine_kwargs)
-            gwy_config = GatewayConfig(
-                engine=engine_config, **gateway_kwargs
-            )
+            gwy_config = GatewayConfig(engine=engine_config, **gateway_kwargs)
             return Gateway(
                 port_name=port_name,
                 config=gwy_config,
@@ -1962,6 +1959,17 @@ class RamsesCoordinator(DataUpdateCoordinator):
         :returns: An async transport constructor callable.
         :rtype: Callable[..., Awaitable[Any]]
         """
+        # Lazy import — pooled_transport_factory is only available in
+        # ramses_tx >= 0.60.5 (not yet published to PyPI).  This allows
+        # ramses_cc to import cleanly on older ramses_tx versions.
+        try:
+            from ramses_tx.transport import pooled_transport_factory
+        except ImportError as err:
+            raise ImportError(
+                "Gateway pool requires ramses_tx with PooledTransport "
+                "support (ramses-rf >= 0.60.5). "
+                "Update ramses-rf or remove additional_ports from config."
+            ) from err
 
         async def _pool_constructor(
             protocol: Any,
@@ -1976,9 +1984,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # All children share the same port_config for now.
             # Per-child configs can be added when the config flow supports
             # per-port settings.
-            all_configs: list[dict[str, Any]] | None = [
-                port_config
-            ] * len(all_ports)
+            all_configs: list[dict[str, Any]] | None = [port_config] * len(
+                all_ports
+            )
 
             _LOGGER.debug(
                 "PooledTransport: creating pool with %d ports: %s",

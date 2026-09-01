@@ -1647,16 +1647,14 @@ async def test_create_client_pool_transport(
     """Test _create_client uses pool when additional_ports set (1119)."""
 
     # Arrange — primary port + additional ports
-    mock_coordinator.options[SZ_SERIAL_PORT] = {
-        SZ_PORT_NAME: "/dev/ttyUSB0"
-    }
+    mock_coordinator.options[SZ_SERIAL_PORT] = {SZ_PORT_NAME: "/dev/ttyUSB0"}
     mock_coordinator.options[CONF_ADDITIONAL_PORTS] = ["/dev/ttyUSB1"]
     mock_coordinator.options[CONF_ACCEPTED_HGIS] = ["18:001234"]
 
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
         patch(
-            "custom_components.ramses_cc.coordinator.pooled_transport_factory"
+            "ramses_tx.transport.pooled_transport_factory"
         ) as mock_pool_factory,
     ):
         mock_client = mock_gwy.return_value
@@ -1703,15 +1701,13 @@ async def test_create_client_no_pool_without_additional_ports(
 ) -> None:
     """Test _create_client does NOT use pool when no additional_ports."""
 
-    mock_coordinator.options[SZ_SERIAL_PORT] = {
-        SZ_PORT_NAME: "/dev/ttyUSB0"
-    }
+    mock_coordinator.options[SZ_SERIAL_PORT] = {SZ_PORT_NAME: "/dev/ttyUSB0"}
     # No CONF_ADDITIONAL_PORTS set
 
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
         patch(
-            "custom_components.ramses_cc.coordinator.pooled_transport_factory"
+            "ramses_tx.transport.pooled_transport_factory"
         ) as mock_pool_factory,
     ):
         mock_coordinator._create_client({})
