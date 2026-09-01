@@ -29,6 +29,8 @@ from pytest_homeassistant_custom_component.common import (  # type: ignore[impor
 from serialx import SerialException
 
 from custom_components.ramses_cc.const import (
+    CONF_ACCEPTED_HGIS,
+    CONF_ADDITIONAL_PORTS,
     CONF_ADVANCED_FEATURES,
     CONF_COMMANDS,
     CONF_GATEWAY_OFFLINE_NOTIFY,
@@ -1676,6 +1678,89 @@ async def test_create_client_zigbee_path(
 
         # The method should return the Gateway instance
         assert result is mock_client
+
+
+@pytest.mark.asyncio
+async def test_create_client_pool_transport(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _create_client uses pool when additional_ports set (1119)."""
+
+    # Arrange — primary port + additional ports
+    mock_coordinator.options[SZ_SERIAL_PORT] = {
+        SZ_PORT_NAME: "/dev/ttyUSB0"
+    }
+    mock_coordinator.options[CONF_ADDITIONAL_PORTS] = ["/dev/ttyUSB1"]
+    mock_coordinator.options[CONF_ACCEPTED_HGIS] = ["18:001234"]
+
+    with (
+        patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
+        patch(
+            "custom_components.ramses_cc.coordinator.pooled_transport_factory"
+        ) as mock_pool_factory,
+    ):
+        mock_client = mock_gwy.return_value
+        # Make the pool factory return a mock with set_accepted_hgis
+        mock_transport = MagicMock()
+        mock_pool_factory.return_value = mock_transport
+
+        # Act
+        result = mock_coordinator._create_client({})
+
+        # Assert — Gateway called with transport_constructor
+        cast(Any, mock_gwy).assert_called_once()
+        _, kwargs = cast(Any, mock_gwy).call_args
+        assert "transport_constructor" in kwargs
+        assert kwargs["port_name"] == "/dev/ttyUSB0"
+
+        # The transport_constructor is a closure — verify it calls
+        # pooled_transport_factory with the right ports
+        constructor = kwargs["transport_constructor"]
+        assert callable(constructor)
+
+        # Call the constructor to verify it delegates to pool factory
+        await constructor(
+            protocol=MagicMock(),
+            config=MagicMock(),
+            extra=None,
+            loop=mock_coordinator.hass.loop,
+        )
+
+        cast(Any, mock_pool_factory).assert_called_once()
+        _, pool_kwargs = cast(Any, mock_pool_factory).call_args
+        assert pool_kwargs["port_names"] == [
+            "/dev/ttyUSB0",
+            "/dev/ttyUSB1",
+        ]
+
+        # Assert — result is the Gateway instance
+        assert result is mock_client
+
+
+@pytest.mark.asyncio
+async def test_create_client_no_pool_without_additional_ports(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _create_client does NOT use pool when no additional_ports."""
+
+    mock_coordinator.options[SZ_SERIAL_PORT] = {
+        SZ_PORT_NAME: "/dev/ttyUSB0"
+    }
+    # No CONF_ADDITIONAL_PORTS set
+
+    with (
+        patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
+        patch(
+            "custom_components.ramses_cc.coordinator.pooled_transport_factory"
+        ) as mock_pool_factory,
+    ):
+        mock_coordinator._create_client({})
+
+        # Assert — Gateway called WITHOUT transport_constructor
+        cast(Any, mock_gwy).assert_called_once()
+        _, kwargs = cast(Any, mock_gwy).call_args
+        assert "transport_constructor" not in kwargs
+        cast(Any, mock_pool_factory).assert_not_called()
 
 
 @pytest.mark.asyncio
