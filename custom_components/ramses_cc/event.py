@@ -256,6 +256,17 @@ class RamsesRegexEvent(RamsesEvent):
 
             # filter msg by advanced_config regex, fire an event if a match
             if regex and regex.search(f"{msg!r}"):
+                # Convert payload to a JSON-serializable form — some
+                # payload dataclasses contain bytes fields (e.g. 10E0
+                # info_bytes) which HA can't serialize.
+                payload = msg.payload
+                if isinstance(payload, dict):
+                    payload = {
+                        k: v.hex() if isinstance(v, bytes) else v
+                        for k, v in payload.items()
+                    }
+                elif isinstance(payload, bytes):
+                    payload = payload.hex()
                 event_data = {
                     "type": RamsesEventType.REGEX,
                     "device_id": msg.src.id,
@@ -264,7 +275,7 @@ class RamsesRegexEvent(RamsesEvent):
                     "dst": msg.dst.id,
                     "verb": msg.verb,
                     "code": str(msg.code),
-                    "payload": msg.payload,
+                    "payload": payload,
                     "packet": repr(msg),
                 }
                 self.update_data(event_data)
