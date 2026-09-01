@@ -17,7 +17,7 @@
         "step": {
             "init": {
                 "menu_options": {
-                    "choose_serial_port": "Serial port",
+                    "choose_serial_port": "Primary port",
                     "config": "Gateway configuration",
                     "schema": "System schema",
                     "advanced_features": "Advanced features",
@@ -49,7 +49,7 @@
                     "serial_port": "Advanced serial port config"
                 },
                 "data_description": {
-                  "port_name": "Examples: '/dev/cu.modem2', 'COM6' (Windows) or 'mqtt://user:pwd@homeassistant.local:1883'",
+                    "port_name": "Examples: '/dev/cu.modem2', 'COM6' (Windows) or 'mqtt://user:pwd@homeassistant.local:1883'",
                     "serial_port": "Not required for typical use, except nanoCUL to set 'baudrate: 57600'"
                 }
             },
@@ -145,7 +145,8 @@
         "step": {
             "init": {
                 "menu_options": {
-                    "choose_serial_port": "Serial port",
+                    "choose_serial_port": "Primary port",
+                    "manage_pool": "Manage gateway pool",
                     "config": "Gateway configuration",
                     "schema": "System schema",
                     "advanced_features": "Advanced features",
@@ -195,8 +196,8 @@
                     "log_all_mqtt": "Log Tx + all MQTT traffic"
                 },
                 "data_description": {
-                  "schema": "A mapping of system device IDs to their respective schemas. This should describe your complete system(s), including zones with sensors, as YAML.",
-                  "log_all_mqtt": "Show all subscribed topics from MQTT broker in system console."
+                    "schema": "A mapping of system device IDs to their respective schemas. This should describe your complete system(s), including zones with sensors, as YAML.",
+                    "log_all_mqtt": "Show all subscribed topics from MQTT broker in system console."
                 }
             },
             "advanced_features": {
@@ -255,11 +256,17 @@
                 "title": "Review device health",
                 "description": "{message}",
                 "data": {}
+            },
+            "manage_pool": {
+                "title": "Gateway Pool Management",
+                "description": "Primary port: {primary_port}\nCurrent additional ports: {current_count}",
+                "data": {
+                    "additional_ports": "Additional ports"
+                }
             }
         }
     },
     "services": {
-
         "bind_device": {
             "name": "Bind a Device",
             "description": "Bind a device to a CH/DHW controller or a fan/ventilation unit. The device will be either a sensor (e.g. temperature, humidity, etc.) or a remote (e.g. a 4-way switch). It must be 'yours' in the System schema and correctly configured with an appropriate class and _faked: true.",
@@ -282,17 +289,14 @@
                 }
             }
         },
-
         "force_update": {
             "name": "Update the System state",
             "description": "Immediately update the system state, without waiting for the next scheduled update."
         },
-
         "sync_topology": {
             "name": "Sync learned topology",
             "description": "Immediately sync the learned topology (zones, DHW, orphans) from ramses_rf back to the config entry, without waiting for the 5-minute interval."
         },
-
         "discover_known_devices": {
             "name": "Discover Known Devices",
             "description": "Send RQ discovery messages from the HGI to devices in the 'System schema' that are not yet registered or not yet promoted to their expected class. Useful after cache clear or when setting up a new system.",
@@ -303,7 +307,6 @@
                 }
             }
         },
-
         "get_discovered_devices": {
             "name": "Get Discovered Devices",
             "description": "Retrieve the list of devices discovered by the passive scan, optionally filtered by status or enabled flag. Fires a ramses_cc_discovered_devices event with the results.",
@@ -318,7 +321,6 @@
                 }
             }
         },
-
         "accept_discovered_device": {
             "name": "Accept Discovered Device",
             "description": "Accept a discovered device and add it to the schema. The device will be created on the next discover_known_devices call.",
@@ -337,7 +339,6 @@
                 }
             }
         },
-
         "discard_discovered_device": {
             "name": "Discard Discovered Device",
             "description": "Discard a discovered device. It stays in the list for spam prevention but won't be created.",
@@ -348,7 +349,6 @@
                 }
             }
         },
-
         "remove_discovered_device": {
             "name": "Remove Discovered Device",
             "description": "Mark a previously accepted device as removed (it no longer exists). Discovery info is kept to prevent re-notification.",
@@ -359,7 +359,6 @@
                 }
             }
         },
-
         "enable_discovered_device": {
             "name": "Enable Discovered Device",
             "description": "Enable a disabled or discarded device without changing its status.",
@@ -370,7 +369,6 @@
                 }
             }
         },
-
         "disable_discovered_device": {
             "name": "Disable Discovered Device",
             "description": "Disable an accepted device temporarily (e.g. for maintenance) without changing its status.",
@@ -381,7 +379,6 @@
                 }
             }
         },
-
         "add_faked_rem": {
             "name": "Add Faked REM",
             "description": "Create a faked REM (virtual remote) for sending commands to a FAN. No RF traffic needed.",
@@ -410,7 +407,6 @@
                 }
             }
         },
-
         "get_fan_clim_param": {
             "name": "Get Fan Parameter",
             "description": "Request the current value of a specific configuration parameter (2411) from a FAN device.",
@@ -425,18 +421,16 @@
                 }
             }
         },
-
         "get_fan_rem_param": {
             "name": "Get Fan Parameter via REM",
             "description": "Request the current value of a specific configuration parameter (2411) from a FAN device via its bound Remote.",
             "fields": {
                 "param_id": {
-                  "name": "Parameter ID",
-                  "description": "The parameter identifier to read. Enter a valid parameter ID (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
-              }
+                    "name": "Parameter ID",
+                    "description": "The parameter identifier to read. Enter a valid parameter ID (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
+                }
             }
         },
-
         "set_fan_clim_param": {
             "name": "Set Fan Parameter",
             "description": "Set the value of a specific configuration parameter (2411) on a FAN device.",
@@ -455,22 +449,20 @@
                 }
             }
         },
-
         "set_fan_rem_param": {
             "name": "Set Fan Parameter via REM",
             "description": "Set the value of a specific configuration parameter (2411) on a FAN device via its bound Remote.",
             "fields": {
                 "param_id": {
-                  "name": "Parameter ID",
-                  "description": "The parameter identifier to set. Enter a valid parameter ID (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
+                    "name": "Parameter ID",
+                    "description": "The parameter identifier to set. Enter a valid parameter ID (31, 3D, 3E, 3F, 40, 41, 42, 43, 44, 4B, 4E, 52, 54, 75, 95)"
                 },
                 "value": {
-                  "name": "Value",
-                  "description": "The value to set for the parameter (range depends on parameter type). Examples: Sensor sensitivity (52): 0-25, Comfort temperature (75): 5-35°C, Fan speed (31): 0-100%"
+                    "name": "Value",
+                    "description": "The value to set for the parameter (range depends on parameter type). Examples: Sensor sensitivity (52): 0-25, Comfort temperature (75): 5-35°C, Fan speed (31): 0-100%"
                 }
             }
         },
-
         "set_fan_param": {
             "name": "Set Fan Parameter (device)",
             "description": "Set the value of a specific configuration parameter (2411) on a FAN device. Provide either a RAMSES device_id (XX:XXXXXX) or select a device target in the UI.",
@@ -497,7 +489,6 @@
                 }
             }
         },
-
         "update_fan_params": {
             "name": "Update Fan Parameters",
             "description": "Request all available configuration parameters (2411) from a FAN. Will update all parameter entities for the device. Select the FAN climate entity as the target, or provide a RAMSES device_id (XX:XXXXXX).",
@@ -512,7 +503,6 @@
                 }
             }
         },
-
         "send_packet": {
             "name": "Send a Command packet",
             "description": "Send a completely bespoke RAMSES II command packet from the gateway.",
@@ -539,7 +529,6 @@
                 }
             }
         },
-
         "get_system_faults": {
             "name": "Get the Fault log of a TCS (Controller)",
             "description": "Obtains the controller's latest fault log entries.",
@@ -550,12 +539,10 @@
                 }
             }
         },
-
         "reset_system_mode": {
             "name": "Fully reset the Mode of a TCS (Controller)",
             "description": "The system will be in auto mode and all zones will be in follow_schedule mode, including (if supported) those in permanent_override mode."
         },
-
         "set_system_mode": {
             "name": "Set the Mode of a TCS (Controller)",
             "description": "The system will be in the new mode and all zones not in permanent_override mode will be affected. Some modes have the option of a period (of days), others a duration (of hours/minutes).",
@@ -574,27 +561,22 @@
                 }
             }
         },
-
         "get_zone_schedule": {
             "name": "Get the Weekly schedule of a Zone",
             "description": "Obtains the zone's latest weekly schedule from the controller and updates the entity's state attributes with that data. The schedule will be available at: '{{' state_attr('climate.main_room', 'schedule') '}}'. Note: only evohome-compatible zones have schedules and not all of this integration's climate entities are such zones (will raise a TypeError)."
         },
-
         "put_zone_temp": {
             "name": "Fake the Sensor temperature of a Zone",
             "description": "Currently deprecated, use `fake_zone_temp` or `put_room_temp` instead."
         },
-
         "reset_zone_config": {
             "name": "Reset the Configuration of a Zone",
             "description": "Reset the configuration of the zone."
         },
-
         "reset_zone_mode": {
             "name": "Reset the Mode of a Zone",
             "description": "Reset the operating mode of the zone."
         },
-
         "set_zone_config": {
             "name": "Set the Configuration of a Zone",
             "description": "Set the configuration of the zone.",
@@ -609,7 +591,6 @@
                 }
             }
         },
-
         "set_zone_mode": {
             "name": "Set the Mode of a Zone",
             "description": "Set the operating mode of the zone, either indefinitely or for a given duration.",
@@ -632,7 +613,6 @@
                 }
             }
         },
-
         "set_zone_schedule": {
             "name": "Set the Weekly schedule of a Zone",
             "description": "Upload the zone's weekly schedule from a portable format.",
@@ -643,27 +623,22 @@
                 }
             }
         },
-
         "get_dhw_schedule": {
             "name": "Get the Weekly schedule of a DHW",
             "description": "Obtains the DHW's latest weekly schedule from the controller and updates the entity's state attributes with that data. The schedule will be available at: '{{' state_attr('water_heater.stored_hw', 'schedule') '}}'"
         },
-
         "reset_dhw_mode": {
             "name": "Reset the Mode of a DHW",
             "description": "Reset the operating mode of the system's DHW."
         },
-
         "reset_dhw_params": {
             "name": "Reset the Configuration of a DHW",
             "description": "Reset the configuration of the system's DHW."
         },
-
         "set_dhw_boost": {
             "name": "Start Boost mode for a DHW",
             "description": "Enable the system's DHW for an hour."
         },
-
         "set_dhw_mode": {
             "name": "Set the Mode of a DHW",
             "description": "Set the operating mode of the system's DHW, optionally for a given duration.",
@@ -686,7 +661,6 @@
                 }
             }
         },
-
         "set_dhw_params": {
             "name": "Set the Configuration of a DHW",
             "description": "Set the configuration of the system's DHW.",
@@ -705,7 +679,6 @@
                 }
             }
         },
-
         "set_dhw_schedule": {
             "name": "Set the Weekly schedule of a DHW",
             "description": "Upload the DHW's weekly schedule from a portable format.",
@@ -716,7 +689,6 @@
                 }
             }
         },
-
         "fake_zone_temp": {
             "name": "Fake a Room temperature",
             "description": "Set the current temperature (not setpoint) of an evohome zone. This is a convenience wrapper for `put_zone_temp` service call.",
@@ -727,7 +699,6 @@
                 }
             }
         },
-
         "fake_dhw_temp": {
             "name": "Fake a DHW temperature",
             "description": "Set the current temperature (not setpoint) of an evohome water heater. This is a convenience wrapper for the `put_dhw_temp` service call.",
@@ -738,7 +709,6 @@
                 }
             }
         },
-
         "put_room_temp": {
             "name": "Announce a Room temperature",
             "description": "Announce the measured room temperature of an evohome zone sensor. The device must be set as _faked: true in the System schema, and should be bound to a CH/DHW controller as a zone sensor.",
@@ -749,7 +719,6 @@
                 }
             }
         },
-
         "put_dhw_temp": {
             "name": "Announce a DHW temperature",
             "description": "Announce the measured temperature of an evohome DHW sensor. The device must be set up as _faked: true in the System schema, and should be bound to a CH/DHW controller as a DHW sensor.",
@@ -760,7 +729,6 @@
                 }
             }
         },
-
         "put_co2_level": {
             "name": "Announce an Indoor CO2 level",
             "description": "Announce the measured CO2 level of a indoor sensor (experimental). The device must _faked: true in the System schema, and should be bound to a fan/ventilation unit as a CO2 sensor.",
@@ -793,7 +761,6 @@
                 }
             }
         },
-
         "delete_command": {
             "name": "Delete a Remote command",
             "description": "Delete a RAMSES command from the database. This is a convenience wrapper for HA's own `delete_command` service call.",
@@ -804,7 +771,6 @@
                 }
             }
         },
-
         "learn_command": {
             "name": "Learn a Remote command",
             "description": "Learn a RAMSES command and adds it to the database. This is a convenience wrapper for HA's own `learn_command` service call. The device should be bound to a fan/ventilation unit as a switch.",
@@ -819,7 +785,6 @@
                 }
             }
         },
-
         "add_command": {
             "name": "Add a Remote command",
             "description": "Add a RAMSES command to the database until restart. Most often used by code, not manually.",
@@ -834,7 +799,6 @@
                 }
             }
         },
-
         "send_command": {
             "name": "Send a Remote command",
             "description": "Sends a RAMSES command as if from a remote. This is a convenience wrapper for HA's own `send_command` service call. The device must be set up as _faked: true in the System schema, and should be bound to a fan/ventilation unit as a switch.",

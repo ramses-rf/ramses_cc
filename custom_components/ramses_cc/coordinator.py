@@ -740,6 +740,81 @@ class RamsesCoordinator(DataUpdateCoordinator):
             active_hgi_id=self.active_hgi_id,
         )
 
+        # Register pool member HGIs and schema HGIs that are connected but
+        # may not have sent any packets (e.g. USB HGI with
+        # skip_signature=True).  Without this, they won't appear in scan
+        # results and may be flagged as "lost" by the discovery manager
+        # (issue 1119).
+        if self.client:
+            engine = getattr(self.client, "_engine", None)
+            transport = getattr(engine, "_transport", None) if engine else None
+            registered: list[str] = []
+
+            # 1. Register HGIs learned by the pool from packets
+            if transport is not None:
+                pool_hgi_ids = transport.get_extra_info("pool_hgi_ids")
+                if pool_hgi_ids:
+                    for hgi_id in pool_hgi_ids:
+                        scan.register_known_hgi(hgi_id)
+                        registered.append(hgi_id)
+
+            # 2. Register schema HGIs (18: devices with _class: HGI) that
+            #    are pool members but whose HGI ID wasn't learned from
+            #    packets (e.g. USB HGI with skip_signature=True).
+            #    Also clear _suppress_not_seen (int form) from schema —
+            #    the HGI is connected, so the temporary suppress set by
+            #    review_device_health is no longer needed (issue 988).
+            #    Use a deep copy so HA detects the change and persists it.
+            import copy
+
+            schema = copy.deepcopy(self.entry.options.get(CONF_SCHEMA, {}))
+            schema_changed = False
+            for dev_id, entry in schema.items():
+                if (
+                    dev_id.startswith("18:")
+                    and isinstance(entry, dict)
+                    and entry.get("_class", "").upper() == "HGI"
+                ):
+                    if dev_id not in registered:
+                        scan.register_known_hgi(dev_id)
+                        registered.append(dev_id)
+                    # Clear temporary _suppress_not_seen (int form only,
+                    # not True which is permanent user suppression)
+                    suppress_val = entry.get("_suppress_not_seen")
+                    if suppress_val is not None and suppress_val is not True:
+                        entry.pop("_suppress_not_seen", None)
+                        schema_changed = True
+                        _LOGGER.info(
+                            "HGI %s is connected, cleared "
+                            "_suppress_not_seen=%s from schema",
+                            dev_id,
+                            suppress_val,
+                        )
+
+            if registered:
+                _LOGGER.info(
+                    "Registered %d HGI(s) in scan: %s",
+                    len(registered),
+                    registered,
+                )
+            if schema_changed:
+                new_options = dict(self.entry.options)
+                new_options[CONF_SCHEMA] = schema
+                self._suppress_reload = time.time()
+                try:
+                    self.hass.config_entries.async_update_entry(
+                        self.entry, options=new_options
+                    )
+                    _LOGGER.info(
+                        "Persisted schema changes (cleared "
+                        "_suppress_not_seen from HGI entries)"
+                    )
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Failed to persist _suppress_not_seen clear: %s",
+                        err,
+                    )
+
         # Restore persisted state (unless schema was wiped — start fresh)
         stored = await self.store.async_load()
         from .discovery import SZ_DISCOVERY
@@ -1912,6 +1987,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # routing, and accepted_hgis filtering.
         additional_ports: list[str] = self.options.get(
             CONF_ADDITIONAL_PORTS, []
+        )
+        _LOGGER.debug(
+            "Gateway pool check: additional_ports=%s, port_name=%s",
+            additional_ports,
+            port_name,
         )
         if additional_ports:
             accepted_hgis: list[str] | None = self.options.get(
