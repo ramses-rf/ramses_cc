@@ -1382,6 +1382,12 @@ class DiscoveryManager:
             # Skip foreign-owner devices.
             if device_id in self._foreign_device_ids:
                 continue
+            # Skip faked devices — their RSSI reflects the HGI's own
+            # transmissions (heard by the other HGI), not a real
+            # device's signal strength.  Warning about "weak signal"
+            # is meaningless for a virtual/impersonated device.
+            if getattr(device, "is_faked", False):
+                continue
 
             quality = getattr(device, "communication_quality", None)
             if quality is None:
