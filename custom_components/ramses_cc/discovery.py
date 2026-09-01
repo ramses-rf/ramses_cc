@@ -652,6 +652,21 @@ class DiscoveryManager:
                     "status, marked as ACCEPTED",
                     device_id,
                 )
+            elif (
+                device_id.startswith("18:")
+                and meta.status == DiscoveryStatus.LOST
+            ):
+                # HGI gateways are never "lost" — they are the receiver,
+                # not remote devices.  Clear any stale LOST status that
+                # may have been set before the HGI-skip was added to
+                # check_for_lost_devices / check_communication_quality.
+                meta.status = DiscoveryStatus.ACCEPTED
+                self._metadata[device_id] = meta
+                _LOGGER.info(
+                    "DiscoveryManager: HGI %s had stale LOST status, "
+                    "cleared to ACCEPTED",
+                    device_id,
+                )
 
         # Second, add devices from the scan that aren't in discovery metadata
         # (e.g., devices seen by the system but not yet in discovery).
@@ -1451,6 +1466,24 @@ class DiscoveryManager:
                         device_id,
                         quality.best_rssi,
                     )
+
+                # Also clear _suppress_not_seen from the schema (unless
+                # it's set to True for permanent suppression).  The int
+                # form (e.g. 7) is set by review_device_health as a
+                # temporary suppress — once the device is heard again,
+                # it should be cleared so the user gets a fresh
+                # notification if it goes quiet later (issue 988).
+                schema_entry = schema.get(device_id)
+                if isinstance(schema_entry, dict):
+                    suppress_val = schema_entry.get("_suppress_not_seen")
+                    if suppress_val is not None and suppress_val is not True:
+                        schema_entry.pop("_suppress_not_seen", None)
+                        _LOGGER.info(
+                            "DiscoveryManager: device %s seen again, "
+                            "cleared _suppress_not_seen=%s from schema",
+                            device_id,
+                            suppress_val,
+                        )
 
             # Determine if the device has weak signal (RSSI only).
             # Staleness is not checked — see docstring above.
