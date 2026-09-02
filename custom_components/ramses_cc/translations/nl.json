@@ -259,7 +259,7 @@
             },
             "manage_pool": {
                 "title": "Gateway Pool Beheer",
-                "description": "Primary port: {primary_port}\nCurrent additional ports: {current_count}",
+                "description": "Primaire poort: {primary_port}\nHuidige extra poorten: {current_count}\nSchema pool-leden (auto): {schema_pool_members}",
                 "data": {
                     "additional_ports": "Extra poorten"
                 }
