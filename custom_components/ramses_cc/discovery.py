@@ -272,7 +272,8 @@ class DiscoveryManager:
         # after a reload where .storage/ wasn't updated before teardown
         # (issue 917).
         self._schema_device_ids: set[str] = set()
-        # Devices in schema without _owner — need review (issue 1119)
+        # Devices in schema without _owner — need review (issue 1119).
+        # Populated by sync_with_schema().
         self._schema_no_owner_ids: set[str] = set()
         self._foreign_device_ids: set[str] = set()
         # Devices in schema without _owner — need review (issue 1119).
