@@ -1169,6 +1169,94 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 foreign.add(str(key))
         return foreign
 
+    def _extract_pool_hgis_from_schema(self) -> list[str]:
+        """Extract accepted HGI IDs from the schema for pool membership.
+
+        Per issue 1119, HGIs (18: devices with _class: HGI) that have
+        _owner matching the root _owner are pool members.  HGIs with
+        a different _owner are foreign (excluded).  HGIs without _owner
+        are discovery candidates (not yet accepted).
+
+        :return: List of HGI device IDs that are accepted pool members
+            (excluding the primary HGI which is the first child).
+        """
+        schema = self.entry.options.get(CONF_SCHEMA, {})
+        if not isinstance(schema, dict):
+            return []
+        root_owner = schema.get(SZ_OWNER)
+        if not root_owner:
+            return []
+        # Get the primary HGI ID to exclude it from additional children
+        primary_hgi = self._get_primary_hgi_id()
+        pool_hgis: list[str] = []
+        for dev_id, entry in schema.items():
+            if (
+                dev_id.startswith("18:")
+                and isinstance(entry, dict)
+                and entry.get("_class", "").upper() == "HGI"
+                and entry.get(SZ_TR_OWNER) == root_owner
+                and not entry.get("_disabled")
+                and dev_id != primary_hgi
+            ):
+                pool_hgis.append(dev_id)
+        return pool_hgis
+
+    def _get_primary_hgi_id(self) -> str | None:
+        """Return the primary HGI ID from the transport config.
+
+        For MQTT transports, the HGI ID is extracted from the URL path
+        or from CONF_MQTT_HGI_ID.  For serial/USB, it's unknown until
+        the first packet (returns None).
+        """
+        port_name = self.options.get(SZ_SERIAL_PORT, {}).get(SZ_PORT_NAME, "")
+        if isinstance(port_name, str):
+            if port_name.startswith("mqtt://"):
+                # Check CONF_MQTT_HGI_ID first
+                hgi_id = self.options.get(CONF_MQTT_HGI_ID)
+                if hgi_id:
+                    return str(hgi_id)
+                # Extract from URL path
+                import re as _re
+
+                m = _re.search(r"(18:[0-9]{6})(?:/|$)", port_name)
+                if m:
+                    return m.group(1)
+        return None
+
+    @staticmethod
+    def _build_explicit_mqtt_url(primary_url: str, hgi_id: str) -> str | None:
+        """Construct an explicit per-HGI MQTT URL from a wildcard URL.
+
+        Given ``mqtt://broker:1883`` (wildcard) or
+        ``mqtt://broker:1883/RAMSES/GATEWAY`` and an HGI ID like
+        ``18:149488``, returns
+        ``mqtt://broker:1883/RAMSES/GATEWAY/18:149488``.
+
+        :param primary_url: The primary MQTT URL (may be wildcard).
+        :param hgi_id: The HGI device ID (e.g. ``18:149488``).
+        :return: Explicit MQTT URL with the HGI ID in the path, or None
+            if the URL already contains the HGI ID.
+        """
+        if not primary_url or not hgi_id:
+            return None
+        # If the URL already has this HGI ID in the path, no need to duplicate
+        if hgi_id in primary_url:
+            return None
+        try:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(primary_url)
+            path = parsed.path or "/RAMSES/GATEWAY"
+            # Strip trailing slash and ensure it starts with /RAMSES/GATEWAY
+            path = path.rstrip("/")
+            if not path:
+                path = "/RAMSES/GATEWAY"
+            # Append the HGI ID
+            path = f"{path}/{hgi_id}"
+            return urlunparse(parsed._replace(path=path))
+        except (ValueError, AttributeError):
+            return None
+
     @staticmethod
     def _strip_schema_extensions(schema: dict[str, Any]) -> dict[str, Any]:
         """Return a copy of *schema* with ramses_cc-only keys removed.
@@ -2000,26 +2088,48 @@ class RamsesCoordinator(DataUpdateCoordinator):
         engine_kwargs["port_config"] = port_config
 
         # Gateway pool (multi-HGI) — issue 1119.
-        # When additional_ports is set, use a pooled_transport_factory
-        # that wraps the primary port and all additional ports into a
-        # single PooledTransport.  The pool handles dedup, RSSI-based
-        # routing, and accepted_hgis filtering.
+        # When additional_ports is set, OR when the schema has multiple
+        # accepted HGIs (18: devices with _owner == root_owner and
+        # _class: HGI), use a pooled_transport_factory that wraps the
+        # primary port and all additional HGI ports into a single
+        # PooledTransport.  The pool handles dedup, RSSI-based routing,
+        # and accepted_hgis filtering.
         additional_ports: list[str] = self.options.get(
             CONF_ADDITIONAL_PORTS, []
         )
+
+        # For MQTT transports, also check the schema for accepted HGIs
+        # that share the same broker.  Each accepted HGI gets its own
+        # child transport with an explicit per-HGI MQTT URL (issue 1119).
+        schema_accepted_hgis: list[str] = []
+        if isinstance(port_name, str) and port_name.startswith("mqtt://"):
+            schema_accepted_hgis = self._extract_pool_hgis_from_schema()
+
+        # Merge additional_ports and schema-derived HGI ports
+        all_additional_ports = list(additional_ports)
+        if schema_accepted_hgis:
+            # Construct explicit MQTT URLs for schema-accepted HGIs
+            for hgi_id in schema_accepted_hgis:
+                explicit_url = self._build_explicit_mqtt_url(port_name, hgi_id)
+                if explicit_url and explicit_url not in all_additional_ports:
+                    all_additional_ports.append(explicit_url)
+
         _LOGGER.debug(
-            "Gateway pool check: additional_ports=%s, port_name=%s",
+            "Gateway pool check: additional_ports=%s, schema_hgis=%s, "
+            "all_additional=%s, port_name=%s",
             additional_ports,
+            schema_accepted_hgis,
+            all_additional_ports,
             port_name,
         )
-        if additional_ports:
+        if all_additional_ports:
             accepted_hgis: list[str] | None = self.options.get(
                 CONF_ACCEPTED_HGIS
             )
             pool_constructor = self._create_pool_transport_constructor(
                 port_name=port_name,
                 port_config=port_config,
-                additional_ports=additional_ports,
+                additional_ports=all_additional_ports,
                 accepted_hgis=accepted_hgis,
             )
             engine_config = EngineConfig(**engine_kwargs)
@@ -3257,7 +3367,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 schema_device_ids = self._extract_schema_device_ids(schema)
                 foreign_device_ids = self._extract_foreign_device_ids(schema)
                 self.discovery_manager.sync_with_schema(
-                    schema_device_ids, foreign_device_ids
+                    schema_device_ids, foreign_device_ids, schema
                 )
                 self.discovery_manager.check_all_mismatches(
                     schema,

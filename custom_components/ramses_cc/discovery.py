@@ -272,6 +272,8 @@ class DiscoveryManager:
         # after a reload where .storage/ wasn't updated before teardown
         # (issue 917).
         self._schema_device_ids: set[str] = set()
+        # Devices in schema without _owner — need review (issue 1119)
+        self._schema_no_owner_ids: set[str] = set()
         self._foreign_device_ids: set[str] = set()
         # Devices in schema without _owner — need review (issue 1119).
         self._schema_no_owner_ids: set[str] = set()
@@ -577,7 +579,7 @@ class DiscoveryManager:
         # Devices in the schema that have no _owner — these are discovery
         # candidates that need review (e.g. HGIs discovered via MQTT).
         # check_for_new_devices should NOT suppress them (issue 1119).
-        self._schema_no_owner_ids = set()
+        self._schema_no_owner_ids: set[str] = set()
         if schema and isinstance(schema, dict):
             import re
 
@@ -2475,13 +2477,24 @@ class DiscoveryManager:
                 # (e.g. metadata lost during reload because .storage/ wasn't
                 # updated before teardown), do NOT flag it as NEW — it's
                 # already configured, not a new discovery (issue 917).
-                if device_id in self._schema_device_ids:
+                # Exception: devices in the schema without an _owner need
+                # review (issue 1119 — e.g. HGI discovered via MQTT that
+                # hasn't been accepted/rejected yet).
+                if device_id in self._schema_device_ids and (
+                    device_id not in self._schema_no_owner_ids
+                ):
                     _LOGGER.info(
                         "check_for_new_devices: %s is in schema but has no"
                         " metadata — suppressing NEW notification (issue 917)",
                         device_id,
                     )
                     continue
+                if device_id in self._schema_no_owner_ids:
+                    _LOGGER.info(
+                        "check_for_new_devices: %s is in schema but has no"
+                        " _owner — flagging for review (issue 1119)",
+                        device_id,
+                    )
                 # Brand new device — create metadata
                 self._metadata[device_id] = DeviceMetadata()
                 new_ids.append(device_id)
