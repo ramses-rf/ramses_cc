@@ -1778,6 +1778,25 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         )
         current_additional = self.options.get(CONF_ADDITIONAL_PORTS, [])
 
+        # Also show schema-derived pool members (HGIs with _owner: me
+        # and _class: HGI that are automatically added to the pool by
+        # _extract_pool_hgis_from_schema).  These are not in
+        # additional_ports but are active pool members (issue 1119).
+        schema = self.options.get(CONF_SCHEMA, {})
+        if not isinstance(schema, dict):
+            schema = {}
+        root_owner = schema.get(SZ_OWNER, "me")
+        schema_pool_members: list[str] = []
+        for dev_id, entry in schema.items():
+            if (
+                dev_id.startswith("18:")
+                and isinstance(entry, dict)
+                and entry.get("_class", "").upper() == "HGI"
+                and entry.get(SZ_TR_OWNER) == root_owner
+                and not entry.get("_disabled")
+            ):
+                schema_pool_members.append(dev_id)
+
         # Build options for the "current ports" multi-select (for removal)
         # Show each current additional port with a friendly label
         current_options: list[selector.SelectOptionDict] = []
@@ -1858,6 +1877,11 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             description_placeholders={
                 "primary_port": str(primary_port),
                 "current_count": str(len(current_additional)),
+                "schema_pool_members": (
+                    ", ".join(schema_pool_members)
+                    if schema_pool_members
+                    else "(none)"
+                ),
             },
             last_step=False,
         )

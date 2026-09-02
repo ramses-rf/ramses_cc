@@ -4039,8 +4039,13 @@ async def test_review_discovered_foreign_device_sync_with_schema(
     )
 
     # Assert
+    expected_schema = {
+        SZ_OWNER: "me",
+        "18:072981": {SZ_TR_CLASS: "HGI", SZ_TR_OWNER: "not-me"},
+        "01:216136": {},
+    }
     mock_coord.discovery_manager.sync_with_schema.assert_called_once_with(
-        {"01:216136", "18:072981"}, {"18:072981"}
+        {"01:216136", "18:072981"}, {"18:072981"}, expected_schema
     )
 
 
