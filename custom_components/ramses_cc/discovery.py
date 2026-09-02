@@ -257,6 +257,8 @@ class DiscoveryManager:
         # after a reload where .storage/ wasn't updated before teardown
         # (issue 917).
         self._schema_device_ids: set[str] = set()
+        # Devices in schema without _owner — need review (issue 1119)
+        self._schema_no_owner_ids: set[str] = set()
         self._foreign_device_ids: set[str] = set()
 
         # Track which mismatches we've already warned about (to avoid
@@ -511,6 +513,7 @@ class DiscoveryManager:
         self,
         schema_device_ids: set[str],
         foreign_device_ids: set[str] | None = None,
+        schema: dict[str, Any] | None = None,
     ) -> None:
         """Sync discovery metadata with the current schema.
 
@@ -523,11 +526,41 @@ class DiscoveryManager:
             (neighbour's devices).  These are excluded from discovery —
             they appear in the scan engine (it sees all RF traffic) but
             should not be offered for review/acceptance.
+        :param schema: The full config schema dict (with _ traits).
+            Used to identify devices that are in the schema but have no
+            ``_owner`` — these need review (issue 1119: HGI discovery
+            candidates).
         """
         # Stash for check_for_new_devices (issue 917: prevents re-notifying
         # devices that are already in the schema but lost their metadata).
         self._schema_device_ids = schema_device_ids
         self._foreign_device_ids = foreign_device_ids or set()
+        # Devices in the schema that have no _owner — these are discovery
+        # candidates that need review (e.g. HGIs discovered via MQTT).
+        # check_for_new_devices should NOT suppress them (issue 1119).
+        self._schema_no_owner_ids: set[str] = set()
+        if schema and isinstance(schema, dict):
+            for dev_id, entry in schema.items():
+                if (
+                    isinstance(entry, dict)
+                    and SZ_TR_OWNER not in entry
+                    and dev_id.startswith(
+                        (
+                            "18:",
+                            "01:",
+                            "04:",
+                            "07:",
+                            "10:",
+                            "12:",
+                            "13:",
+                            "29:",
+                            "32:",
+                            "37:",
+                            "63:",
+                        )
+                    )
+                ):
+                    self._schema_no_owner_ids.add(dev_id)
 
         _LOGGER.info(
             "DiscoveryManager: sync_with_schema with schema_device_ids=%s",
@@ -2359,13 +2392,24 @@ class DiscoveryManager:
                 # (e.g. metadata lost during reload because .storage/ wasn't
                 # updated before teardown), do NOT flag it as NEW — it's
                 # already configured, not a new discovery (issue 917).
-                if device_id in self._schema_device_ids:
+                # Exception: devices in the schema without an _owner need
+                # review (issue 1119 — e.g. HGI discovered via MQTT that
+                # hasn't been accepted/rejected yet).
+                if device_id in self._schema_device_ids and (
+                    device_id not in self._schema_no_owner_ids
+                ):
                     _LOGGER.info(
                         "check_for_new_devices: %s is in schema but has no"
                         " metadata — suppressing NEW notification (issue 917)",
                         device_id,
                     )
                     continue
+                if device_id in self._schema_no_owner_ids:
+                    _LOGGER.info(
+                        "check_for_new_devices: %s is in schema but has no"
+                        " _owner — flagging for review (issue 1119)",
+                        device_id,
+                    )
                 # Brand new device — create metadata
                 self._metadata[device_id] = DeviceMetadata()
                 new_ids.append(device_id)

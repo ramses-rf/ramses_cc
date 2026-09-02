@@ -1306,6 +1306,8 @@ def sync_learned_topology(
     # TRV in zones[], etc.) were accepted without a root entry — so _owner
     # and other traits could never be set on them.  This backfill creates
     # a root entry with the root _owner so SSOT works for these devices.
+    # Also backfills _owner on existing entries that are missing it (e.g.
+    # HGI gateways discovered via MQTT that have _class but no _owner).
     root_owner = new_schema.get(SZ_OWNER)
     backfill_count = 0
     for dev_id in active_device_ids:
@@ -1317,6 +1319,22 @@ def sync_learned_topology(
             backfill_count += 1
             _LOGGER.info(
                 "sync_learned_topology: backfilled root entry for %s",
+                dev_id,
+            )
+        elif (
+            root_owner
+            and isinstance(new_schema[dev_id], dict)
+            and SZ_TR_OWNER not in new_schema[dev_id]
+        ):
+            # Existing entry without _owner — inherit root owner.
+            # This happens for auto-discovered devices (e.g. HGIs
+            # discovered via MQTT packets) that were added with
+            # _class but no _owner.
+            new_schema[dev_id][SZ_TR_OWNER] = root_owner
+            changed = True
+            backfill_count += 1
+            _LOGGER.info(
+                "sync_learned_topology: backfilled _owner for %s",
                 dev_id,
             )
     # Also check remotes/sensors lists (not in active_device_ids above)
