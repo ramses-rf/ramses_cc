@@ -1758,9 +1758,23 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             if primary and primary in additional:
                 errors["base"] = "pool_duplicate_primary"
             else:
+                # Determine the primary HGI ID — it cannot be removed
+                # from the pool via this form (it's managed via
+                # choose_serial_port).
+                primary_hgi_id_input: str | None = None
+                if isinstance(primary, str) and primary.startswith("mqtt://"):
+                    primary_hgi_id_input = self.options.get(CONF_MQTT_HGI_ID)
+                    if not primary_hgi_id_input:
+                        import re as _re
+
+                        m = _re.search(r"(18:[0-9]{6})", primary)
+                        if m:
+                            primary_hgi_id_input = m.group(1)
+
                 # Process schema pool member removals — unchecking a
                 # schema pool member removes _owner from its schema entry,
                 # demoting it back to a discovery candidate (issue 1119).
+                # The primary HGI is always kept (cannot be demoted here).
                 schema_dict = dict(self.options.get(CONF_SCHEMA, {}))
                 if isinstance(schema_dict, dict):
                     root_owner = schema_dict.get(SZ_OWNER, "me")
@@ -1771,6 +1785,8 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                             and entry.get("_class", "").upper() == "HGI"
                             and entry.get(SZ_TR_OWNER) == root_owner
                         ):
+                            if dev_id == primary_hgi_id_input:
+                                continue  # primary — always kept
                             if dev_id not in keep_schema_members:
                                 # Demote: remove _owner
                                 entry.pop(SZ_TR_OWNER, None)
@@ -1806,6 +1822,8 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         # HGI) — these are active pool members managed via the schema.
         # Show them in the form with a checkbox for each; unchecking
         # demotes them back to discovery candidates (removes _owner).
+        # The primary HGI is also listed (marked as "primary") so the
+        # user can see the full pool composition.
         schema = self.options.get(CONF_SCHEMA, {})
         if not isinstance(schema, dict):
             schema = {}
@@ -1820,6 +1838,64 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 and not entry.get("_disabled")
             ):
                 schema_pool_members.append(dev_id)
+
+        # Determine the primary HGI ID (from the MQTT URL or CONF_MQTT_HGI_ID)
+        # so we can label it in the pool list.
+        primary_hgi_id: str | None = None
+        if isinstance(primary_port, str) and primary_port.startswith(
+            "mqtt://"
+        ):
+            primary_hgi_id = self.options.get(CONF_MQTT_HGI_ID)
+            if not primary_hgi_id:
+                import re as _re
+
+                m = _re.search(r"(18:[0-9]{6})", primary_port)
+                if m:
+                    primary_hgi_id = m.group(1)
+
+        # Build a label for each pool member showing its broker info.
+        # For the primary HGI: the primary_port URL.
+        # For additional HGIs: the explicit per-HGI MQTT URL.
+        def _pool_member_label(dev_id: str) -> str:
+            """Build a human-readable label with broker info."""
+            if dev_id == primary_hgi_id:
+                # Mask credentials in the primary URL for display
+                from urllib.parse import urlparse, urlunparse
+
+                display_url = primary_port
+                try:
+                    parsed = urlparse(primary_port)
+                    if parsed.username:
+                        netloc = f"***:***@{parsed.hostname}"
+                        if parsed.port:
+                            netloc += f":{parsed.port}"
+                        display_url = urlunparse(
+                            parsed._replace(netloc=netloc)
+                        )
+                except (ValueError, AttributeError):
+                    pass
+                return f"HGI: {dev_id} (primary, {display_url})"
+            # Build the explicit MQTT URL for this HGI
+            if isinstance(primary_port, str) and primary_port.startswith(
+                "mqtt://"
+            ):
+                from .coordinator import RamsesCoordinator
+
+                explicit = RamsesCoordinator._build_explicit_mqtt_url(
+                    primary_port, dev_id
+                )
+                if explicit:
+                    # Mask credentials in the URL for display
+                    from urllib.parse import urlparse, urlunparse
+
+                    parsed = urlparse(explicit)
+                    if parsed.username:
+                        netloc = f"***:***@{parsed.hostname}"
+                        if parsed.port:
+                            netloc += f":{parsed.port}"
+                        explicit = urlunparse(parsed._replace(netloc=netloc))
+                    return f"HGI: {dev_id} ({explicit})"
+            return f"HGI: {dev_id} (schema, _owner: {root_owner})"
 
         # Build options for the "current ports" multi-select (for removal)
         # Show each current additional port with a friendly label
@@ -1877,16 +1953,24 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 )
             )
 
-        # Schema pool members selector (multi-select for removal)
-        if schema_pool_members:
+        # Schema pool members selector (multi-select for removal).
+        # Include the primary HGI in the list (it's also a pool member)
+        # but mark it as "primary" so the user knows which one is the
+        # primary gateway.  The primary cannot be removed here — it's
+        # managed via choose_serial_port.
+        all_pool_hgis = sorted(
+            set(schema_pool_members)
+            | ({primary_hgi_id} if primary_hgi_id else set())
+        )
+        if all_pool_hgis:
             schema_pool_selector = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         selector.SelectOptionDict(
                             value=dev_id,
-                            label=f"HGI: {dev_id} (schema, _owner: {root_owner})",
+                            label=_pool_member_label(dev_id),
                         )
-                        for dev_id in sorted(schema_pool_members)
+                        for dev_id in all_pool_hgis
                     ],
                     mode=selector.SelectSelectorMode.LIST,
                     multiple=True,
@@ -1909,7 +1993,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         data_schema: dict[str, Any] = {
             prob.Optional(
                 "schema_pool_members",
-                default=schema_pool_members,
+                default=all_pool_hgis,
             ): schema_pool_selector,
             prob.Optional(
                 CONF_ADDITIONAL_PORTS,
