@@ -1170,35 +1170,46 @@ class RamsesCoordinator(DataUpdateCoordinator):
         return foreign
 
     def _extract_pool_hgis_from_schema(self) -> list[str]:
-        """Extract accepted HGI IDs from the schema for pool membership.
+        """Extract HGI IDs from the schema for pool membership.
 
         Per issue 1119, HGIs (18: devices with _class: HGI) that have
-        _owner matching the root _owner are pool members.  HGIs with
-        a different _owner are foreign (excluded).  HGIs without _owner
-        are discovery candidates (not yet accepted).
+        _owner matching the root _owner are accepted pool members.
+        HGIs with a different _owner are foreign (excluded).  HGIs
+        without _owner are discovery candidates — they are included
+        as receive-only children so their packets are received and
+        the scan engine can discover them, but they cannot send
+        commands until the user accepts them (sets _owner).
 
-        :return: List of HGI device IDs that are accepted pool members
-            (excluding the primary HGI which is the first child).
+        :return: List of HGI device IDs for pool membership (accepted
+            members + discovery candidates), excluding the primary HGI.
         """
         schema = self.entry.options.get(CONF_SCHEMA, {})
         if not isinstance(schema, dict):
             return []
         root_owner = schema.get(SZ_OWNER)
-        if not root_owner:
-            return []
         # Get the primary HGI ID to exclude it from additional children
         primary_hgi = self._get_primary_hgi_id()
         pool_hgis: list[str] = []
         for dev_id, entry in schema.items():
-            if (
+            if not (
                 dev_id.startswith("18:")
                 and isinstance(entry, dict)
                 and entry.get("_class", "").upper() == "HGI"
-                and entry.get(SZ_TR_OWNER) == root_owner
                 and not entry.get("_disabled")
                 and dev_id != primary_hgi
             ):
+                continue
+            owner = entry.get(SZ_TR_OWNER)
+            if owner == root_owner:
+                # Accepted pool member — full send + receive
                 pool_hgis.append(dev_id)
+            elif owner is None:
+                # Discovery candidate — receive-only so packets are
+                # received and the scan engine can discover the HGI.
+                # The user must accept it (set _owner) before it can
+                # send commands (issue 1119).
+                pool_hgis.append(dev_id)
+            # HGIs with a foreign owner are excluded
         return pool_hgis
 
     def _get_primary_hgi_id(self) -> str | None:
