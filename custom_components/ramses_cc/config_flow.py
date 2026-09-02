@@ -1747,30 +1747,54 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         if user_input is not None:
             # Save the current additional ports (removals applied)
             additional: list[str] = user_input.get(CONF_ADDITIONAL_PORTS, [])
+            # Schema pool members that the user wants to keep (checked)
+            keep_schema_members: list[str] = user_input.get(
+                "schema_pool_members", []
+            )
             add_choice = user_input.get("add_new_port", NO_ADD)
 
             # Validate: no duplicates, primary port not in additional
             primary = self.options.get(SZ_SERIAL_PORT, {}).get(SZ_PORT_NAME)
             if primary and primary in additional:
                 errors["base"] = "pool_duplicate_primary"
-            elif add_choice == CONF_MQTT_PATH:
-                # Save current state and go to MQTT sub-step
-                self.options[CONF_ADDITIONAL_PORTS] = additional
-                return await self.async_step_manage_pool_mqtt()
-            elif add_choice == CONF_ZIGBEE_DEVICE:
-                # Save current state and go to Zigbee sub-step
-                self.options[CONF_ADDITIONAL_PORTS] = additional
-                return await self.async_step_manage_pool_zigbee()
-            elif add_choice not in (NO_ADD, ADD_NEW):
-                # USB port selected directly — add it
-                if add_choice not in additional:
-                    additional = additional + [add_choice]
-                self.options[CONF_ADDITIONAL_PORTS] = additional
-                return self._async_save()
             else:
-                # No new port — just save removals
-                self.options[CONF_ADDITIONAL_PORTS] = additional
-                return self._async_save()
+                # Process schema pool member removals — unchecking a
+                # schema pool member removes _owner from its schema entry,
+                # demoting it back to a discovery candidate (issue 1119).
+                schema_dict = dict(self.options.get(CONF_SCHEMA, {}))
+                if isinstance(schema_dict, dict):
+                    root_owner = schema_dict.get(SZ_OWNER, "me")
+                    for dev_id, entry in list(schema_dict.items()):
+                        if (
+                            dev_id.startswith("18:")
+                            and isinstance(entry, dict)
+                            and entry.get("_class", "").upper() == "HGI"
+                            and entry.get(SZ_TR_OWNER) == root_owner
+                        ):
+                            if dev_id not in keep_schema_members:
+                                # Demote: remove _owner
+                                entry.pop(SZ_TR_OWNER, None)
+                                schema_dict[dev_id] = entry
+                    self.options[CONF_SCHEMA] = schema_dict
+
+                if add_choice == CONF_MQTT_PATH:
+                    # Save current state and go to MQTT sub-step
+                    self.options[CONF_ADDITIONAL_PORTS] = additional
+                    return await self.async_step_manage_pool_mqtt()
+                elif add_choice == CONF_ZIGBEE_DEVICE:
+                    # Save current state and go to Zigbee sub-step
+                    self.options[CONF_ADDITIONAL_PORTS] = additional
+                    return await self.async_step_manage_pool_zigbee()
+                elif add_choice not in (NO_ADD, ADD_NEW):
+                    # USB port selected directly — add it
+                    if add_choice not in additional:
+                        additional = additional + [add_choice]
+                    self.options[CONF_ADDITIONAL_PORTS] = additional
+                    return self._async_save()
+                else:
+                    # No new port — just save removals
+                    self.options[CONF_ADDITIONAL_PORTS] = additional
+                    return self._async_save()
 
         # Build the current state for display
         primary_port = self.options.get(SZ_SERIAL_PORT, {}).get(
@@ -1778,10 +1802,10 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         )
         current_additional = self.options.get(CONF_ADDITIONAL_PORTS, [])
 
-        # Also show schema-derived pool members (HGIs with _owner: me
-        # and _class: HGI that are automatically added to the pool by
-        # _extract_pool_hgis_from_schema).  These are not in
-        # additional_ports but are active pool members (issue 1119).
+        # Schema-derived pool members (HGIs with _owner: me and _class:
+        # HGI) — these are active pool members managed via the schema.
+        # Show them in the form with a checkbox for each; unchecking
+        # demotes them back to discovery candidates (removes _owner).
         schema = self.options.get(CONF_SCHEMA, {})
         if not isinstance(schema, dict):
             schema = {}
@@ -1853,7 +1877,40 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 )
             )
 
+        # Schema pool members selector (multi-select for removal)
+        if schema_pool_members:
+            schema_pool_selector = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value=dev_id,
+                            label=f"HGI: {dev_id} (schema, _owner: {root_owner})",
+                        )
+                        for dev_id in sorted(schema_pool_members)
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=True,
+                )
+            )
+        else:
+            schema_pool_selector = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value="__none__",
+                            label="(no schema pool members)",
+                        )
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=True,
+                )
+            )
+
         data_schema: dict[str, Any] = {
+            prob.Optional(
+                "schema_pool_members",
+                default=schema_pool_members,
+            ): schema_pool_selector,
             prob.Optional(
                 CONF_ADDITIONAL_PORTS,
                 default=current_additional,
