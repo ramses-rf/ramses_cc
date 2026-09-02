@@ -261,6 +261,7 @@
                 "title": "Gateway Pool Beheer",
                 "description": "Primaire poort: {primary_port}\nHuidige extra poorten: {current_count}\nSchema pool-leden (auto): {schema_pool_members}",
                 "data": {
+                    "schema_pool_members": "Schema pool-leden (vink uit om uit pool te verwijderen)",
                     "additional_ports": "Extra poorten"
                 }
             }
