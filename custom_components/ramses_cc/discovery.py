@@ -257,7 +257,8 @@ class DiscoveryManager:
         # after a reload where .storage/ wasn't updated before teardown
         # (issue 917).
         self._schema_device_ids: set[str] = set()
-        # Devices in schema without _owner — need review (issue 1119)
+        # Devices in schema without _owner — need review (issue 1119).
+        # Populated by sync_with_schema().
         self._schema_no_owner_ids: set[str] = set()
         self._foreign_device_ids: set[str] = set()
 
@@ -538,7 +539,7 @@ class DiscoveryManager:
         # Devices in the schema that have no _owner — these are discovery
         # candidates that need review (e.g. HGIs discovered via MQTT).
         # check_for_new_devices should NOT suppress them (issue 1119).
-        self._schema_no_owner_ids: set[str] = set()
+        self._schema_no_owner_ids = set()
         if schema and isinstance(schema, dict):
             for dev_id, entry in schema.items():
                 if (
