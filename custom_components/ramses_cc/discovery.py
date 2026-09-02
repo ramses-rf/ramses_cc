@@ -646,14 +646,29 @@ class DiscoveryManager:
                 # of the review form — it's already in the schema.  If there's
                 # a class mismatch, the review form will show it in the
                 # mismatch section where the user can resolve it.
-                meta.status = DiscoveryStatus.ACCEPTED
-                meta.enabled = True
-                self._metadata[device_id] = meta
-                _LOGGER.info(
-                    "DiscoveryManager: device %s is in schema but had NEW "
-                    "status, marked as ACCEPTED",
-                    device_id,
-                )
+                #
+                # Exception: HGIs (18:) without _owner are discovery
+                # candidates — they're in the schema but haven't been
+                # accepted yet.  Keep status NEW so they appear in the
+                # review form for the user to accept (issue 1119).
+                if (
+                    device_id.startswith("18:")
+                    and device_id in self._schema_no_owner_ids
+                ):
+                    _LOGGER.info(
+                        "DiscoveryManager: HGI %s is in schema without "
+                        "_owner, keeping NEW status for review (issue 1119)",
+                        device_id,
+                    )
+                else:
+                    meta.status = DiscoveryStatus.ACCEPTED
+                    meta.enabled = True
+                    self._metadata[device_id] = meta
+                    _LOGGER.info(
+                        "DiscoveryManager: device %s is in schema but had "
+                        "NEW status, marked as ACCEPTED",
+                        device_id,
+                    )
             elif (
                 device_id.startswith("18:")
                 and meta.status == DiscoveryStatus.LOST
@@ -1797,6 +1812,11 @@ class DiscoveryManager:
             # Skip local active HGI gateway — it is managed directly by the
             # coordinator and auto-registered in the schema.
             if self._active_hgi_id and device_id == self._active_hgi_id:
+                _LOGGER.debug(
+                    "get_devices: skipping %s (active_hgi_id=%s)",
+                    device_id,
+                    self._active_hgi_id,
+                )
                 continue
             meta = self._metadata.get(device_id, DeviceMetadata())
 

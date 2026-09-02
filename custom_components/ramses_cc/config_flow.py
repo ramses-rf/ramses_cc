@@ -2091,6 +2091,11 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         new_devices = coordinator.discovery_manager.get_devices(
             status=DiscoveryStatus.NEW
         )
+        _LOGGER.debug(
+            "review_discovered: get_devices(NEW) returned %d devices: %s",
+            len(new_devices),
+            [d.device.device_id for d in new_devices],
+        )
         mismatched_devices = (
             coordinator.discovery_manager.get_mismatched_devices()
         )
