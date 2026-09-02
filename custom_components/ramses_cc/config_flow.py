@@ -1914,7 +1914,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         # Build options for the "add new port" dropdown
         ports = await async_get_usb_ports(self.hass)
         add_options: list[selector.SelectOptionDict] = [
-            selector.SelectOptionDict(value=NO_ADD, label="(none)"),
+            selector.SelectOptionDict(value=NO_ADD, label="(nothing to add)"),
         ]
         for k, v in ports.items():
             if k not in current_additional:

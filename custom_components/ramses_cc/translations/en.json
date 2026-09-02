@@ -261,8 +261,9 @@
                 "title": "Gateway Pool Management",
                 "description": "Primary port: {primary_port}\nCurrent additional ports: {current_count}\nSchema pool members (auto): {schema_pool_members}",
                 "data": {
-                    "schema_pool_members": "Schema pool members (uncheck to remove from pool)",
-                    "additional_ports": "Additional ports"
+                    "schema_pool_members": "Pool members (uncheck to remove from pool)",
+                    "additional_ports": "Additional ports (USB, Zigbee, external MQTT)",
+                    "add_new_port": "Add new port"
                 }
             }
         }
