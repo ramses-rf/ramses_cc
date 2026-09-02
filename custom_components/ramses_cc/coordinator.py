@@ -742,7 +742,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
             pool_hgi_ids = transport.get_extra_info("pool_hgi_ids")
             if pool_hgi_ids:
                 for hgi_id in pool_hgi_ids:
-                    scan.register_known_hgi(hgi_id)
+                    if hasattr(scan, "register_known_hgi"):
+                        scan.register_known_hgi(hgi_id)
                     registered.append(hgi_id)
 
         # 2. Register schema HGIs (18: devices with _class: HGI) that
@@ -763,7 +764,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 and entry.get("_class", "").upper() == "HGI"
             ):
                 if dev_id not in registered:
-                    scan.register_known_hgi(dev_id)
+                    # register_known_hgi was added in ramses_rf 0.60.5+;
+                    # guard for older published versions (manifest pins 0.60.4)
+                    if hasattr(scan, "register_known_hgi"):
+                        scan.register_known_hgi(dev_id)
                     registered.append(dev_id)
                 # Clear temporary _suppress_not_seen (int form only,
                 # not True which is permanent user suppression)
