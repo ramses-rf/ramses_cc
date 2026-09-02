@@ -259,7 +259,7 @@
             },
             "manage_pool": {
                 "title": "Gateway Pool Management",
-                "description": "Primary port: {primary_port}\nCurrent additional ports: {current_count}",
+                "description": "Primary port: {primary_port}\nCurrent additional ports: {current_count}\nSchema pool members (auto): {schema_pool_members}",
                 "data": {
                     "additional_ports": "Additional ports"
                 }
