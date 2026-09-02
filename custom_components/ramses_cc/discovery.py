@@ -2503,6 +2503,20 @@ class DiscoveryManager:
                 and device_id not in self._notified
             ):
                 new_ids.append(device_id)
+            elif (
+                meta.status == DiscoveryStatus.ACCEPTED
+                and device_id in self._schema_no_owner_ids
+                and device_id not in self._notified
+            ):
+                # Accepted device that lost its _owner in the schema
+                # (e.g. during a merge/migration) — re-flag for review
+                # so the user can re-accept and set _owner (issue 1119).
+                _LOGGER.info(
+                    "check_for_new_devices: %s is accepted but has no"
+                    " _owner in schema — re-flagging for review (issue 1119)",
+                    device_id,
+                )
+                new_ids.append(device_id)
             elif meta.status == DiscoveryStatus.REMOVED:
                 # Re-mark REMOVED devices as NEW if they're still seen
                 # (e.g., user removed from schema but device is still present)
