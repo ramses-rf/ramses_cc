@@ -1205,8 +1205,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         """Return the primary HGI ID from the transport config.
 
         For MQTT transports, the HGI ID is extracted from the URL path
-        or from CONF_MQTT_HGI_ID.  For serial/USB, it's unknown until
-        the first packet (returns None).
+        or from CONF_MQTT_HGI_ID.  For wildcard MQTT (no HGI ID in URL),
+        falls back to the first accepted HGI in the schema.  For serial/
+        USB, it's unknown until the first packet (returns None).
         """
         port_name = self.options.get(SZ_SERIAL_PORT, {}).get(SZ_PORT_NAME, "")
         if isinstance(port_name, str):
@@ -1221,6 +1222,21 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 m = _re.search(r"(18:[0-9]{6})(?:/|$)", port_name)
                 if m:
                     return m.group(1)
+                # Wildcard MQTT — fall back to the first accepted HGI
+                # in the schema (the one the user has been using).
+                schema = self.entry.options.get(CONF_SCHEMA, {})
+                if isinstance(schema, dict):
+                    root_owner = schema.get(SZ_OWNER)
+                    if root_owner:
+                        for dev_id, entry in schema.items():
+                            if (
+                                dev_id.startswith("18:")
+                                and isinstance(entry, dict)
+                                and entry.get("_class", "").upper() == "HGI"
+                                and entry.get(SZ_TR_OWNER) == root_owner
+                                and not entry.get("_disabled")
+                            ):
+                                return dev_id
         return None
 
     @staticmethod
