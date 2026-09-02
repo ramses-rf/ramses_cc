@@ -1082,6 +1082,11 @@ class DiscoveryManager:
             # Skip structural keys (main_tcs, _owner, etc.)
             if device_id.startswith("_") or device_id in ("main_tcs",):
                 continue
+            # Skip faked devices — they are virtual/impersonated and don't
+            # have real RF signal.  Flagging them as orphaned is a false
+            # positive (issue 1119).
+            if schema_entry.get("_faked") is True:
+                continue
 
             dev = scan_devices.get(device_id)
             if dev is None:
@@ -2426,11 +2431,14 @@ class DiscoveryManager:
                 # Accepted device that lost its _owner in the schema
                 # (e.g. during a merge/migration) — re-flag for review
                 # so the user can re-accept and set _owner (issue 1119).
+                # Reset status to NEW so it appears in review_discovered.
                 _LOGGER.info(
                     "check_for_new_devices: %s is accepted but has no"
                     " _owner in schema — re-flagging for review (issue 1119)",
                     device_id,
                 )
+                meta.status = DiscoveryStatus.NEW
+                self._metadata[device_id] = meta
                 new_ids.append(device_id)
             elif meta.status == DiscoveryStatus.REMOVED:
                 # Re-mark REMOVED devices as NEW if they're still seen
@@ -2478,6 +2486,17 @@ class DiscoveryManager:
             # ServiceValidationError).  Mirrors check_orphaned_devices.
             if device_id.startswith("18:"):
                 continue
+
+            # Skip faked devices — they are virtual/impersonated and don't
+            # have real RF signal.  Flagging them as lost is a false
+            # positive (issue 1119).
+            if schema is not None:
+                schema_entry = schema.get(device_id)
+                if (
+                    isinstance(schema_entry, dict)
+                    and schema_entry.get("_faked") is True
+                ):
+                    continue
 
             # Respect _suppress_not_seen from schema (issue 988)
             # Accepted values: True (suppress forever) or N int (suppress

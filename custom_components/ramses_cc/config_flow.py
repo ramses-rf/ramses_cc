@@ -2067,7 +2067,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 config_schema_for_sync
             )
             coordinator.discovery_manager.sync_with_schema(
-                schema_device_ids, foreign_device_ids
+                schema_device_ids, foreign_device_ids, config_schema_for_sync
             )
 
         # Run an immediate check so devices found by the scan since the
