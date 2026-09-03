@@ -24,10 +24,9 @@ flowchart TD
 
     USB -.->|"same HGI different transport<br/>not both at once"| ESP
 
-    PortPkt --> Proxy["ChildProtocolProxy 0<br/>packet_received"]
-    MqttPkt --> Proxy
+    PortPkt --> Pool["PooledTransport._on_child_packet<br/>via ChildProtocolProxy"]
+    MqttPkt --> Pool
 
-    Proxy -->|"_on_child_packet 0"| Pool["PooledTransport._on_child_packet"]
     Pool --> Proto["Protocol._packet_received"]
     Proto --> Scan["DiscoveryScan raw handler"]
     Scan --> NewDev["Discovery entry created"]
@@ -37,12 +36,19 @@ flowchart TD
 
 ## Transport comparison
 
-| Transport | RF receiver | Delivery to pool |
-|---|---|---|
-| Serial USB | USB stick | Serial bytes to frame to Packet |
-| MQTT ramses_esp | ramses_esp radio | MQTT publish to broker to subscriber to Packet |
-| Zigbee | Zigbee coordinator radio | Zigbee cluster attr to Packet |
+| Transport | RF receiver | Delivery to pool | Send-ready |
+|---|---|---|---|
+| Serial USB | USB stick | Serial bytes to frame to Packet | After hardware feasibility gate |
+| MQTT ramses_esp | ramses_esp radio | MQTT publish to broker to subscriber to Packet | After ESP online (LWT) |
+| Zigbee | Zigbee coordinator radio | Zigbee cluster attr to Packet | Not advertised until IEEE identity separated |
 
-All three converge at `_packet_read` to `ChildProtocolProxy` to
-`pool._on_child_packet` to `Protocol._packet_received` to raw handlers
-to `DiscoveryScan._on_packet`. The pool treats all children the same.
+All three converge at `ChildProtocolProxy` to `pool._on_child_packet` to
+`Protocol._packet_received` to raw handlers to `DiscoveryScan._on_packet`.
+The pool treats all children the same via the transport-neutral child interface.
+
+## Key points (new plan)
+
+- Each child is a `PoolChild` object with distinct `connection_state`, `node_availability`, `send_ready`, and `rssi` (invariant 20)
+- Serial children remain `send_ready=False` until the hardware feasibility gate is passed
+- MQTT LWT/offline propagates into `node_availability`, not just `connection_state`
+- Zigbee is not advertised as supported until IEEE transport identity and RAMSES HGI identity are separated (invariant 13)
