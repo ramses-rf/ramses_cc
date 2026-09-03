@@ -11,8 +11,8 @@ flowchart TD
     NewHGI -->|"broadcasts 0001 puzzle<br/>RSSI -060"| ActiveHGI
     NewREM -->|"broadcasts 22F1 state<br/>RSSI -075"| ActiveHGI
 
-    ActiveHGI -->|"MQTT rx topic"| MqttTransport["MqttTransport child 0"]
-    MqttTransport -->|"packet_received"| Pool["PooledTransport._on_child_packet"]
+    ActiveHGI -->|"MQTT rx topic"| MqttBridge["RamsesMqttBridge child 0<br/>(HA-native)"]
+    MqttBridge -->|"packet_received"| Pool["PooledTransport._on_child_packet"]
 
     Pool -->|"loopback check: src 18:009999<br/>NOT in pool_hgi_ids - normal traffic"| AcceptCheck{"child accepted?<br/>schema ownership"}
     AcceptCheck -->|"YES - forward"| Forward["Forward to dedup + protocol"]
