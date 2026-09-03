@@ -1,45 +1,55 @@
-# RSSI when a new HGI is added or removed
+# RSSI routing: cold-start, warmup, and child lifecycle
 
 ```mermaid
 flowchart TD
-    AddChild["pool.add_child /dev/ttyUSB1"]
-    AddChild --> Init["Initialize:<br/>child_rssi_trackers 1 = RssiTracker empty<br/>child_hgi 1 = None until handshake"]
-
-    Init --> Connected["Child connects<br/>_on_child_connected 1<br/>child_hgi 1 = 18:009999"]
-
-    Connected --> Select["_select_transport target_device"]
-
-    Select --> Check1{"Per-device RSSI<br/>tracker.best_rssi_for target?"}
-    Check1 -->|"None no samples<br/>returns _RSSI_UNKNOWN"| Check2{"Aggregate best RSSI<br/>across all known devices?"}
-    Check2 -->|"No known devices<br/>returns _RSSI_UNKNOWN"| Check3{"All candidates<br/>return _RSSI_UNKNOWN?"}
-    Check3 -->|"YES round-robin"| RR["Round-robin selection<br/>new child gets fair share"]
-    Check3 -->|"NO some have RSSI"| Best["Select best RSSI child<br/>new child excluded until<br/>it has samples"]
-
-    RR --> UseNew["New child immediately usable<br/>via round-robin fallback"]
-    Best --> UseExisting["Existing children preferred<br/>they have RSSI data"]
-
-    UseNew --> Packets["New child receives packets"]
-    UseExisting --> Packets
-
-    Packets --> Accumulate["RSSI samples accumulate<br/>tracker 1 record src_id, rssi, now"]
-
-    Accumulate --> Transition["After a few packets:<br/>tracker 1 best_rssi_for returns data<br/>selected when best signal"]
-
-    subgraph Remove["When a child is removed"]
-        RemoveChild["pool.remove_child 1"]
-        RemoveChild --> Clear["tracker 1 clear<br/>transports 1 = None<br/>child_connected 1 = False"]
-        Clear --> Excluded["select_transport filters<br/>transports i is not None - False<br/>removed child never selected"]
+    subgraph ColdStart["Cold-start after config-entry reload"]
+        Reload["Config-entry reload<br/>Pool recreated"]
+        Reload --> Init["Each PoolChild:<br/>rssi = RssiTracker empty<br/>connection_state: CONNECTING"]
+        Init --> Connected["Child connects<br/>connection_state: CONNECTED<br/>hgi_id discovered"]
+        Connected --> Select["_select_transport target_device"]
     end
 
-    style RR fill:#dfd,stroke:#0a0
+    Select --> Check1{"Fresh per-device RSSI?<br/>TTL: 5 minutes<br/>at least 1 sample?"}
+    Check1 -->|"NO - cold start"| Check2{"Fresh aggregate RSSI?<br/>excluding pool HGI sources"}
+    Check2 -->|"NO - no data at all"| Primary["Deterministic primary<br/>first eligible child in<br/>stable config order"]
+    Check1 -->|"YES"| Best["Select child with<br/>best fresh per-device RSSI"]
+    Check2 -->|"YES"| BestAgg["Select child with<br/>best fresh aggregate RSSI"]
+
+    Primary --> UseChild["Transmit via selected child"]
+    Best --> UseChild
+    BestAgg --> UseChild
+
+    UseChild --> Packets["Child receives packets"]
+    Packets --> Accumulate["RSSI samples accumulate<br/>child.rssi.record src, rssi, now<br/>loopback excluded"]
+
+    Accumulate --> Transition["After warmup:<br/>per-device RSSI available<br/>routing becomes RSSI-driven"]
+
+    subgraph Offline["Child goes offline (LWT / disconnect)"]
+        LWT["MQTT LWT offline<br/>or serial disconnect"]
+        LWT --> Avail["node_availability: OFFLINE<br/>send_ready: False"]
+        Avail --> Quarantine["Quarantine child's RSSI samples<br/>exclude from selection"]
+        Quarantine --> Excluded["Child excluded from<br/>outbound selection"]
+    end
+
+    subgraph ConfigChange["Config-entry reload removes child"]
+        RemoveReload["Config-entry reload<br/>without this child"]
+        RemoveReload --> Recreate["Pool recreated<br/>child simply absent"]
+        Recreate --> NoClear["No runtime remove_child<br/>no tracker.clear needed"]
+    end
+
+    style Primary fill:#dfd,stroke:#0a0
     style Transition fill:#dfd,stroke:#0a0
     style Excluded fill:#fdd,stroke:#c00
+    style Quarantine fill:#ffd,stroke:#aa0
 ```
 
-## Key points
+## Key points (new plan)
 
-- New child gets a fresh `RssiTracker` — no initialization needed
-- Immediately usable via round-robin fallback
-- Naturally transitions to RSSI-based selection as samples accumulate
-- Removed child: `tracker.clear()` frees memory, `is not None` check excludes from selection
-- Fallback chain: per-device `best_rssi_for` → aggregate best → round-robin
+- **Cold-start routing is deterministic**: first eligible child in stable config order (invariant 16) — never round-robin unless explicitly configured
+- **RSSI TTL: 5 minutes** — stale samples expire automatically (resolved from fixtures)
+- **Loopback excluded** from route RSSI, including aggregate fallback (invariant 15)
+- **Fallback chain**: fresh per-device RSSI → fresh aggregate RSSI (excluding pool HGIs) → deterministic primary → fail clearly
+- **Never multicast**: exactly one HGI transmits per attempt (invariant 16)
+- **No runtime add/remove**: config-entry reload is the only membership-change mechanism (invariant 19)
+- **Node availability** is distinct from connection state: LWT offline sets `node_availability=OFFLINE` and quarantines RSSI without dropping the connection
+- **Health timeout ≥ 120s**: packet silence expires route evidence but does not itself mark a connected serial radio offline (observed: 60s was too aggressive)
