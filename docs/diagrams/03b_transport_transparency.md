@@ -24,7 +24,7 @@ flowchart TD
 
     USB -.->|"same HGI different transport<br/>not both at once"| ESP
 
-    PortPkt --> Pool["PooledTransport._on_child_packet<br/>via ChildProtocolProxy"]
+    PortPkt --> Pool["PooledTransport._on_child_packet<br/>via PoolChild.transport callback"]
     MqttPkt --> Pool
 
     Pool --> Proto["Protocol._packet_received"]
@@ -42,8 +42,8 @@ flowchart TD
 | MQTT ramses_esp | ramses_esp radio | MQTT publish to broker to subscriber to Packet | After ESP online (LWT) |
 | Zigbee | Zigbee coordinator radio | Zigbee cluster attr to Packet | Not advertised until IEEE identity separated |
 
-All three converge at `ChildProtocolProxy` to `pool._on_child_packet` to
-`Protocol._packet_received` to raw handlers to `DiscoveryScan._on_packet`.
+All three converge at the `PoolChild.transport` callback to `pool._on_child_packet`
+to `Protocol._packet_received` to raw handlers to `DiscoveryScan._on_packet`.
 The pool treats all children the same via the transport-neutral child interface.
 
 ## Key points (new plan)

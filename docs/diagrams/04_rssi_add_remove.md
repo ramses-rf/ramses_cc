@@ -15,11 +15,18 @@ flowchart TD
     Check1 -->|"YES"| Best["Select child with<br/>best fresh per-device RSSI"]
     Check2 -->|"YES"| BestAgg["Select child with<br/>best fresh aggregate RSSI"]
 
-    Primary --> UseChild["Transmit via selected child"]
+    Primary --> CheckRR{"Round-robin<br/>explicitly configured?"}
+    CheckRR -->|"NO - use primary"| UseChild["Transmit via selected child"]
+    CheckRR -->|"YES"| RR["Round-robin selection"]
+    RR --> UseChild
     Best --> UseChild
     BestAgg --> UseChild
 
-    UseChild --> Packets["Child receives packets"]
+    UseChild --> CheckSend{"Any child<br/>send-ready?"}
+    CheckSend -->|"YES"| Transmit["Transmit"]
+    CheckSend -->|"NO - fail clearly"| Fail["Fail: no send-ready child"]
+
+    Transmit --> Packets["Child receives packets"]
     Packets --> Accumulate["RSSI samples accumulate<br/>child.rssi.record src, rssi, now<br/>loopback excluded"]
 
     Accumulate --> Transition["After warmup:<br/>per-device RSSI available<br/>routing becomes RSSI-driven"]
@@ -48,7 +55,7 @@ flowchart TD
 - **Cold-start routing is deterministic**: first eligible child in stable config order (invariant 16) — never round-robin unless explicitly configured
 - **RSSI TTL: 5 minutes** — stale samples expire automatically (resolved from fixtures)
 - **Loopback excluded** from route RSSI, including aggregate fallback (invariant 15)
-- **Fallback chain**: fresh per-device RSSI → fresh aggregate RSSI (excluding pool HGIs) → deterministic primary → fail clearly
+- **Fallback chain** (plan lines 544-548): fresh per-device RSSI → fresh aggregate RSSI (excluding pool HGIs) → first eligible child in stable config order → round-robin only if explicitly configured → fail clearly if no child is send-ready
 - **Never multicast**: exactly one HGI transmits per attempt (invariant 16)
 - **No runtime add/remove**: config-entry reload is the only membership-change mechanism (invariant 19)
 - **Node availability** is distinct from connection state: LWT offline sets `node_availability=OFFLINE` and quarantines RSSI without dropping the connection
