@@ -16,17 +16,23 @@ flowchart TD
     MqttTransport0 -->|"packet_received"| Pool["PooledTransport._on_child_packet"]
     PortTransport1 -->|"packet_received"| Pool
 
-    Pool -->|"step 1: loopback check<br/>src is active pool HGI?"| LoopCheck{"src in<br/>pool_hgi_ids?"}
+    Pool -->|"step 1: preserve ingress_hgi_id<br/>with the frame"| Provenance["IngressFrame<br/>frame + ingress_hgi_id"]
+    Provenance -->|"step 2: resolve RF transmitter<br/>via packet_addrs"| LoopCheck{"src is active<br/>pool HGI?"}
     LoopCheck -->|"NO - normal traffic"| AcceptCheck{"child accepted?<br/>schema ownership check"}
-    LoopCheck -->|"YES - loopback frame"| LoopTag["Tag as loopback<br/>exclude from route RSSI"]
+    LoopCheck -->|"YES - loopback frame"| LoopTag["Exclude from route RSSI<br/>(do not record as<br/>target-device evidence)"]
 
-    AcceptCheck -->|"YES"| Dedup["Dedup cache<br/>dict-backed, O(1) lookup"]
+    AcceptCheck -->|"YES"| RecordRSSI["Record RSSI for non-loopback<br/>child.rssi.record src, rssi, now<br/>TTL: 5 minutes"]
     AcceptCheck -->|"NO"| Drop["Dropped: not accepted"]
+
+    LoopTag --> EchoCheck{"QoS echo match?<br/>compare canonical fingerprint<br/>with pending final routed command"}
+    RecordRSSI --> EchoCheck
+
+    EchoCheck -->|"match: local echo or over-air copy<br/>satisfy QoS, then dedup"| Dedup["Dedup cache<br/>dict-backed, O(1) lookup"]
+    EchoCheck -->|"no match: normal traffic<br/>proceed to dedup"| Dedup
 
     Dedup -->|"first arrival<br/>key = verb,src,addr1,addr2,addr3,<br/>code,length,payload,seq?"| Forward["Forward to protocol"]
     Dedup -->|"duplicate within 500ms window"| DedupDrop["Dropped: deduped"]
 
-    Forward -->|"record RSSI AFTER dedup<br/>child.rssi.record src, rssi, now<br/>(loopback excluded)"| RSSI["Per-device RSSI tracking<br/>RssiTracker per PoolChild<br/>TTL: 5 minutes"]
     Forward --> Proto["Protocol.packet_received"]
     Proto -->|"raw handlers fire first"| Scan["DiscoveryScan raw handler"]
     Proto -->|"device ID filter"| Filter["Device ID filter"]
@@ -41,10 +47,17 @@ flowchart TD
 ## Key points (new plan)
 
 - Both HGIs hear the same RF packet with different RSSI due to distance
-- **Loopback check first**: if src is an active pool HGI, tag as loopback and exclude from route RSSI (invariant 15)
+- **Inbound processing order** (plan section "Ingress provenance and cross-dongle loopback"):
+  1. Preserve `ingress_hgi_id` with the frame
+  2. Resolve RF transmitter; if src is an active pool HGI, exclude from route RSSI (not `addr1` heuristic)
+  3. Compare canonical echo fingerprint with pending final routed command
+  4. Normalize transport-assigned sequence for echo matching
+  5. Treat exact match from selected child as local echo; from other children as over-air copy
+  6. Satisfy QoS, then deduplicate remaining copies
+  7. Do not blanket-suppress unrelated frames whose `addr1` is an active HGI
+- **RSSI recorded before dedup but after loopback exclusion** — loopback frames never enter route RSSI
 - **Schema ownership** is canonical for acceptance (not a separate `accepted_hgis` set)
 - **Dedup is dict-backed** (O(1) lookup), key includes sequence when present (resolved from fixtures: sequence is stable across HGIs, 50/50)
-- **RSSI recorded after dedup** — only for non-loopback packets, preventing aggregate contamination
 - **RSSI TTL: 5 minutes** — stale samples expire automatically (resolved from fixtures)
 - **500 ms dedup window** confirmed from fixtures (median delta 8.4 ms)
 - Inbound frames retain receiving-HGI provenance independently from `addr1` (invariant 8)

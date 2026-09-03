@@ -27,7 +27,7 @@ flowchart TD
 
         Factory --> Handshake["Signature handshake<br/>send 0001 puzzle<br/>wait for echo"]
         Handshake -->|"HGI echoes back<br/>0001 with its ID as src"| Echo["Echo received<br/>packet.src.id = 18:009999"]
-        Echo --> SetHgi["PoolChild.hgi_id = 18:009999<br/>connection_state: CONNECTED"]
+        Echo --> SetHgi["PoolChild.hgi_id = 18:009999<br/>connection_state: CONNECTED<br/>node_availability: ONLINE<br/>send_ready: True (after HW gate)"]
         SetHgi --> CrossRef["Cross-reference:<br/>18:009999 accepted in Phase 1<br/>schema ownership = me"]
         CrossRef --> Done["Pool has 2 children:<br/>child 0: /dev/ttyUSB0 to 18:001234<br/>child 1: /dev/ttyUSB1 to 18:009999<br/>RSSI routing active after warmup"]
     end
