@@ -3,17 +3,20 @@
 Mermaid flow diagrams for the multi-HGI gateway pool support.
 
 These diagrams illustrate the **target architecture** from the new plan
-(`multi-hgi-plan.md`), not the current PR implementation. Key differences
-from the current implementation:
+(`multi-hgi-plan.md`), not the current PR implementation. The plan is
+phased: Phase 1 (MQTT-only pool) is the first release, Phase 2 adds
+serial/hybrid, Phase 3 adds Zigbee. The diagrams show the complete target
+state across all phases. Key differences from the current implementation:
 
 - **Typed pre-serialization routing** instead of ASCII frame parsing
 - **`SourcePolicy.GATEWAY` vs `PRESERVE`** instead of `addr1.startswith("18:")` heuristic
 - **`PoolChild` object** instead of parallel arrays
 - **Schema ownership** as canonical acceptance authority instead of separate `accepted_hgis`
 - **Config-entry reload** for membership changes instead of runtime `add_child()`/`remove_child()`
-- **RSSI recorded after dedup** with loopback excluded from route RSSI
+- **RSSI recorded before dedup but after loopback exclusion** — loopback frames never enter route RSSI
 - **RSSI TTL of 5 minutes** (resolved from captured fixtures)
 - **Deterministic primary fallback** instead of round-robin as default cold-start
+- **HA-native MQTT** via `RamsesMqttBridge` (`homeassistant.components.mqtt`) inside Home Assistant — no direct paho clients for pooled MQTT
 
 ## Diagrams
 

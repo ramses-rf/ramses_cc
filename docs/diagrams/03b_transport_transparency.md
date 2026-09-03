@@ -17,7 +17,7 @@ flowchart TD
         ESP["HGI 18:001234<br/>ramses_esp, child 0"]
         ESP -->|"hears RF signal"| EspPub["ramses_esp publishes<br/>to .../18:001234/rx"]
         EspPub --> Broker["MQTT broker"]
-        Broker -->|"delivers to subscriber"| MqttSub["MqttTransport._on_message"]
+        Broker -->|"delivers to subscriber"| MqttSub["RamsesMqttBridge._handle_rx_message<br/>(HA-native: homeassistant.components.mqtt)"]
         MqttSub --> MqttFrame["_frame_read<br/>Packet.from_file"]
         MqttFrame --> MqttPkt["_packet_read"]
     end
@@ -38,9 +38,9 @@ flowchart TD
 
 | Transport | RF receiver | Delivery to pool | Send-ready |
 |---|---|---|---|
-| Serial USB | USB stick | Serial bytes to frame to Packet | After hardware feasibility gate |
-| MQTT ramses_esp | ramses_esp radio | MQTT publish to broker to subscriber to Packet | After ESP online (LWT) |
-| Zigbee | Zigbee coordinator radio | Zigbee cluster attr to Packet | Not advertised until IEEE identity separated |
+| Serial USB | USB stick | Serial bytes to frame to Packet | Phase 2 (after hardware feasibility gate) |
+| MQTT ramses_esp | ramses_esp radio | MQTT publish to broker to RamsesMqttBridge to Packet | Phase 1 (after ESP online/LWT) |
+| Zigbee | Zigbee coordinator radio | Zigbee cluster attr to Packet | Phase 3 (after IEEE identity separated) |
 
 All three converge at the `PoolChild.transport` callback to `pool._on_child_packet`
 to `Protocol._packet_received` to raw handlers to `DiscoveryScan._on_packet`.
@@ -49,6 +49,9 @@ The pool treats all children the same via the transport-neutral child interface.
 ## Key points (new plan)
 
 - Each child is a `PoolChild` object with distinct `connection_state`, `node_availability`, `send_ready`, and `rssi` (invariant 20)
-- Serial children remain `send_ready=False` until the hardware feasibility gate is passed
+- **Phase 1 (MQTT-only):** only MQTT children are instantiated; serial and Zigbee are gated in the config flow with "(not yet supported)" markers
+- **Phase 2 (serial/hybrid):** serial children are un-gated; `send_ready=False` until the hardware feasibility gate is passed
+- **Phase 3 (Zigbee):** Zigbee children are un-gated after IEEE/RAMSES identity separation
 - MQTT LWT/offline propagates into `node_availability`, not just `connection_state`
+- Inside HA, MQTT uses `RamsesMqttBridge` (`homeassistant.components.mqtt`), not `MqttTransport` (direct paho)
 - Zigbee is not advertised as supported until IEEE transport identity and RAMSES HGI identity are separated (invariant 13)

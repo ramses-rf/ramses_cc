@@ -10,10 +10,10 @@ flowchart TD
     end
 
     HGI1 -->|"MQTT publish<br/>RAMSES/GATEWAY/18:001234/rx"| MQTT["MQTT broker"]
-    MQTT --> MqttTransport0["MqttTransport child 0"]
+    MQTT --> MqttBridge0["RamsesMqttBridge child 0<br/>(HA-native, homeassistant.components.mqtt)"]
     HGI2 -->|"serial read"| PortTransport1["PortTransport child 1"]
 
-    MqttTransport0 -->|"packet_received"| Pool["PooledTransport._on_child_packet"]
+    MqttBridge0 -->|"packet_received"| Pool["PooledTransport._on_child_packet"]
     PortTransport1 -->|"packet_received"| Pool
 
     Pool -->|"step 1: preserve ingress_hgi_id<br/>with the frame"| Provenance["IngressFrame<br/>frame + ingress_hgi_id"]
@@ -30,7 +30,7 @@ flowchart TD
     EchoCheck -->|"match: local echo or over-air copy<br/>satisfy QoS, then dedup"| Dedup["Dedup cache<br/>dict-backed, O(1) lookup"]
     EchoCheck -->|"no match: normal traffic<br/>proceed to dedup"| Dedup
 
-    Dedup -->|"first arrival<br/>key = verb,src,addr1,addr2,addr3,<br/>code,length,payload,seq?"| Forward["Forward to protocol"]
+    Dedup -->|"first arrival<br/>key = verb,addr1,addr2,addr3,<br/>code,length,payload,seq?"| Forward["Forward to protocol"]
     Dedup -->|"duplicate within 500ms window"| DedupDrop["Dropped: deduped"]
 
     Forward --> Proto["Protocol.packet_received"]
@@ -59,5 +59,5 @@ flowchart TD
 - **Schema ownership** is canonical for acceptance (not a separate `accepted_hgis` set)
 - **Dedup is dict-backed** (O(1) lookup), key includes sequence when present (resolved from fixtures: sequence is stable across HGIs, 50/50)
 - **RSSI TTL: 5 minutes** — stale samples expire automatically (resolved from fixtures)
-- **500 ms dedup window** confirmed from fixtures (median delta 8.4 ms)
+- **500 ms dedup window** confirmed from fixtures (median delta 5.9 ms, max 499.6 ms, 0/149 outside window)
 - Inbound frames retain receiving-HGI provenance independently from `addr1` (invariant 8)
