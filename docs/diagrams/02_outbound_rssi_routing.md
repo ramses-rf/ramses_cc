@@ -1,44 +1,54 @@
-# Outbound: send a command to the FAN
+# Outbound: send a command via typed pre-serialization routing
 
-Normal command (HGI as source) vs faked device (REM as source).
+The new plan moves route selection to a typed pre-serialization boundary.
+The pool no longer parses ASCII frames with `.split()` to extract addresses.
 
 ```mermaid
 flowchart TD
-    subgraph CaseA["Case A: normal command, HGI as source"]
+    subgraph CaseA["Case A: gateway-source command (SourcePolicy.GATEWAY)"]
         Cmd1["CommandDTO<br/>addr1 = 18:000730 placeholder"]
-        Cmd1 --> Patch1["_patch_cmd_if_needed<br/>evofw3: 18:000730 to 18:001234<br/>pools active HGI = first child"]
-        Patch1 --> Frame1["Frame: I --- 18:001234 01:123456 ..."]
-        Frame1 --> Pool1["Pool.write_frame"]
-        Pool1 -->|"src = 18:001234<br/>child = 18:005678<br/>src starts with 18 - re-patch"| Repatch1["Frame: I --- 18:005678 01:123456 ..."]
-        Repatch1 --> Send1["Transmit via child 1<br/>best RSSI for 01:123456"]
+        Cmd1 --> Prep1["prepare_command RouteRequest<br/>command, source_policy=GATEWAY"]
+        Prep1 --> Route1["Router selects child<br/>via packet_addrs for target<br/>fresh per-device RSSI"]
+        Route1 --> Sub1{"SourcePolicy.GATEWAY<br/>and child is evofw3?"}
+        Sub1 -->|"YES - substitute source"| Replace1["dataclasses.replace<br/>addr1 = selected child HGI ID"]
+        Sub1 -->|"NO - HGI80 placeholder<br/>keep 18:000730"| Keep1["DTO unchanged<br/>HGI80 firmware substitutes ID"]
+        Replace1 --> Final1["Final routed CommandDTO<br/>addr1 = 18:005678"]
+        Keep1 --> Final1
     end
 
-    subgraph CaseB["Case B: faked device, REM as source"]
+    subgraph CaseB["Case B: faked device (SourcePolicy.PRESERVE)"]
         Cmd2["CommandDTO<br/>addr1 = 37:001234 faked REM"]
-        Cmd2 --> Patch2["_patch_cmd_if_needed<br/>addr1 not 18:000730 - no patch<br/>addr1 not hgi_id - no patch"]
-        Patch2 --> Frame2["Frame: I --- 37:001234 32:000001 ... 2411 ..."]
-        Frame2 --> Pool2["Pool.write_frame"]
-        Pool2 -->|"src = 37:001234<br/>child = 18:005678<br/>src does NOT start with 18 - skip"| NoRepatch["Frame unchanged:<br/>I --- 37:001234 32:000001 ..."]
-        NoRepatch --> Send2["Transmit via child 1<br/>best RSSI for 32:000001"]
+        Cmd2 --> Prep2["prepare_command RouteRequest<br/>command, source_policy=PRESERVE"]
+        Prep2 --> Route2["Router selects child<br/>via packet_addrs for target<br/>fresh per-device RSSI"]
+        Route2 --> NoSub["SourcePolicy.PRESERVE<br/>source NEVER rewritten"]
+        NoSub --> Final2["Final routed CommandDTO<br/>addr1 = 37:001234 unchanged"]
     end
 
-    Send1 --> HGI1["HGI 18:005678 transmits<br/>RF source: 18:005678"]
-    Send2 --> HGI2["HGI 18:005678 transmits<br/>RF source: 37:001234 faked REM"]
+    Final1 --> QoS1["Set pending QoS command<br/>from final routed DTO"]
+    Final2 --> QoS2["Set pending QoS command<br/>from final routed DTO"]
 
-    HGI1 --> Dev1["Device 01:123456 receives<br/>command from HGI 18:005678"]
-    HGI2 --> Dev2["FAN 32:000001 receives<br/>2411 from bound REM 37:001234"]
+    QoS1 --> Serial1["Serialize once<br/>derive canonical echo fingerprint<br/>from re-parsed wire frame"]
+    QoS2 --> Serial2["Serialize once<br/>derive canonical echo fingerprint<br/>from re-parsed wire frame"]
 
-    style Repatch1 fill:#ffd,stroke:#aa0
+    Serial1 --> Write1["write_routed child_id, frame<br/>dispatch to pinned child"]
+    Serial2 --> Write2["write_routed child_id, frame<br/>dispatch to pinned child"]
+
+    Write1 --> HGI1["HGI 18:005678 transmits<br/>RF source: 18:005678"]
+    Write2 --> HGI2["HGI 18:005678 transmits<br/>RF source: 37:001234 faked REM"]
+
+    style Replace1 fill:#ffd,stroke:#aa0
     style NoRepatch fill:#dfd,stroke:#0a0
+    style QoS1 fill:#dfd,stroke:#0a0
+    style QoS2 fill:#dfd,stroke:#0a0
 ```
 
-## Key points
+## Key points (new plan)
 
-- Protocol patches addr1 to pool's active HGI (first child) — first patch
-- Pool parses frame via `.split()`, target = parts[3] (addr2)
-- Pool looks up `tracker.best_rssi_for(target)` — max of last N readings
-- Pool re-patches addr1 to selected child's HGI — second patch
-- Re-patch only when `src_addr starts with 18` (HGI source)
-- Faked devices preserved: 37:001234 (REM) is NOT re-patched
-- HGI80 exception: 18:000730 placeholder is NOT re-patched
-- Double-patch is not optimal but overhead is negligible — see future optimization comment
+- **Typed pre-serialization routing**: route selection happens on `CommandDTO`, not on a serialized ASCII frame string
+- **SourcePolicy.GATEWAY vs PRESERVE**: explicit intent, not an `addr1.startswith("18:")` heuristic
+- **`dataclasses.replace()`** for source substitution — no string manipulation
+- **QoS echo fingerprint** derived from the final routed wire command (invariant 9, 15)
+- **Serialize once** per attempt; QoS retry is a new routed attempt that may select a different child
+- **No double-patching**: `_patch_cmd_if_needed` is folded into the preparation step
+- HGI80 exception: placeholder `18:000730` kept for HGI80 children (firmware substitutes its own ID)
+- Faked-device sources (`37:001234`) are preserved — no `18:` prefix heuristic
