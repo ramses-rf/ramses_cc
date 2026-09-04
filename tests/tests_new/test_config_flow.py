@@ -5051,7 +5051,8 @@ async def test_options_flow_manage_pool_mqtt_with_auth(
     assert result.get("type") == FlowResultType.CREATE_ENTRY
     updated = config_entry.options.get(CONF_ADDITIONAL_PORTS, [])
     assert any(
-        "user:pass@" in p and "broker.example.com:8883" in p
+        "user:pass@" in p
+        and "broker.example.com:8883" in p
         and "18:008888" in p
         for p in updated
     )
@@ -5103,7 +5104,9 @@ async def test_options_flow_manage_pool_remove_schema_member(
     config_entry = MockConfigEntry(
         domain=DOMAIN,
         options={
-            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"},
+            SZ_SERIAL_PORT: {
+                SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+            },
             CONF_SCHEMA: {
                 SZ_OWNER: "me",
                 "18:001111": {
@@ -5373,7 +5376,9 @@ async def test_options_flow_manage_pool_mqtt_duplicate_url(
         domain=DOMAIN,
         options={
             SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
-            CONF_ADDITIONAL_PORTS: ["mqtt://broker:1883/RAMSES/GATEWAY/18:009999"],
+            CONF_ADDITIONAL_PORTS: [
+                "mqtt://broker:1883/RAMSES/GATEWAY/18:009999"
+            ],
         },
     )
     config_entry.add_to_hass(hass)
@@ -5391,7 +5396,9 @@ async def test_options_flow_manage_pool_mqtt_duplicate_url(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             user_input={
-                CONF_ADDITIONAL_PORTS: ["mqtt://broker:1883/RAMSES/GATEWAY/18:009999"],
+                CONF_ADDITIONAL_PORTS: [
+                    "mqtt://broker:1883/RAMSES/GATEWAY/18:009999"
+                ],
                 "add_new_port": CONF_MQTT_PATH,
             },
         )
@@ -5492,7 +5499,9 @@ async def test_options_flow_manage_pool_no_add_save(
         domain=DOMAIN,
         options={
             SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
-            CONF_ADDITIONAL_PORTS: ["mqtt://broker:1883/RAMSES/GATEWAY/18:009999"],
+            CONF_ADDITIONAL_PORTS: [
+                "mqtt://broker:1883/RAMSES/GATEWAY/18:009999"
+            ],
         },
     )
     config_entry.add_to_hass(hass)
