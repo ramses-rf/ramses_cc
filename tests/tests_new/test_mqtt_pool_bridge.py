@@ -366,7 +366,9 @@ async def test_publish_frame_to_correct_hgi(
     mock_mqtt_pool: dict[str, Any],
 ) -> None:
     """Test that publish_frame publishes to the correct HGI topic."""
-    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1, TEST_HGI_2])
+    bridge = RamsesMqttPoolBridge(
+        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1, TEST_HGI_2]
+    )
     await bridge.publish_frame(
         TEST_HGI_2,
         " 000 I --- 01:123456 18:000730 --:------ 30C9 000 00",

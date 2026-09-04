@@ -221,7 +221,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # Initialize handlers
         self.fan_handler = RamsesFanHandler(self)
         self.service_handler = RamsesServiceHandler(self)
-        self.mqtt_bridge: RamsesMqttBridge | None = None
+        self.mqtt_bridge: RamsesMqttBridge | RamsesMqttPoolBridge | None = None
         self.discovery_manager: DiscoveryManager | None = None
         self._cached_discovery_state: dict[str, Any] | None = None
         self._suppress_reload: float = 0.0  # timestamp; >0 means suppressed

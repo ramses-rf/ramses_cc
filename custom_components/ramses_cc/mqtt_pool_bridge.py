@@ -302,7 +302,9 @@ class RamsesMqttPoolBridge:
         )
         _LOGGER.debug("MqttPoolBridge: TX -> %s on %s", payload, topic)
 
-    def _publish_command(self, hgi_id: str, payload: PublishPayloadType) -> None:
+    def _publish_command(
+        self, hgi_id: str, payload: PublishPayloadType
+    ) -> None:
         """Publish to ``{prefix}/{hgi_id}/cmd/cmd``.
 
         :param hgi_id: The target HGI device ID.
