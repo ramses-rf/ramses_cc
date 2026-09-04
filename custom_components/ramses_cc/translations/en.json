@@ -140,7 +140,10 @@
             "invalid_port_config": "Invalid serial port config: {error_detail}",
             "invalid_regex": "Invalid regular expression: {error_detail}",
             "invalid_schema": "Invalid schema: {error_detail}",
-            "invalid_traits": "Invalid device traits: {error_detail}"
+            "invalid_traits": "Invalid device traits: {error_detail}",
+            "pool_duplicate_primary": "The primary port cannot also be an additional port.",
+            "pool_serial_not_supported": "Serial/USB pool members are not yet supported (planned for Phase 2).",
+            "pool_zigbee_not_supported": "Zigbee pool members are not yet supported (planned for Phase 3)."
         },
         "step": {
             "init": {

@@ -1798,15 +1798,13 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     self.options[CONF_ADDITIONAL_PORTS] = additional
                     return await self.async_step_manage_pool_mqtt()
                 elif add_choice == CONF_ZIGBEE_DEVICE:
-                    # Save current state and go to Zigbee sub-step
-                    self.options[CONF_ADDITIONAL_PORTS] = additional
-                    return await self.async_step_manage_pool_zigbee()
+                    # Zigbee pool members are not yet supported (Phase 3,
+                    # PR 6).  Block the sub-step and show an error.
+                    errors["base"] = "pool_zigbee_not_supported"
                 elif add_choice not in (NO_ADD, ADD_NEW):
-                    # USB port selected directly — add it
-                    if add_choice not in additional:
-                        additional = additional + [add_choice]
-                    self.options[CONF_ADDITIONAL_PORTS] = additional
-                    return self._async_save()
+                    # Serial/USB pool members are not yet supported
+                    # (Phase 2, PR 3).  Block and show an error.
+                    errors["base"] = "pool_serial_not_supported"
                 else:
                     # No new port — just save removals
                     self.options[CONF_ADDITIONAL_PORTS] = additional
@@ -1911,22 +1909,35 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 selector.SelectOptionDict(value=port, label=label)
             )
 
-        # Build options for the "add new port" dropdown
+        # Build options for the "add new port" dropdown.
+        # Phase 1: only MQTT HGIs are supported as pool children.
+        # Serial and Zigbee are gated with "(not yet supported)" markers
+        # until Phase 2 (PR 3) and Phase 3 (PR 6) respectively.
+        # TODO: re-enable serial when Phase 2 (PR 3) lands.
+        # TODO: re-enable zigbee when Phase 3 (PR 6) lands.
         ports = await async_get_usb_ports(self.hass)
         add_options: list[selector.SelectOptionDict] = [
             selector.SelectOptionDict(value=NO_ADD, label="(nothing to add)"),
         ]
+        # Serial ports — gated (not yet supported for pool membership).
         for k, v in ports.items():
             if k not in current_additional:
-                add_options.append(selector.SelectOptionDict(value=k, label=v))
+                add_options.append(
+                    selector.SelectOptionDict(
+                        value=k, label=f"{v} (not yet supported)"
+                    )
+                )
+        # MQTT — supported in Phase 1.
         add_options.append(
             selector.SelectOptionDict(
                 value=CONF_MQTT_PATH, label="MQTT Broker..."
             )
         )
+        # Zigbee — gated (not yet supported for pool membership).
         add_options.append(
             selector.SelectOptionDict(
-                value=CONF_ZIGBEE_DEVICE, label="Zigbee device"
+                value=CONF_ZIGBEE_DEVICE,
+                label="Zigbee device (not yet supported)",
             )
         )
 
