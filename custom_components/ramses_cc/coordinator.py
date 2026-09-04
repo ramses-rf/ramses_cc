@@ -81,7 +81,6 @@ from ramses_tx.schemas import extract_serial_port
 from ramses_tx.typing import DeviceIdT
 
 from .const import (
-    CONF_ACCEPTED_HGIS,
     CONF_ADDITIONAL_PORTS,
     CONF_ADVANCED_FEATURES,
     CONF_AUTO_NOTIFY,
@@ -2269,14 +2268,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
             port_name,
         )
         if all_additional_ports:
-            accepted_hgis: list[str] | None = self.options.get(
-                CONF_ACCEPTED_HGIS
-            )
             pool_constructor = self._create_pool_transport_constructor(
                 port_name=port_name,
                 port_config=port_config,
                 additional_ports=all_additional_ports,
-                accepted_hgis=accepted_hgis,
             )
             engine_config = EngineConfig(**engine_kwargs)
             gwy_config = GatewayConfig(engine=engine_config, **gateway_kwargs)
@@ -2335,7 +2330,6 @@ class RamsesCoordinator(DataUpdateCoordinator):
         port_name: str,
         port_config: dict[str, Any],
         additional_ports: list[str],
-        accepted_hgis: list[str] | None,
     ) -> Callable[..., Awaitable[Any]]:
         """Create a transport_constructor for the gateway pool.
 
@@ -2350,9 +2344,6 @@ class RamsesCoordinator(DataUpdateCoordinator):
         :type port_config: dict[str, Any]
         :param additional_ports: List of additional port names.
         :type additional_ports: list[str]
-        :param accepted_hgis: Optional list of accepted HGI IDs for
-            packet filtering.  When ``None``, all HGIs are accepted.
-        :type accepted_hgis: list[str] | None
         :returns: An async transport constructor callable.
         :rtype: Callable[..., Awaitable[Any]]
         """
@@ -2399,12 +2390,6 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 extra=extra,
                 loop=loop or self.hass.loop,
             )
-
-            # accepted_hgis filter is applied at construction time
-            # via the schema-derived pool membership in the HA MQTT
-            # path.  The legacy non-HA pool path passes accepted_hgis
-            # to the factory; no runtime set_accepted_hgis call is
-            # needed (the method was removed in PR 1).
 
             return transport
 

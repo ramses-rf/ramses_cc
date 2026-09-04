@@ -57,7 +57,6 @@ CONF_UNKNOWN_CODES: Final = "unknown_codes"
 
 # Gateway pool (multi-HGI) — issue 1119
 CONF_ADDITIONAL_PORTS: Final = "additional_ports"
-CONF_ACCEPTED_HGIS: Final = "accepted_hgis"
 CONF_WAIT_ONLINE_TIMEOUT: Final = "wait_online_timeout"
 
 # Defaults

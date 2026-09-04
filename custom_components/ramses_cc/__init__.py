@@ -75,7 +75,6 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
-    CONF_ACCEPTED_HGIS,
     CONF_ADVANCED_FEATURES,
     CONF_FRESH_START,
     CONF_MQTT_HGI_ID,
@@ -83,7 +82,6 @@ from .const import (
     CONF_MQTT_USE_HA,
     CONF_PASSIVE_SCAN,
     CONF_RAMSES_RF,
-    CONF_SCHEMA,
     CONF_SEND_PACKET,
     DOMAIN,
     STORAGE_KEY,
@@ -97,10 +95,8 @@ from .const import (
     SVC_GET_DISCOVERED_DEVICES,
     SVC_REMOVE_DEVICE,
     SVC_REMOVE_DISCOVERED_DEVICE,
-    SZ_OWNER,
     SZ_PORT_NAME,
     SZ_SERIAL_PORT,
-    SZ_TR_OWNER,
 )
 from .coordinator import RamsesCoordinator
 from .schemas import (
@@ -433,13 +429,11 @@ async def async_setup_entry(
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate legacy configuration options to the current version 4.
+    """Migrate legacy configuration options to the current version 3.
 
     v1→v2: Clean up packet_log and ramses_rf dicts (remove deprecated keys).
     v2→v3: Phase 4 — merge known_list traits into schema, drop known_list
            and enforce_known_list from options (schema is now the sole source).
-    v3→v4: Convert legacy CONF_ACCEPTED_HGIS to owned schema HGI entries
-           so the schema is the canonical membership source (issue 1119).
 
     :param hass: The Home Assistant instance.
     :param entry: The ConfigEntry to migrate.
@@ -569,55 +563,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.info(
             "Successfully migrated ramses_cc config entry %s to "
             "version 3 (Phase 4)",
-            entry.entry_id,
-        )
-
-    if entry.version == 3:
-        # v3→v4: Convert legacy CONF_ACCEPTED_HGIS to owned schema HGI
-        # entries (issue 1119).  The schema is now the canonical
-        # membership source for the MQTT pool.  CONF_ACCEPTED_HGIS
-        # was used by the legacy non-HA pool path; the HA MQTT pool
-        # path derives membership entirely from the schema.
-        new_options = {**entry.options}
-        accepted_hgis = new_options.pop(CONF_ACCEPTED_HGIS, None)
-
-        if accepted_hgis and isinstance(accepted_hgis, list):
-            raw_schema = new_options.get(CONF_SCHEMA, {})
-            schema = dict(raw_schema) if isinstance(raw_schema, dict) else {}
-            root_owner = schema.get(SZ_OWNER, "me")
-            migrated_count = 0
-            for hgi_id in accepted_hgis:
-                if not isinstance(hgi_id, str) or not hgi_id.startswith("18:"):
-                    continue
-                if hgi_id not in schema or not isinstance(
-                    schema.get(hgi_id), dict
-                ):
-                    schema[hgi_id] = {}
-                # Only set _owner if not already present (don't
-                # overwrite a foreign owner)
-                if SZ_TR_OWNER not in schema[hgi_id]:
-                    schema[hgi_id]["_class"] = "HGI"
-                    schema[hgi_id][SZ_TR_OWNER] = root_owner
-                    migrated_count += 1
-                    _LOGGER.info(
-                        "v4 migration: converted accepted_hgi %s "
-                        "to schema entry with _owner=%s",
-                        hgi_id,
-                        root_owner,
-                    )
-            new_options[CONF_SCHEMA] = schema
-            _LOGGER.info(
-                "v4 migration: converted %d accepted_hgi(s) to "
-                "schema entries, removed CONF_ACCEPTED_HGIS",
-                migrated_count,
-            )
-
-        hass.config_entries.async_update_entry(
-            entry, options=new_options, version=4
-        )
-        _LOGGER.info(
-            "Successfully migrated ramses_cc config entry %s to "
-            "version 4 (issue 1119 membership migration)",
             entry.entry_id,
         )
 

@@ -29,7 +29,6 @@ from pytest_homeassistant_custom_component.common import (  # type: ignore[impor
 from serialx import SerialException
 
 from custom_components.ramses_cc.const import (
-    CONF_ACCEPTED_HGIS,
     CONF_ADDITIONAL_PORTS,
     CONF_ADVANCED_FEATURES,
     CONF_COMMANDS,
@@ -1697,7 +1696,6 @@ async def test_create_client_pool_transport(
     mock_coordinator.options[CONF_ADDITIONAL_PORTS] = [
         "mqtt://broker:1883/RAMSES/GATEWAY/18:001234"
     ]
-    mock_coordinator.options[CONF_ACCEPTED_HGIS] = ["18:001234"]
 
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
@@ -6928,7 +6926,6 @@ def test_create_pool_transport_constructor(
         port_name="mqtt://broker:1883",
         port_config={},
         additional_ports=["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
-        accepted_hgis=None,
     )
     assert callable(constructor)
 
@@ -7167,7 +7164,6 @@ async def test_pool_constructor_invocation(
             port_name="mqtt://broker:1883",
             port_config={},
             additional_ports=["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
-            accepted_hgis=None,
         )
         result = await constructor(
             MagicMock(),
@@ -7176,41 +7172,6 @@ async def test_pool_constructor_invocation(
         )
         assert result is mock_transport
         mock_factory.assert_called_once()
-
-
-async def test_pool_constructor_with_accepted_hgis(
-    mock_coordinator: RamsesCoordinator,
-) -> None:
-    """Test the pool constructor passes accepted_hgis to the factory.
-
-    The ``set_accepted_hgis`` runtime method was removed in PR 1;
-    accepted_hgis is now applied at construction time via the
-    schema-derived pool membership.  This test verifies the
-    constructor still accepts the parameter without error.
-    """
-    try:
-        from ramses_tx.transport import pooled_transport_factory  # noqa: F401
-    except ImportError:
-        pytest.skip("pooled_transport_factory not in published ramses_tx")
-    mock_transport = MagicMock()
-
-    with patch(
-        "ramses_tx.transport.pooled_transport_factory",
-        new_callable=AsyncMock,
-        return_value=mock_transport,
-    ):
-        constructor = mock_coordinator._create_pool_transport_constructor(
-            port_name="mqtt://broker:1883",
-            port_config={},
-            additional_ports=["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
-            accepted_hgis=["18:001111", "18:002222"],
-        )
-        result = await constructor(
-            MagicMock(),
-            config=TransportConfig(),
-            loop=asyncio.get_event_loop(),
-        )
-        assert result is mock_transport
 
 
 async def test_mqtt_hgi_discovery_callback_inserts_into_schema(
