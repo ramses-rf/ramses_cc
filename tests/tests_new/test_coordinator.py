@@ -6917,6 +6917,10 @@ def test_create_pool_transport_constructor(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test _create_pool_transport_constructor returns a callable."""
+    try:
+        from ramses_tx.transport import pooled_transport_factory  # noqa: F401
+    except ImportError:
+        pytest.skip("pooled_transport_factory not in published ramses_tx")
     constructor = mock_coordinator._create_pool_transport_constructor(
         port_name="mqtt://broker:1883",
         port_config={},
@@ -6930,6 +6934,10 @@ def test_create_client_filters_non_mqtt_ports(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test _create_client filters out non-MQTT ports from additional_ports."""
+    try:
+        from ramses_tx.transport import pooled_transport_factory  # noqa: F401
+    except ImportError:
+        pytest.skip("pooled_transport_factory not in published ramses_tx")
     mock_coordinator.options = {
         SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
         CONF_ADDITIONAL_PORTS: [
@@ -7142,6 +7150,10 @@ async def test_pool_constructor_invocation(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test the pool constructor callable invokes pooled_transport_factory."""
+    try:
+        from ramses_tx.transport import pooled_transport_factory  # noqa: F401
+    except ImportError:
+        pytest.skip("pooled_transport_factory not in published ramses_tx")
     mock_transport = MagicMock()
     with patch(
         "ramses_tx.transport.pooled_transport_factory",
@@ -7167,6 +7179,10 @@ async def test_pool_constructor_with_accepted_hgis(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test the pool constructor applies accepted_hgis filter."""
+    try:
+        from ramses_tx.transport import pooled_transport_factory  # noqa: F401
+    except ImportError:
+        pytest.skip("pooled_transport_factory not in published ramses_tx")
     mock_transport = MagicMock()
     mock_transport.set_accepted_hgis = MagicMock()
 
