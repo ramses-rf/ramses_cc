@@ -6762,7 +6762,9 @@ def test_extract_pool_hgis_from_schema_accepted(
         }
     }
     mock_coordinator.options = {
-        SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"},
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
     }
 
     # Should return 18:002222 (accepted) and 18:004444 (discovery candidate),
@@ -6808,7 +6810,9 @@ def test_get_primary_hgi_id_from_url(
 ) -> None:
     """Test _get_primary_hgi_id extracts HGI from MQTT URL."""
     mock_coordinator.options = {
-        SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"},
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
     }
     mock_coordinator.entry.options = {CONF_SCHEMA: {}}
     assert mock_coordinator._get_primary_hgi_id() == "18:001111"
@@ -6885,7 +6889,10 @@ def test_build_explicit_mqtt_url_already_has_hgi() -> None:
 def test_build_explicit_mqtt_url_empty() -> None:
     """Test _build_explicit_mqtt_url returns None for empty inputs."""
     assert RamsesCoordinator._build_explicit_mqtt_url("", "18:149488") is None
-    assert RamsesCoordinator._build_explicit_mqtt_url("mqtt://broker:1883", "") is None
+    assert (
+        RamsesCoordinator._build_explicit_mqtt_url("mqtt://broker:1883", "")
+        is None
+    )
 
 
 def test_build_explicit_mqtt_url_slash_only() -> None:
@@ -6899,9 +6906,7 @@ def test_build_explicit_mqtt_url_slash_only() -> None:
 
 def test_build_explicit_mqtt_url_invalid() -> None:
     """Test _build_explicit_mqtt_url returns None on parse error."""
-    with patch(
-        "urllib.parse.urlparse", side_effect=ValueError("parse error")
-    ):
+    with patch("urllib.parse.urlparse", side_effect=ValueError("parse error")):
         result = RamsesCoordinator._build_explicit_mqtt_url(
             "mqtt://broker:1883", "18:149488"
         )
@@ -6927,7 +6932,10 @@ def test_create_client_filters_non_mqtt_ports(
     """Test _create_client filters out non-MQTT ports from additional_ports."""
     mock_coordinator.options = {
         SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
-        CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB0", "mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
+        CONF_ADDITIONAL_PORTS: [
+            "/dev/ttyUSB0",
+            "mqtt://broker:1883/RAMSES/GATEWAY/18:002222",
+        ],
         CONF_RAMSES_RF: {},
         CONF_SCHEMA: {},
     }
@@ -6941,11 +6949,13 @@ def test_create_client_filters_non_mqtt_ports(
             new_callable=AsyncMock,
         ),
     ):
-        mock_coordinator._create_client({
-            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
-            CONF_RAMSES_RF: {},
-            CONF_SCHEMA: {},
-        })
+        mock_coordinator._create_client(
+            {
+                SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+                CONF_RAMSES_RF: {},
+                CONF_SCHEMA: {},
+            }
+        )
         # Gateway should be called with transport_constructor (pool)
         assert mock_gwy.called
         kwargs = mock_gwy.call_args[1]
@@ -6957,7 +6967,9 @@ def test_create_client_no_pool_for_single_mqtt(
 ) -> None:
     """Test _create_client does not use pool for single MQTT without additional ports."""
     mock_coordinator.options = {
-        SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"},
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
         CONF_ADDITIONAL_PORTS: [],
         CONF_RAMSES_RF: {},
         CONF_SCHEMA: {},
@@ -6968,11 +6980,15 @@ def test_create_client_no_pool_for_single_mqtt(
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
         patch("custom_components.ramses_cc.coordinator.RamsesMqttBridge"),
     ):
-        mock_coordinator._create_client({
-            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"},
-            CONF_RAMSES_RF: {},
-            CONF_SCHEMA: {},
-        })
+        mock_coordinator._create_client(
+            {
+                SZ_SERIAL_PORT: {
+                    SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+                },
+                CONF_RAMSES_RF: {},
+                CONF_SCHEMA: {},
+            }
+        )
         assert mock_gwy.called
         kwargs = mock_gwy.call_args[1]
         # No transport_constructor → no pool
@@ -7039,6 +7055,7 @@ async def test_register_pool_hgis_schema_hgi(
     # Mock async_update_entry to actually update options
     def _update_entry(entry, options):
         entry.options = options
+
     mock_coordinator.hass.config_entries.async_update_entry = _update_entry
 
     await mock_coordinator._register_pool_hgis(scan)
