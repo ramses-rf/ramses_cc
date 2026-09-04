@@ -223,9 +223,7 @@ class RamsesMqttPoolBridge:
         )
 
         # Wildcard status/LWT: {prefix}/+
-        topic_status_wildcard = (
-            f"{self._topic_prefix}{_TOPIC_WILDCARD_STATUS}"
-        )
+        topic_status_wildcard = f"{self._topic_prefix}{_TOPIC_WILDCARD_STATUS}"
         _LOGGER.debug(
             "MqttPoolBridge: Subscribing to wildcard status %s",
             topic_status_wildcard,
@@ -238,9 +236,7 @@ class RamsesMqttPoolBridge:
                 self._handle_rx_message,
                 qos=0,
             )
-            _LOGGER.info(
-                "MqttPoolBridge: Subscribed to %s", topic_rx_wildcard
-            )
+            _LOGGER.info("MqttPoolBridge: Subscribed to %s", topic_rx_wildcard)
 
             self._sub_cmd = await mqtt.async_subscribe(
                 self._hass,
@@ -264,14 +260,10 @@ class RamsesMqttPoolBridge:
                 topic_status_wildcard,
             )
 
-            self._sub_broker = (
-                mqtt.async_subscribe_connection_status(
-                    self._hass, self._handle_broker_status
-                )
+            self._sub_broker = mqtt.async_subscribe_connection_status(
+                self._hass, self._handle_broker_status
             )
-            _LOGGER.info(
-                "MqttPoolBridge: Subscribed to broker status"
-            )
+            _LOGGER.info("MqttPoolBridge: Subscribed to broker status")
 
         except Exception as err:
             _LOGGER.error(
@@ -282,9 +274,7 @@ class RamsesMqttPoolBridge:
 
     # -- MqttPoolOutbound implementation --------------------------------
 
-    async def publish_frame(
-        self, child_id: str, frame: str
-    ) -> None:
+    async def publish_frame(self, child_id: str, frame: str) -> None:
         """Publish a frame to the specified HGI's TX topic.
 
         Implements :class:`MqttPoolOutbound`.
@@ -300,9 +290,7 @@ class RamsesMqttPoolBridge:
 
     # -- Publishing helpers ---------------------------------------------
 
-    def _publish_tx(
-        self, hgi_id: str, payload: PublishPayloadType
-    ) -> None:
+    def _publish_tx(self, hgi_id: str, payload: PublishPayloadType) -> None:
         """Publish to ``{prefix}/{hgi_id}/tx``.
 
         :param hgi_id: The target HGI device ID.
@@ -312,13 +300,9 @@ class RamsesMqttPoolBridge:
         self._hass.async_create_task(
             mqtt.async_publish(self._hass, topic, payload)
         )
-        _LOGGER.debug(
-            "MqttPoolBridge: TX -> %s on %s", payload, topic
-        )
+        _LOGGER.debug("MqttPoolBridge: TX -> %s on %s", payload, topic)
 
-    def _publish_command(
-        self, hgi_id: str, payload: PublishPayloadType
-    ) -> None:
+    def _publish_command(self, hgi_id: str, payload: PublishPayloadType) -> None:
         """Publish to ``{prefix}/{hgi_id}/cmd/cmd``.
 
         :param hgi_id: The target HGI device ID.
@@ -328,9 +312,7 @@ class RamsesMqttPoolBridge:
         self._hass.async_create_task(
             mqtt.async_publish(self._hass, topic, payload)
         )
-        _LOGGER.debug(
-            "MqttPoolBridge: CMD -> %s on %s", payload, topic
-        )
+        _LOGGER.debug("MqttPoolBridge: CMD -> %s on %s", payload, topic)
 
     # -- Inbound message handlers ---------------------------------------
 
@@ -389,9 +371,7 @@ class RamsesMqttPoolBridge:
             )
 
         except json.JSONDecodeError as err:
-            _LOGGER.debug(
-                "MqttPoolBridge RX: JSON decode error: %s", err
-            )
+            _LOGGER.debug("MqttPoolBridge RX: JSON decode error: %s", err)
         except Exception as err:
             _LOGGER.error(
                 "MqttPoolBridge RX: unexpected error: %s",
@@ -417,9 +397,7 @@ class RamsesMqttPoolBridge:
             return
 
         # Extract HGI ID from topic: {prefix}/{hgi_id}/cmd/result
-        hgi_id = self._extract_hgi_from_topic(
-            msg.topic, "/cmd/result"
-        )
+        hgi_id = self._extract_hgi_from_topic(msg.topic, "/cmd/result")
         if hgi_id is None:
             return
 
@@ -443,9 +421,7 @@ class RamsesMqttPoolBridge:
                     result_str = return_val
 
                 if "ramses_esp_eth" in result_str:
-                    result_str = result_str.replace(
-                        "ramses_esp_eth", "evofw3"
-                    )
+                    result_str = result_str.replace("ramses_esp_eth", "evofw3")
 
                 if not result_str.strip().startswith("#"):
                     result_str = f"# {result_str}"
@@ -460,9 +436,7 @@ class RamsesMqttPoolBridge:
                 # Command results are not RF packets — log only.
 
         except json.JSONDecodeError as err:
-            _LOGGER.debug(
-                "MqttPoolBridge CMD: JSON decode error: %s", err
-            )
+            _LOGGER.debug("MqttPoolBridge CMD: JSON decode error: %s", err)
         except Exception as err:
             _LOGGER.error(
                 "MqttPoolBridge CMD: unexpected error: %s",
@@ -484,9 +458,7 @@ class RamsesMqttPoolBridge:
         payload_str = self._extract_payload(msg).strip().lower()
 
         if payload_str == "online":
-            _LOGGER.info(
-                "MqttPoolBridge: HGI %s online (LWT)", hgi_id
-            )
+            _LOGGER.info("MqttPoolBridge: HGI %s online (LWT)", hgi_id)
             self._online_hgis.add(hgi_id)
             if hgi_id in self._configured_hgi_ids:
                 self._adapter.on_child_online(hgi_id)
@@ -498,14 +470,10 @@ class RamsesMqttPoolBridge:
                 )
 
         elif payload_str == "offline":
-            _LOGGER.warning(
-                "MqttPoolBridge: HGI %s offline (LWT)", hgi_id
-            )
+            _LOGGER.warning("MqttPoolBridge: HGI %s offline (LWT)", hgi_id)
             self._online_hgis.discard(hgi_id)
             if hgi_id in self._configured_hgi_ids:
-                self._adapter.on_child_offline(
-                    hgi_id, definitive=True
-                )
+                self._adapter.on_child_offline(hgi_id, definitive=True)
 
     @callback
     def _handle_broker_status(self, connected: bool) -> None:
@@ -514,21 +482,15 @@ class RamsesMqttPoolBridge:
             return
 
         if connected:
-            _LOGGER.info(
-                "MqttPoolBridge: broker connected, resuming"
-            )
+            _LOGGER.info("MqttPoolBridge: broker connected, resuming")
             self._adapter.on_broker_connected()
         else:
-            _LOGGER.warning(
-                "MqttPoolBridge: broker disconnected, pausing"
-            )
+            _LOGGER.warning("MqttPoolBridge: broker disconnected, pausing")
             self._adapter.on_broker_disconnected()
 
     # -- Helpers --------------------------------------------------------
 
-    def _extract_hgi_from_topic(
-        self, topic: str, suffix: str
-    ) -> str | None:
+    def _extract_hgi_from_topic(self, topic: str, suffix: str) -> str | None:
         """Extract the HGI ID from an MQTT topic.
 
         Topics have the form ``{prefix}/{hgi_id}{suffix}``.
@@ -541,7 +503,7 @@ class RamsesMqttPoolBridge:
         prefix = self._topic_prefix + "/"
         if not topic.startswith(prefix):
             return None
-        remainder = topic[len(prefix):]
+        remainder = topic[len(prefix) :]
         if suffix and remainder.endswith(suffix):
             remainder = remainder[: -len(suffix)]
         # HGI ID is the last segment (e.g. "18:123456").
