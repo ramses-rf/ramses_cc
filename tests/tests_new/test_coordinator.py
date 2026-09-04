@@ -1686,9 +1686,13 @@ async def test_create_client_pool_transport(
 ) -> None:
     """Test _create_client uses pool when additional_ports set (1119)."""
 
-    # Arrange — primary port + additional ports
-    mock_coordinator.options[SZ_SERIAL_PORT] = {SZ_PORT_NAME: "/dev/ttyUSB0"}
-    mock_coordinator.options[CONF_ADDITIONAL_PORTS] = ["/dev/ttyUSB1"]
+    # Arrange — primary MQTT port + additional MQTT port (Phase 1: MQTT only)
+    mock_coordinator.options[SZ_SERIAL_PORT] = {
+        SZ_PORT_NAME: "mqtt://broker:1883"
+    }
+    mock_coordinator.options[CONF_ADDITIONAL_PORTS] = [
+        "mqtt://broker:1883/RAMSES/GATEWAY/18:001234"
+    ]
     mock_coordinator.options[CONF_ACCEPTED_HGIS] = ["18:001234"]
 
     with (
@@ -1711,7 +1715,7 @@ async def test_create_client_pool_transport(
         cast(Any, mock_gwy).assert_called_once()
         _, kwargs = cast(Any, mock_gwy).call_args
         assert "transport_constructor" in kwargs
-        assert kwargs["port_name"] == "/dev/ttyUSB0"
+        assert kwargs["port_name"] == "mqtt://broker:1883"
 
         # The transport_constructor is a closure — verify it calls
         # pooled_transport_factory with the right ports
@@ -1729,8 +1733,8 @@ async def test_create_client_pool_transport(
         cast(Any, mock_pool_factory).assert_called_once()
         _, pool_kwargs = cast(Any, mock_pool_factory).call_args
         assert pool_kwargs["port_names"] == [
-            "/dev/ttyUSB0",
-            "/dev/ttyUSB1",
+            "mqtt://broker:1883",
+            "mqtt://broker:1883/RAMSES/GATEWAY/18:001234",
         ]
 
         # Assert — result is the Gateway instance

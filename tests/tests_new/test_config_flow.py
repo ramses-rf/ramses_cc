@@ -687,19 +687,21 @@ async def test_options_flow_serial_port_save(hass: HomeAssistant) -> None:
 
 
 async def test_options_flow_manage_pool_add_port(hass: HomeAssistant) -> None:
-    """Test manage_pool step adds additional ports (issue 1119)."""
+    """Test manage_pool step adds additional MQTT ports (issue 1119)."""
 
-    # Arrange
+    # Arrange — primary MQTT port
     config_entry = MockConfigEntry(
         domain=DOMAIN,
-        options={SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}},
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
     )
     config_entry.add_to_hass(hass)
 
     # Act — navigate to manage_pool
     with patch(
         "custom_components.ramses_cc.config_flow.async_get_usb_ports",
-        return_value={"/dev/ttyUSB1": "USB Serial 1"},
+        return_value={},
     ):
         result = await hass.config_entries.options.async_init(
             config_entry.entry_id
@@ -712,7 +714,45 @@ async def test_options_flow_manage_pool_add_port(hass: HomeAssistant) -> None:
         assert result.get("type") == FlowResultType.FORM
         assert result.get("step_id") == "manage_pool"
 
-        # Act — add an additional port via the add_new_port dropdown
+        # Act — add an MQTT broker via the add_new_port dropdown
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+
+    # Assert — navigated to MQTT sub-step
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "manage_pool_mqtt"
+
+
+async def test_options_flow_manage_pool_serial_gated(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool blocks serial ports in Phase 1 (issue 1119)."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={"/dev/ttyUSB1": "USB Serial 1"},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+        # Try to add a serial port — should be blocked
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             user_input={
@@ -721,11 +761,47 @@ async def test_options_flow_manage_pool_add_port(hass: HomeAssistant) -> None:
             },
         )
 
-    # Assert — saved with additional port
-    assert result.get("type") == FlowResultType.CREATE_ENTRY
-    data = result.get("data")
-    assert data is not None
-    assert data[CONF_ADDITIONAL_PORTS] == ["/dev/ttyUSB1"]
+    # Assert — error form shown, not saved
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "pool_serial_not_supported"}
+
+
+async def test_options_flow_manage_pool_zigbee_gated(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool blocks Zigbee in Phase 1 (issue 1119)."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+        # Try to add Zigbee — should be blocked
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_ZIGBEE_DEVICE,
+            },
+        )
+
+    # Assert — error form shown, not saved
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "pool_zigbee_not_supported"}
 
 
 async def test_options_flow_manage_pool_duplicate_primary(
