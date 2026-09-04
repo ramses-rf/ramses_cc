@@ -6939,7 +6939,7 @@ def test_create_client_filters_non_mqtt_ports(
         patch(
             "ramses_tx.transport.pooled_transport_factory",
             new_callable=AsyncMock,
-        ) as mock_pool,
+        ),
     ):
         mock_coordinator._create_client({
             SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
