@@ -7,8 +7,7 @@
   aiousbwatcher         >= 1.1.2                 # as per: manifest.json latest: 1.1.2
   aioesphomeapi         >= 46.2.1               # required by config_flow > homeassistant.components.usb
   pyserial-asyncio-fast >= 0.16                  # as per: manifest.json latest: 0.16
-  # PR 4B temporarily depends on PR 4A (ramses-rf/ramses_rf#1195):
-  ramses-rf @ git+https://github.com/wimpie70/ramses_rf.git@pr4a/mqtt-callback-contract
+  ramses-rf             == 0.60.4                # as per: manifest.json latest:
   # pycares               == 5.0.1               # ha_cc 2026.2: aiodns 4.0.0: pycares==5.0.1=latest
                                                  # (ha_cc 2025.12: aiodns 3.5.0 was not compatible with pycares 5.x)
   serialx               >= 1.9.0                 # required by config_flow > homeassistant.components.usb, see issue #623
