@@ -52,9 +52,7 @@ def mock_mqtt_pool(
         mock_pub = AsyncMock()
         mock_mqtt_module.async_publish = mock_pub
         mock_conn_status = MagicMock(return_value=MagicMock())
-        mock_mqtt_module.async_subscribe_connection_status = (
-            mock_conn_status
-        )
+        mock_mqtt_module.async_subscribe_connection_status = mock_conn_status
         yield {
             "subscribe": mock_sub,
             "connection_status": mock_conn_status,
@@ -90,20 +88,14 @@ def test_pool_bridge_strips_trailing_slash(hass: HomeAssistant) -> None:
 
 def test_extract_hgi_from_rx_topic(hass: HomeAssistant) -> None:
     """Test HGI ID extraction from an RX topic."""
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1]
-    )
-    hgi = bridge._extract_hgi_from_topic(
-        "RAMSES/GATEWAY/18:001111/rx", "/rx"
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    hgi = bridge._extract_hgi_from_topic("RAMSES/GATEWAY/18:001111/rx", "/rx")
     assert hgi == TEST_HGI_1
 
 
 def test_extract_hgi_from_cmd_topic(hass: HomeAssistant) -> None:
     """Test HGI ID extraction from a CMD result topic."""
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1]
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
     hgi = bridge._extract_hgi_from_topic(
         "RAMSES/GATEWAY/18:001111/cmd/result", "/cmd/result"
     )
@@ -112,24 +104,19 @@ def test_extract_hgi_from_cmd_topic(hass: HomeAssistant) -> None:
 
 def test_extract_hgi_from_status_topic(hass: HomeAssistant) -> None:
     """Test HGI ID extraction from a status/LWT topic."""
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1]
-    )
-    hgi = bridge._extract_hgi_from_topic(
-        "RAMSES/GATEWAY/18:001111", ""
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    hgi = bridge._extract_hgi_from_topic("RAMSES/GATEWAY/18:001111", "")
     assert hgi == TEST_HGI_1
 
 
 def test_extract_hgi_invalid_topic(hass: HomeAssistant) -> None:
     """Test that invalid topics return None."""
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1]
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
     assert bridge._extract_hgi_from_topic("other/topic/rx", "/rx") is None
-    assert bridge._extract_hgi_from_topic(
-        "RAMSES/GATEWAY/not-an-hgi/rx", "/rx"
-    ) is None
+    assert (
+        bridge._extract_hgi_from_topic("RAMSES/GATEWAY/not-an-hgi/rx", "/rx")
+        is None
+    )
 
 
 # -- Wildcard subscription ------------------------------------------------
@@ -151,8 +138,7 @@ async def test_subscribes_to_wildcard_topics(
     # Should subscribe to 3 wildcard topics + broker status.
     assert mock_mqtt_pool["subscribe"].call_count == 3
     topics = [
-        call.args[1]
-        for call in mock_mqtt_pool["subscribe"].call_args_list
+        call.args[1] for call in mock_mqtt_pool["subscribe"].call_args_list
     ]
     assert "RAMSES/GATEWAY/+/rx" in topics
     assert "RAMSES/GATEWAY/+/cmd/result" in topics
@@ -164,9 +150,7 @@ async def test_does_not_double_subscribe(
     mock_mqtt_pool: dict[str, Any],
 ) -> None:
     """Test that calling _async_attach twice doesn't re-subscribe."""
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1]
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
     await bridge._async_attach()
     mock_mqtt_pool["subscribe"].reset_mock()
     await bridge._async_attach()
@@ -225,7 +209,9 @@ async def test_lwt_online_marks_child_online(
 ) -> None:
     """Test that LWT online marks the child as online."""
     bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1, TEST_HGI_2],
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
         wait_online_timeout=0.01,
     )
     await bridge.async_transport_factory(mock_protocol)
@@ -250,7 +236,9 @@ async def test_lwt_offline_marks_child_offline(
 ) -> None:
     """Test that LWT offline marks the child as offline."""
     bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1, TEST_HGI_2],
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
         wait_online_timeout=0.01,
     )
     await bridge.async_transport_factory(mock_protocol)
@@ -277,7 +265,9 @@ async def test_lwt_online_only_affects_target_child(
 ) -> None:
     """Test that LWT online for one HGI doesn't affect others."""
     bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1, TEST_HGI_2],
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
         wait_online_timeout=0.01,
     )
     await bridge.async_transport_factory(mock_protocol)
@@ -327,7 +317,9 @@ async def test_broker_connected(
 ) -> None:
     """Test broker connected event."""
     bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1],
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
         wait_online_timeout=0.01,
     )
     await bridge.async_transport_factory(mock_protocol)
@@ -342,7 +334,9 @@ async def test_broker_disconnected_marks_all_unavailable(
 ) -> None:
     """Test broker disconnected marks all children unavailable."""
     bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1, TEST_HGI_2],
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
         wait_online_timeout=0.01,
     )
     await bridge.async_transport_factory(mock_protocol)
@@ -372,9 +366,7 @@ async def test_publish_frame_to_correct_hgi(
     mock_mqtt_pool: dict[str, Any],
 ) -> None:
     """Test that publish_frame publishes to the correct HGI topic."""
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1, TEST_HGI_2]
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1, TEST_HGI_2])
     await bridge.publish_frame(
         TEST_HGI_2,
         " 000 I --- 01:123456 18:000730 --:------ 30C9 000 00",
@@ -392,9 +384,7 @@ async def test_publish_frame_command_to_correct_hgi(
     mock_mqtt_pool: dict[str, Any],
 ) -> None:
     """Test that publish_frame with ! command goes to cmd topic."""
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1]
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
     await bridge.publish_frame(TEST_HGI_1, "!V")
 
     mock_mqtt_pool["publish"].assert_called_once()
@@ -413,7 +403,9 @@ async def test_rx_message_invalid_json_no_crash(
 ) -> None:
     """Test that invalid JSON in RX doesn't crash."""
     bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1],
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
         wait_online_timeout=0.01,
     )
     await bridge.async_transport_factory(mock_protocol)
@@ -431,7 +423,9 @@ async def test_rx_message_non_packet_frame_dropped(
 ) -> None:
     """Test that non-packet RX frames are silently dropped."""
     bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1],
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
         wait_online_timeout=0.01,
     )
     await bridge.async_transport_factory(mock_protocol)
@@ -450,7 +444,9 @@ async def test_rx_message_valid_packet_forwarded(
 ) -> None:
     """Test that valid RX packets are forwarded to the adapter."""
     bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1],
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
         wait_online_timeout=0.01,
     )
     await bridge.async_transport_factory(mock_protocol)
@@ -478,9 +474,7 @@ async def test_close_unsubscribes(
     mock_mqtt_pool: dict[str, Any],
 ) -> None:
     """Test that close unsubscribes from all topics."""
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1]
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
     await bridge._async_attach()
     bridge.close()
     # All unsub callbacks should have been called.
@@ -494,7 +488,5 @@ def test_pool_bridge_is_mqtt_pool_outbound(hass: HomeAssistant) -> None:
     """Test that RamsesMqttPoolBridge satisfies MqttPoolOutbound."""
     from ramses_tx.transport.callbacks import MqttPoolOutbound
 
-    bridge = RamsesMqttPoolBridge(
-        hass, TEST_TOPIC_PREFIX, [TEST_HGI_1]
-    )
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
     assert isinstance(bridge, MqttPoolOutbound)
