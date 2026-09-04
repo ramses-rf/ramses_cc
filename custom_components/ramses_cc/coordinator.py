@@ -78,6 +78,7 @@ from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_ACTIVE_HGI, Code
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.schemas import extract_serial_port
+from ramses_tx.typing import DeviceIdT
 
 from .const import (
     CONF_ACCEPTED_HGIS,
@@ -206,6 +207,37 @@ def _normalize_class_slug(value: str) -> str:
 
 # Generic Type for Entity Discovery to satisfy Pylance covariance
 _T_Entity = TypeVar("_T_Entity", bound=RamsesRFEntity)
+
+
+class _MqttHgiDiscoveryCallback:
+    """Receive unknown-HGI notifications from the MQTT pool bridge.
+
+    Implements the ``MqttDiscoveryCallback`` protocol from
+    ``ramses_tx.transport.callbacks``.  An unknown HGI observed on the
+    wildcard topic is logged and flagged for review by the discovery
+    manager; it does **not** create a ``PoolChild`` or become routable
+    until the user accepts it and the config entry reloads.
+    """
+
+    def __init__(self, coordinator: RamsesCoordinator) -> None:
+        self._coordinator = coordinator
+
+    def on_unknown_hgi(
+        self,
+        hgi_id: DeviceIdT,
+        *,
+        topic: str | None = None,
+    ) -> None:
+        """Report an unknown HGI observed on the wildcard topic."""
+        _LOGGER.info(
+            "MqttPoolBridge: unknown HGI %s observed on topic %s "
+            "(flagged for discovery review, not added to pool)",
+            hgi_id,
+            topic,
+        )
+        # The discovery manager's periodic checkpoint will pick this up
+        # via check_for_new_devices().  We do not mutate the pool or
+        # schema here — acceptance requires a config-entry reload.
 
 
 class RamsesCoordinator(DataUpdateCoordinator):
@@ -2109,6 +2141,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     self.hass,
                     mqtt_topic,
                     all_hgi_ids,
+                    discovery_callback=_MqttHgiDiscoveryCallback(self),
                 )
                 self.entry.async_on_unload(self.mqtt_bridge.close)
 

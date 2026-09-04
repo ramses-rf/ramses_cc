@@ -492,3 +492,147 @@ def test_pool_bridge_is_mqtt_pool_outbound(hass: HomeAssistant) -> None:
 
     bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
     assert isinstance(bridge, MqttPoolOutbound)
+
+
+# -- Additional coverage from fact-check ----------------------------------
+
+
+async def test_no_child_online_within_timeout(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that transport factory continues even if no child comes online."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge._async_attach()
+    transport = await bridge.async_transport_factory(mock_protocol)
+    # Transport is still returned — children may come online later.
+    assert transport is not None
+
+
+async def test_lwt_offline_does_not_affect_sibling(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that LWT offline for one HGI does not affect a sibling."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
+        wait_online_timeout=0.01,
+    )
+    await bridge._async_attach()
+    await bridge.async_transport_factory(mock_protocol)
+
+    # Bring both online.
+    for hgi in [TEST_HGI_1, TEST_HGI_2]:
+        msg = MagicMock()
+        msg.topic = f"{TEST_TOPIC_PREFIX}/{hgi}"
+        msg.payload = b"online"
+        bridge._handle_status_message(msg)
+
+    # Take HGI 1 offline.
+    msg_off = MagicMock()
+    msg_off.topic = f"{TEST_TOPIC_PREFIX}/{TEST_HGI_1}"
+    msg_off.payload = b"offline"
+    bridge._handle_status_message(msg_off)
+
+    # HGI 2 should still be online.
+    assert TEST_HGI_2 in bridge._online_hgis
+    assert TEST_HGI_1 not in bridge._online_hgis
+
+
+async def test_broker_recovery_does_not_duplicate_children(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that broker disconnect+reconnect does not duplicate children."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
+        wait_online_timeout=0.01,
+    )
+    await bridge._async_attach()
+    transport = await bridge.async_transport_factory(mock_protocol)
+    initial_child_count = len(transport._children)
+
+    # Broker disconnects and reconnects.
+    bridge._handle_broker_status(False)
+    bridge._handle_broker_status(True)
+
+    # No duplicate children.
+    assert len(transport._children) == initial_child_count
+
+
+async def test_discovery_callback_invoked_for_unknown_hgi(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that unknown HGI on wildcard status fires discovery callback."""
+    unknown_hgi = "18:999999"
+    callback = MagicMock()
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        discovery_callback=callback,
+        wait_online_timeout=0.01,
+    )
+    await bridge._async_attach()
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"{TEST_TOPIC_PREFIX}/{unknown_hgi}"
+    msg.payload = b"online"
+    bridge._handle_status_message(msg)
+
+    callback.on_unknown_hgi.assert_called_once()
+    call_kwargs = callback.on_unknown_hgi.call_args
+    assert str(call_kwargs.args[0]) == unknown_hgi
+
+
+async def test_ingress_hgi_id_passed_to_adapter(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that RX forwarding includes ingress_hgi_id kwarg."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge._async_attach()
+    await bridge.async_transport_factory(mock_protocol)
+
+    # Bring the child online so the adapter has a connected child.
+    msg_online = MagicMock()
+    msg_online.topic = f"{TEST_TOPIC_PREFIX}/{TEST_HGI_1}"
+    msg_online.payload = b"online"
+    bridge._handle_status_message(msg_online)
+
+    # Use a valid RAMSES packet frame (verb " I" = space-I).
+    frame = "000  I --- 01:145038 18:000730 --:------ 30C9 003 000F1B"
+    msg = MagicMock()
+    msg.topic = f"{TEST_TOPIC_PREFIX}/{TEST_HGI_1}/rx"
+    msg.payload = json.dumps({"msg": frame}).encode()
+
+    # Spy on the adapter's on_child_packet.
+    bridge._adapter.on_child_packet = MagicMock()  # type: ignore[union-attr]
+    bridge._handle_rx_message(msg)
+
+    # Verify the adapter received the call with ingress_hgi_id.
+    call = bridge._adapter.on_child_packet.call_args  # type: ignore[union-attr]
+    assert call is not None
+    assert "ingress_hgi_id" in call.kwargs
+    assert str(call.kwargs["ingress_hgi_id"]) == TEST_HGI_1
