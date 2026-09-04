@@ -22,10 +22,14 @@ from custom_components.ramses_cc import (
     async_update_listener,
 )
 from custom_components.ramses_cc.const import (
+    CONF_ACCEPTED_HGIS,
     CONF_ADVANCED_FEATURES,
     CONF_FRESH_START,
+    CONF_SCHEMA,
     CONF_SEND_PACKET,
     DOMAIN,
+    SZ_OWNER,
+    SZ_TR_OWNER,
 )
 from ramses_tx import exceptions as exc
 
@@ -564,8 +568,8 @@ async def test_async_migrate_entry_v1_to_v3(hass: HomeAssistant) -> None:
         result = await async_migrate_entry(hass, entry)
 
         assert result is True
-        # v1→v2 is called first, then v2→v3 (no known_list, so just version bump)
-        assert mock_update.call_count == 2
+        # v1→v2, v2→v3, v3→v4 (chained migrations)
+        assert mock_update.call_count == 3
         # First call: v1→v2 (strip deprecated keys)
         assert mock_update.call_args_list[0] == call(
             entry,
@@ -644,6 +648,100 @@ async def test_async_migrate_entry_v2_to_v3(hass: HomeAssistant) -> None:
             migrated_options.get("advanced_features", {}).get("passive_scan")
             is True
         )
+
+
+async def test_async_migrate_entry_v3_to_v4_accepted_hgis(
+    hass: HomeAssistant,
+) -> None:
+    """Test v3→v4 migration converts CONF_ACCEPTED_HGIS to schema entries.
+
+    v3→v4: Convert legacy CONF_ACCEPTED_HGIS to owned schema HGI entries
+    so the schema is the canonical membership source (issue 1119).
+    """
+    entry = MagicMock()
+    entry.version = 3
+    entry.entry_id = "test_migration_v3_v4"
+    entry.options = {
+        CONF_ACCEPTED_HGIS: ["18:001111", "18:002222"],
+        CONF_SCHEMA: {SZ_OWNER: "me"},
+    }
+
+    with patch.object(
+        hass.config_entries, "async_update_entry"
+    ) as mock_update:
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        mock_update.assert_called_once()
+        call_kwargs = mock_update.call_args
+        assert call_kwargs.kwargs.get("version") == 4
+
+        migrated_options = call_kwargs.kwargs.get("options", {})
+        # CONF_ACCEPTED_HGIS must be removed
+        assert CONF_ACCEPTED_HGIS not in migrated_options
+        # Schema must have HGI entries with _owner
+        schema = migrated_options.get(CONF_SCHEMA, {})
+        assert "18:001111" in schema
+        assert schema["18:001111"].get("_class") == "HGI"
+        assert schema["18:001111"].get(SZ_TR_OWNER) == "me"
+        assert "18:002222" in schema
+        assert schema["18:002222"].get("_class") == "HGI"
+        assert schema["18:002222"].get(SZ_TR_OWNER) == "me"
+
+
+async def test_async_migrate_entry_v3_to_v4_no_accepted_hgis(
+    hass: HomeAssistant,
+) -> None:
+    """Test v3→v4 migration is a no-op when CONF_ACCEPTED_HGIS is absent."""
+    entry = MagicMock()
+    entry.version = 3
+    entry.entry_id = "test_migration_v3_v4_empty"
+    entry.options = {
+        CONF_SCHEMA: {SZ_OWNER: "me"},
+    }
+
+    with patch.object(
+        hass.config_entries, "async_update_entry"
+    ) as mock_update:
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        mock_update.assert_called_once()
+        call_kwargs = mock_update.call_args
+        assert call_kwargs.kwargs.get("version") == 4
+        # Schema should be unchanged
+        schema = call_kwargs.kwargs.get("options", {}).get(CONF_SCHEMA, {})
+        assert schema == {SZ_OWNER: "me"}
+
+
+async def test_async_migrate_entry_v3_to_v4_preserves_foreign_owner(
+    hass: HomeAssistant,
+) -> None:
+    """Test v3→v4 migration does not overwrite a foreign _owner."""
+    entry = MagicMock()
+    entry.version = 3
+    entry.entry_id = "test_migration_v3_v4_foreign"
+    entry.options = {
+        CONF_ACCEPTED_HGIS: ["18:001111"],
+        CONF_SCHEMA: {
+            SZ_OWNER: "me",
+            "18:001111": {
+                "_class": "HGI",
+                SZ_TR_OWNER: "not-me",  # foreign owner
+            },
+        },
+    }
+
+    with patch.object(
+        hass.config_entries, "async_update_entry"
+    ) as mock_update:
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        call_kwargs = mock_update.call_args
+        schema = call_kwargs.kwargs.get("options", {}).get(CONF_SCHEMA, {})
+        # Foreign owner must be preserved (not overwritten to "me")
+        assert schema["18:001111"].get(SZ_TR_OWNER) == "not-me"
 
 
 def test_healed_serial_port_options_from_mqtt_hints() -> None:
