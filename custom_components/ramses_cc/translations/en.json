@@ -143,7 +143,10 @@
             "invalid_traits": "Invalid device traits: {error_detail}",
             "pool_duplicate_primary": "The primary port cannot also be an additional port.",
             "pool_serial_not_supported": "Serial/USB pool members are not yet supported (planned for Phase 2).",
-            "pool_zigbee_not_supported": "Zigbee pool members are not yet supported (planned for Phase 3)."
+            "pool_zigbee_not_supported": "Zigbee pool members are not yet supported (planned for Phase 3).",
+            "mqtt_host_required": "MQTT broker host is required.",
+            "hgi_id_required": "HGI device ID is required.",
+            "hgi_id_invalid": "HGI device ID must be in the format 18:NNNNNN."
         },
         "step": {
             "init": {
@@ -266,7 +269,20 @@
                 "data": {
                     "schema_pool_members": "Pool members (uncheck to remove from pool)",
                     "additional_ports": "Additional ports (USB, Zigbee, external MQTT)",
-                    "add_new_port": "Add new port"
+                    "add_new_port": "Add new port",
+                    "wait_online_timeout": "MQTT pool: seconds to wait for at least one HGI to come online"
+                }
+            },
+            "manage_pool_mqtt": {
+                "title": "Add MQTT HGI to Pool",
+                "description": "Enter the MQTT broker details and the HGI device ID (18:NNNNNN) for this pool member.",
+                "data": {
+                    "host": "MQTT broker host",
+                    "port": "MQTT broker port",
+                    "username": "MQTT username (optional)",
+                    "password": "MQTT password (optional)",
+                    "topic_path": "MQTT topic path (e.g. RAMSES/GATEWAY)",
+                    "hgi_id": "HGI device ID (18:NNNNNN)"
                 }
             }
         }

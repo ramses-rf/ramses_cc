@@ -58,10 +58,12 @@ CONF_UNKNOWN_CODES: Final = "unknown_codes"
 # Gateway pool (multi-HGI) — issue 1119
 CONF_ADDITIONAL_PORTS: Final = "additional_ports"
 CONF_ACCEPTED_HGIS: Final = "accepted_hgis"
+CONF_WAIT_ONLINE_TIMEOUT: Final = "wait_online_timeout"
 
 # Defaults
 DEFAULT_MQTT_TOPIC: Final = "RAMSES/GATEWAY"
 DEFAULT_HGI_ID: Final = HGI_DEVICE_ID
+DEFAULT_WAIT_ONLINE_TIMEOUT: Final = 30.0
 
 # State
 SZ_CLIENT_STATE: Final = "client_state"

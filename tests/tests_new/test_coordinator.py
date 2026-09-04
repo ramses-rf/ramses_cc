@@ -43,15 +43,18 @@ from custom_components.ramses_cc.const import (
     DOMAIN,
     SIGNAL_NEW_DEVICES,
     SZ_ENFORCE_KNOWN_LIST,
+    SZ_OWNER,
     SZ_REMOTES,
     SZ_TR_CLASS,
     SZ_TR_COMMANDS,
+    SZ_TR_OWNER,
 )
 from custom_components.ramses_cc.coordinator import (
     SZ_CLIENT_STATE,
     SZ_PACKETS,
     SZ_SCHEMA,
     RamsesCoordinator,
+    _MqttHgiDiscoveryCallback,
 )
 from custom_components.ramses_cc.schemas import (
     SCH_GET_FAN_PARAM_DOMAIN,
@@ -7178,13 +7181,18 @@ async def test_pool_constructor_invocation(
 async def test_pool_constructor_with_accepted_hgis(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test the pool constructor applies accepted_hgis filter."""
+    """Test the pool constructor passes accepted_hgis to the factory.
+
+    The ``set_accepted_hgis`` runtime method was removed in PR 1;
+    accepted_hgis is now applied at construction time via the
+    schema-derived pool membership.  This test verifies the
+    constructor still accepts the parameter without error.
+    """
     try:
         from ramses_tx.transport import pooled_transport_factory  # noqa: F401
     except ImportError:
         pytest.skip("pooled_transport_factory not in published ramses_tx")
     mock_transport = MagicMock()
-    mock_transport.set_accepted_hgis = MagicMock()
 
     with patch(
         "ramses_tx.transport.pooled_transport_factory",
@@ -7197,11 +7205,67 @@ async def test_pool_constructor_with_accepted_hgis(
             additional_ports=["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
             accepted_hgis=["18:001111", "18:002222"],
         )
-        await constructor(
+        result = await constructor(
             MagicMock(),
             config=TransportConfig(),
             loop=asyncio.get_event_loop(),
         )
-        mock_transport.set_accepted_hgis.assert_called_once_with(
-            ["18:001111", "18:002222"]
-        )
+        assert result is mock_transport
+
+
+async def test_mqtt_hgi_discovery_callback_inserts_into_schema(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _MqttHgiDiscoveryCallback inserts unknown HGI into schema."""
+    # Start with empty schema
+    mock_coordinator.entry.options = {CONF_SCHEMA: {}}
+
+    # Make async_update_entry actually update the entry options
+    def _update_entry(entry: Any, **kwargs: Any) -> None:
+        if "options" in kwargs:
+            entry.options = kwargs["options"]
+
+    mock_coordinator.hass.config_entries.async_update_entry.side_effect = (
+        _update_entry
+    )
+
+    callback = _MqttHgiDiscoveryCallback(mock_coordinator)
+    callback.on_unknown_hgi("18:999999", topic="RAMSES/GATEWAY/18:999999")
+
+    schema = mock_coordinator.entry.options.get(CONF_SCHEMA, {})
+    assert "18:999999" in schema
+    assert schema["18:999999"].get("_class") == "HGI"
+    # No _owner — it's a discovery candidate
+    assert SZ_TR_OWNER not in schema["18:999999"]
+
+
+async def test_mqtt_hgi_discovery_callback_does_not_overwrite(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _MqttHgiDiscoveryCallback does not overwrite existing entries."""
+    # Start with schema that already has the HGI with an owner
+    mock_coordinator.entry.options = {
+        CONF_SCHEMA: {
+            SZ_OWNER: "me",
+            "18:999999": {
+                "_class": "HGI",
+                SZ_TR_OWNER: "me",
+            },
+        }
+    }
+
+    # Make async_update_entry actually update the entry options
+    def _update_entry(entry: Any, **kwargs: Any) -> None:
+        if "options" in kwargs:
+            entry.options = kwargs["options"]
+
+    mock_coordinator.hass.config_entries.async_update_entry.side_effect = (
+        _update_entry
+    )
+
+    callback = _MqttHgiDiscoveryCallback(mock_coordinator)
+    callback.on_unknown_hgi("18:999999", topic="RAMSES/GATEWAY/18:999999")
+
+    schema = mock_coordinator.entry.options.get(CONF_SCHEMA, {})
+    # Should still have the owner (not overwritten)
+    assert schema["18:999999"].get(SZ_TR_OWNER) == "me"

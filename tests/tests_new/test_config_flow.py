@@ -48,6 +48,7 @@ from custom_components.ramses_cc.const import (
     CONF_MQTT_USE_HA,
     CONF_RAMSES_RF,
     CONF_SCHEMA,
+    CONF_WAIT_ONLINE_TIMEOUT,
     DEFAULT_HGI_ID,
     DOMAIN,
     SZ_CLIENT_STATE,
@@ -4951,13 +4952,14 @@ async def test_options_flow_manage_pool_mqtt_add_port(
         assert result.get("type") == FlowResultType.FORM
         assert result.get("step_id") == "manage_pool_mqtt"
 
-        # Submit MQTT form with host + topic_path
+        # Submit MQTT form with host + topic_path + hgi_id
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             user_input={
                 "host": "192.168.1.50",
                 "port": 1883,
                 "topic_path": "RAMSES/GATEWAY/18:009999",
+                "hgi_id": "18:009999",
             },
         )
 
@@ -4965,6 +4967,10 @@ async def test_options_flow_manage_pool_mqtt_add_port(
     assert result.get("type") == FlowResultType.CREATE_ENTRY
     updated = config_entry.options.get(CONF_ADDITIONAL_PORTS, [])
     assert any("192.168.1.50" in p and "18:009999" in p for p in updated)
+    # Schema entry should be created with _owner
+    schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert "18:009999" in schema
+    assert schema["18:009999"].get("_class") == "HGI"
 
 
 async def test_options_flow_manage_pool_mqtt_missing_host(
@@ -5000,7 +5006,7 @@ async def test_options_flow_manage_pool_mqtt_missing_host(
         # Submit with empty host
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
-            user_input={"host": "", "port": 1883},
+            user_input={"host": "", "port": 1883, "hgi_id": "18:009999"},
         )
 
     assert result.get("type") == FlowResultType.FORM
@@ -5045,6 +5051,7 @@ async def test_options_flow_manage_pool_mqtt_with_auth(
                 "username": "user",
                 "password": "pass",
                 "topic_path": "RAMSES/GATEWAY/18:008888",
+                "hgi_id": "18:008888",
             },
         )
 
@@ -5358,6 +5365,7 @@ async def test_options_flow_manage_pool_mqtt_topic_without_ramses_prefix(
                 "host": "broker.local",
                 "port": 1883,
                 "topic_path": "18:009999",
+                "hgi_id": "18:009999",
             },
         )
 
@@ -5409,6 +5417,7 @@ async def test_options_flow_manage_pool_mqtt_duplicate_url(
                 "host": "broker",
                 "port": 1883,
                 "topic_path": "RAMSES/GATEWAY/18:009999",
+                "hgi_id": "18:009999",
             },
         )
 
@@ -5416,6 +5425,175 @@ async def test_options_flow_manage_pool_mqtt_duplicate_url(
     # Should still have only one entry
     updated = config_entry.options.get(CONF_ADDITIONAL_PORTS, [])
     assert len(updated) == 1
+
+
+async def test_options_flow_manage_pool_mqtt_creates_schema_entry(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_mqtt creates a schema HGI entry with _owner."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+            CONF_SCHEMA: {SZ_OWNER: "me"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                "host": "broker",
+                "port": 1883,
+                "hgi_id": "18:007777",
+            },
+        )
+
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert "18:007777" in schema
+    assert schema["18:007777"].get("_class") == "HGI"
+    assert schema["18:007777"].get(SZ_TR_OWNER) == "me"
+
+
+async def test_options_flow_manage_pool_mqtt_missing_hgi_id(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_mqtt shows error when hgi_id is missing."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                "host": "broker",
+                "port": 1883,
+                "hgi_id": "",
+            },
+        )
+
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "hgi_id_required"}
+
+
+async def test_options_flow_manage_pool_mqtt_invalid_hgi_id(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_mqtt shows error for invalid hgi_id format."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                "host": "broker",
+                "port": 1883,
+                "hgi_id": "01:123456",
+            },
+        )
+
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "hgi_id_invalid"}
+
+
+async def test_options_flow_manage_pool_wait_online_timeout(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool saves wait_online_timeout option."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": "__none__",
+                CONF_WAIT_ONLINE_TIMEOUT: 60,
+            },
+        )
+
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    assert config_entry.options.get(CONF_WAIT_ONLINE_TIMEOUT) == 60.0
 
 
 async def test_options_flow_manage_pool_with_schema_members(

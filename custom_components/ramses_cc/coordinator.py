@@ -97,8 +97,10 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONF_SCHEMA,
     CONF_SSOT_MIGRATED,
+    CONF_WAIT_ONLINE_TIMEOUT,
     DEFAULT_HGI_ID,
     DEFAULT_MQTT_TOPIC,
+    DEFAULT_WAIT_ONLINE_TIMEOUT,
     DOMAIN,
     SIGNAL_NEW_DEVICES,
     SIGNAL_UPDATE,
@@ -228,16 +230,44 @@ class _MqttHgiDiscoveryCallback:
         *,
         topic: str | None = None,
     ) -> None:
-        """Report an unknown HGI observed on the wildcard topic."""
+        """Report an unknown HGI observed on the wildcard topic.
+
+        Inserts the HGI into the schema as a discovery candidate
+        (``_class: HGI``, no ``_owner``) so the discovery manager's
+        periodic checkpoint can prompt the user to accept or reject
+        it.  The HGI does **not** become a pool member or routable
+        until the user accepts it (sets ``_owner``) and the config
+        entry reloads.
+        """
+        hgi_str = str(hgi_id)
         _LOGGER.info(
             "MqttPoolBridge: unknown HGI %s observed on topic %s "
-            "(flagged for discovery review, not added to pool)",
-            hgi_id,
+            "(adding as discovery candidate, not added to pool)",
+            hgi_str,
             topic,
         )
-        # The discovery manager's periodic checkpoint will pick this up
-        # via check_for_new_devices().  We do not mutate the pool or
-        # schema here — acceptance requires a config-entry reload.
+        # Insert into schema as a discovery candidate (no _owner).
+        # This makes sync_with_schema → check_for_new_devices flag
+        # it for review on the next checkpoint cycle.
+        raw_schema = self._coordinator.entry.options.get(CONF_SCHEMA, {})
+        if not isinstance(raw_schema, dict):
+            return
+        schema = dict(raw_schema)
+        # Only add if not already present (don't overwrite existing
+        # entries — the user may have already rejected it).
+        if hgi_str not in schema:
+            schema[hgi_str] = {"_class": "HGI"}
+            # No _owner — this is a discovery candidate.
+            new_options = dict(self._coordinator.entry.options)
+            new_options[CONF_SCHEMA] = schema
+            self._coordinator.hass.config_entries.async_update_entry(
+                self._coordinator.entry, options=new_options
+            )
+            _LOGGER.info(
+                "MqttPoolBridge: added HGI %s to schema as "
+                "discovery candidate (no _owner)",
+                hgi_str,
+            )
 
 
 class RamsesCoordinator(DataUpdateCoordinator):
@@ -2142,6 +2172,12 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     mqtt_topic,
                     all_hgi_ids,
                     discovery_callback=_MqttHgiDiscoveryCallback(self),
+                    wait_online_timeout=float(
+                        self.options.get(
+                            CONF_WAIT_ONLINE_TIMEOUT,
+                            DEFAULT_WAIT_ONLINE_TIMEOUT,
+                        )
+                    ),
                 )
                 self.entry.async_on_unload(self.mqtt_bridge.close)
 
@@ -2364,13 +2400,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 loop=loop or self.hass.loop,
             )
 
-            # Apply accepted_hgis filter if configured
-            if accepted_hgis and hasattr(transport, "set_accepted_hgis"):
-                transport.set_accepted_hgis(accepted_hgis)
-                _LOGGER.debug(
-                    "PooledTransport: accepted_hgis set to %s",
-                    accepted_hgis,
-                )
+            # accepted_hgis filter is applied at construction time
+            # via the schema-derived pool membership in the HA MQTT
+            # path.  The legacy non-HA pool path passes accepted_hgis
+            # to the factory; no runtime set_accepted_hgis call is
+            # needed (the method was removed in PR 1).
 
             return transport
 

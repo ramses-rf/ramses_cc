@@ -70,8 +70,10 @@ from .const import (
     CONF_RAMSES_RF,
     CONF_SCHEMA,
     CONF_SEND_PACKET,
+    CONF_WAIT_ONLINE_TIMEOUT,
     DEFAULT_HGI_ID,
     DEFAULT_MQTT_TOPIC,
+    DEFAULT_WAIT_ONLINE_TIMEOUT,
     DOMAIN,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -1752,6 +1754,8 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 "schema_pool_members", []
             )
             add_choice = user_input.get("add_new_port", NO_ADD)
+            # Wait-online timeout (seconds) for MQTT pool bridge
+            wait_timeout = user_input.get(CONF_WAIT_ONLINE_TIMEOUT)
 
             # Validate: no duplicates, primary port not in additional
             primary = self.options.get(SZ_SERIAL_PORT, {}).get(SZ_PORT_NAME)
@@ -1796,6 +1800,10 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 if add_choice == CONF_MQTT_PATH:
                     # Save current state and go to MQTT sub-step
                     self.options[CONF_ADDITIONAL_PORTS] = additional
+                    if wait_timeout is not None:
+                        self.options[CONF_WAIT_ONLINE_TIMEOUT] = float(
+                            wait_timeout
+                        )
                     return await self.async_step_manage_pool_mqtt()
                 elif add_choice == CONF_ZIGBEE_DEVICE:
                     # Zigbee pool members are not yet supported (Phase 3,
@@ -1808,6 +1816,10 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 else:
                     # No new port — just save removals
                     self.options[CONF_ADDITIONAL_PORTS] = additional
+                    if wait_timeout is not None:
+                        self.options[CONF_WAIT_ONLINE_TIMEOUT] = float(
+                            wait_timeout
+                        )
                     return self._async_save()
 
         # Build the current state for display
@@ -2020,6 +2032,24 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     multiple=False,
                 )
             ),
+            prob.Optional(
+                CONF_WAIT_ONLINE_TIMEOUT,
+                default=self.options.get(
+                    CONF_WAIT_ONLINE_TIMEOUT,
+                    DEFAULT_WAIT_ONLINE_TIMEOUT,
+                ),
+            ): prob.All(
+                selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=300,
+                        step=1,
+                        unit_of_measurement="s",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                prob.Coerce(float),
+            ),
         }
 
         return self.async_show_form(
@@ -2041,7 +2071,10 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
     async def async_step_manage_pool_mqtt(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Configure a new MQTT additional port for the pool.
+        """Configure a new MQTT HGI pool member.
+
+        Creates a schema HGI entry with ``_owner`` set to the root
+        owner so the coordinator includes it in the pool on reload.
 
         :param user_input: Dict containing user-provided input data.
         :return: The generated config flow result.
@@ -2055,11 +2088,19 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             username = user_input.get("username")
             password = user_input.get("password")
             topic_path = user_input.get("topic_path", "")
+            hgi_id = (user_input.get("hgi_id") or "").strip().upper()
 
             if not host:
                 errors["base"] = "mqtt_host_required"
+            elif not hgi_id:
+                errors["base"] = "hgi_id_required"
+            elif not re.match(
+                r"^\d{2}:\d{6}$", hgi_id
+            ) or not hgi_id.startswith("18:"):
+                errors["base"] = "hgi_id_invalid"
             else:
-                # Construct the MQTT URL
+                # Construct the MQTT URL (for CONF_ADDITIONAL_PORTS
+                # — used by the non-HA-MQTT pool path).
                 auth = ""
                 if username or password:
                     safe_user = username if username else ""
@@ -2072,12 +2113,31 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         topic_path = f"RAMSES/GATEWAY/{topic_path}"
                     url = f"{url}/{topic_path}"
 
-                # Add to additional_ports
+                # Add to additional_ports (for non-HA-MQTT pool path)
                 additional = self.options.get(CONF_ADDITIONAL_PORTS, [])
                 if url not in additional:
                     additional = additional + [url]
                 self.options[CONF_ADDITIONAL_PORTS] = additional
-                _LOGGER.info("Added MQTT additional port: %s", url)
+
+                # Create/update schema HGI entry with _owner = root_owner
+                # so the coordinator's _extract_pool_hgis_from_schema()
+                # includes it as an accepted pool member.
+                schema_dict = dict(self.options.get(CONF_SCHEMA, {}))
+                root_owner = schema_dict.get(SZ_OWNER, "me")
+                if hgi_id not in schema_dict or not isinstance(
+                    schema_dict.get(hgi_id), dict
+                ):
+                    schema_dict[hgi_id] = {}
+                schema_dict[hgi_id]["_class"] = "HGI"
+                schema_dict[hgi_id][SZ_TR_OWNER] = root_owner
+                self.options[CONF_SCHEMA] = schema_dict
+                _LOGGER.info(
+                    "Added MQTT pool HGI %s (schema entry with "
+                    "_owner=%s, additional_ports URL=%s)",
+                    hgi_id,
+                    root_owner,
+                    url,
+                )
                 return self._async_save()
 
         # Pre-fill from current primary MQTT port if applicable
@@ -2113,6 +2173,11 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             ): selector.TextSelector(
                 selector.TextSelectorConfig(
                     type=selector.TextSelectorType.TEXT
+                )
+            ),
+            prob.Required("hgi_id", default=""): selector.TextSelector(
+                selector.TextSelectorConfig(
+                    type=selector.TextSelectorType.TEXT,
                 )
             ),
         }

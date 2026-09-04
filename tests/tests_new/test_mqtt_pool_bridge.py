@@ -636,3 +636,32 @@ async def test_ingress_hgi_id_passed_to_adapter(
     assert call is not None
     assert "ingress_hgi_id" in call.kwargs
     assert str(call.kwargs["ingress_hgi_id"]) == TEST_HGI_1
+
+
+async def test_wait_online_timeout_passed_to_bridge(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that wait_online_timeout is stored and used."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=45.0,
+    )
+    assert bridge._wait_online_timeout == 45.0
+
+
+async def test_wait_online_timeout_default(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that wait_online_timeout defaults to 30.0."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+    )
+    assert bridge._wait_online_timeout == 30.0
