@@ -2132,8 +2132,17 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if isinstance(port_name, str) and port_name.startswith("mqtt://"):
             schema_accepted_hgis = self._extract_pool_hgis_from_schema()
 
-        # Merge additional_ports and schema-derived HGI ports
-        all_additional_ports = list(additional_ports)
+        # Merge additional_ports and schema-derived HGI ports.
+        # Phase 1: only MQTT pool children are supported.  Serial and
+        # Zigbee are gated in the config flow, but filter defensively
+        # here too in case stale config entries exist.
+        # TODO: re-enable serial when Phase 2 (PR 3) lands.
+        # TODO: re-enable zigbee when Phase 3 (PR 6) lands.
+        all_additional_ports = [
+            p
+            for p in additional_ports
+            if isinstance(p, str) and p.startswith("mqtt://")
+        ]
         if schema_accepted_hgis:
             # Construct explicit MQTT URLs for schema-accepted HGIs
             for hgi_id in schema_accepted_hgis:

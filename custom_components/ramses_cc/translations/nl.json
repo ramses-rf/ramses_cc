@@ -140,7 +140,10 @@
             "invalid_port_config": "Ongeldige seriële poort-configuratie: {error_detail}",
             "invalid_regex": "Ongeldige reguliere expressie: {error_detail}",
             "invalid_schema": "Ongeldig schema: {error_detail}",
-            "invalid_traits": "Ongeldige device-kenmerken: {error_detail}"
+            "invalid_traits": "Ongeldige device-kenmerken: {error_detail}",
+            "pool_duplicate_primary": "De primaire poort kan geen extra poort zijn.",
+            "pool_serial_not_supported": "Seriële/USB-poolleden worden nog niet ondersteund (gepland voor Fase 2).",
+            "pool_zigbee_not_supported": "Zigbee-poolleden worden nog niet ondersteund (gepland voor Fase 3)."
         },
         "step": {
             "init": {
