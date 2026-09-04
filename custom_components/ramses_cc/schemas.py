@@ -1330,6 +1330,24 @@ def sync_learned_topology(
             # This happens for auto-discovered devices (e.g. HGIs
             # discovered via MQTT packets) that were added with
             # _class but no _owner.
+            #
+            # EXCEPT: 18: HGI entries with _class: HGI are discovery
+            # candidates (issue 1119).  They must NOT get _owner
+            # backfilled — that would silently promote them to
+            # accepted pool members without explicit user action.
+            # The user must accept them via the config flow, which
+            # sets _owner and triggers a reload.
+            if (
+                dev_id.startswith("18:")
+                and isinstance(new_schema[dev_id], dict)
+                and new_schema[dev_id].get("_class", "").upper() == "HGI"
+            ):
+                _LOGGER.debug(
+                    "sync_learned_topology: skipping _owner "
+                    "backfill for HGI discovery candidate %s",
+                    dev_id,
+                )
+                continue
             new_schema[dev_id][SZ_TR_OWNER] = root_owner
             changed = True
             backfill_count += 1
