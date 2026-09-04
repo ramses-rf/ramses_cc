@@ -2545,6 +2545,114 @@ class TestSyncWithSchema:
                 != DiscoveryStatus.REMOVED
             )
 
+    def test_schema_no_owner_ids_populated(self) -> None:
+        """sync_with_schema populates _schema_no_owner_ids from schema."""
+        dev = make_discovered_device("18:149488", "HGI")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Schema with an HGI that has no _owner (discovery candidate)
+        schema = {
+            "18:149488": {"_class": "HGI"},  # no _owner
+            "01:123456": {"_class": "CTL", "_owner": "me"},
+            "04:654321": {"_class": "TRV"},  # no _owner
+        }
+        manager.sync_with_schema(
+            {"18:149488", "01:123456", "04:654321"},
+            schema=schema,
+        )
+
+        # _schema_no_owner_ids should contain devices without _owner
+        assert "18:149488" in manager._schema_no_owner_ids
+        assert "04:654321" in manager._schema_no_owner_ids
+        assert "01:123456" not in manager._schema_no_owner_ids
+
+    def test_schema_no_owner_ids_empty_when_all_owned(self) -> None:
+        """sync_with_schema leaves _schema_no_owner_ids empty when all have _owner."""
+        dev = make_discovered_device("01:123456", "CTL")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        schema = {
+            "01:123456": {"_class": "CTL", "_owner": "me"},
+        }
+        manager.sync_with_schema({"01:123456"}, schema=schema)
+        assert manager._schema_no_owner_ids == set()
+
+    def test_schema_no_owner_ids_without_schema_param(self) -> None:
+        """sync_with_schema works without schema param (backward compat)."""
+        dev = make_discovered_device("01:123456", "CTL")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Call without schema parameter — should not crash
+        manager.sync_with_schema({"01:123456"})
+        assert manager._schema_no_owner_ids == set()
+
+    def test_check_for_new_devices_schema_no_owner_flagged(self) -> None:
+        """Device in schema without _owner is flagged as NEW (issue 1119)."""
+        dev = make_discovered_device("18:149488", "HGI")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Sync with schema that has the HGI but no _owner
+        schema = {"18:149488": {"_class": "HGI"}}  # no _owner
+        manager.sync_with_schema({"18:149488"}, schema=schema)
+
+        # check_for_new_devices should flag it (not suppress)
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" in new_ids
+
+    def test_check_for_new_devices_schema_with_owner_suppressed(self) -> None:
+        """Device in schema with _owner is suppressed (not flagged)."""
+        dev = make_discovered_device("18:149488", "HGI")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Sync with schema that has the HGI with _owner
+        schema = {"18:149488": {"_class": "HGI", "_owner": "me"}}
+        manager.sync_with_schema({"18:149488"}, schema=schema)
+
+        # check_for_new_devices should suppress it (in schema, has _owner)
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" not in new_ids
+
+    def test_check_for_new_devices_accepted_no_owner_reflagged(self) -> None:
+        """Accepted device that lost _owner is re-flagged for review."""
+        dev = make_discovered_device("18:149488", "HGI")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # First, mark the device as ACCEPTED
+        manager.sync_with_schema(set())
+        manager._metadata["18:149488"].status = DiscoveryStatus.ACCEPTED
+        manager._metadata["18:149488"].enabled = True
+
+        # Now sync with schema where the HGI has no _owner
+        schema = {"18:149488": {"_class": "HGI"}}  # no _owner
+        manager.sync_with_schema({"18:149488"}, schema=schema)
+
+        # check_for_new_devices should re-flag it
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" in new_ids
+        assert manager._metadata["18:149488"].status == DiscoveryStatus.NEW
+
+    def test_check_for_new_devices_removed_device_seen_again(self) -> None:
+        """REMOVED device that's still seen is re-marked as NEW."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Mark the device as REMOVED
+        manager.sync_with_schema(set())
+        manager._metadata["04:056053"].status = DiscoveryStatus.REMOVED
+        manager._metadata["04:056053"].enabled = False
+
+        # check_for_new_devices should re-mark it as NEW
+        new_ids = manager.check_for_new_devices()
+        assert "04:056053" in new_ids
+        assert manager._metadata["04:056053"].status == DiscoveryStatus.NEW
+
 
 class TestGetOrphanedDevices:
     """Tests for DiscoveryManager.get_orphaned_devices."""
