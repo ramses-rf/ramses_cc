@@ -127,6 +127,7 @@ from .discovery import DiscoveryManager
 from .fan_handler import RamsesFanHandler
 from .helpers import clear_async_attr_cache
 from .mqtt_bridge import RamsesMqttBridge
+from .mqtt_pool_bridge import RamsesMqttPoolBridge
 from .schemas import (
     _SCHEMA_EXTENSION_KEYS,
     _strip_and_orchestrate,
@@ -2088,6 +2089,46 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # In the _is_mqtt_ha branch it's set from CONF_MQTT_HGI_ID.
             assert hgi_id is not None
 
+            # Check for additional configured HGIs from the schema.
+            # When multiple HGIs are configured, use the pool bridge
+            # that drives them through the PR 4A callback contract.
+            schema_pool_hgis = self._extract_pool_hgis_from_schema()
+            all_hgi_ids = [hgi_id]
+            for extra_hgi in schema_pool_hgis:
+                if extra_hgi not in all_hgi_ids:
+                    all_hgi_ids.append(extra_hgi)
+
+            if len(all_hgi_ids) > 1:
+                # Multi-HGI path: use RamsesMqttPoolBridge.
+                _LOGGER.info(
+                    "MqttPoolBridge: %d configured HGIs: %s",
+                    len(all_hgi_ids),
+                    all_hgi_ids,
+                )
+                self.mqtt_bridge = RamsesMqttPoolBridge(
+                    self.hass,
+                    mqtt_topic,
+                    all_hgi_ids,
+                )
+                self.entry.async_on_unload(self.mqtt_bridge.close)
+
+                engine_kwargs["hgi_id"] = hgi_id
+                self._port_name = str(_port_name_raw or "mqtt")
+
+                engine_config = EngineConfig(**engine_kwargs)
+                gwy_config = GatewayConfig(
+                    engine=engine_config, **gateway_kwargs
+                )
+                return Gateway(
+                    port_name=_port_name_raw or "mqtt",
+                    config=gwy_config,
+                    loop=self.hass.loop,
+                    transport_constructor=(
+                        self.mqtt_bridge.async_transport_factory
+                    ),
+                )
+
+            # Single-HGI path: existing RamsesMqttBridge (unchanged).
             self.mqtt_bridge = RamsesMqttBridge(self.hass, mqtt_topic, hgi_id)
 
             # Ensure the bridge unsubscribes from MQTT on shutdown
