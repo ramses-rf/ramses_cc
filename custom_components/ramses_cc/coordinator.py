@@ -2074,11 +2074,26 @@ class RamsesCoordinator(DataUpdateCoordinator):
         _is_mqtt_ha_port = (
             isinstance(_port_name_raw, str) and _port_name_raw == "mqtt_ha"
         )
+        # A mqtt:// URL is a legacy paho-style config.  Inside HA, we
+        # always use the HA MQTT integration (homeassistant.components.mqtt)
+        # — no direct paho clients (issue 1119, plan §Phase 1).  If an HA
+        # MQTT integration is configured, treat mqtt:// URLs as HA MQTT
+        # and extract the topic/HGI ID from the URL path.
+        _is_mqtt_url = isinstance(
+            _port_name_raw, str
+        ) and _port_name_raw.startswith("mqtt://")
+        _has_ha_mqtt = bool(self.hass.config_entries.async_entries("mqtt"))
+        if _is_mqtt_url and _has_ha_mqtt:
+            _is_mqtt_ha_port = True
+            _LOGGER.info(
+                "Legacy mqtt:// URL detected (%s); routing to HA MQTT "
+                "integration (no paho inside HA — issue 1119)",
+                _port_name_raw,
+            )
         _is_mqtt_flag = bool(self.options.get(CONF_MQTT_USE_HA))
 
         if not _port_name_raw:
-            mqtt_entries = self.hass.config_entries.async_entries("mqtt")
-            if mqtt_entries:
+            if _has_ha_mqtt:
                 _LOGGER.warning(
                     "No serial_port configured; defaulting to Home Assistant "
                     "MQTT transport. Please re-open options & re-save."
@@ -2104,20 +2119,35 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # (from CONF_MQTT_HGI_ID or embedded in the mqtt:// URL).
         hgi_id: str | None = None
         if _is_mqtt_ha:
-            hgi_id = self.options.get(CONF_MQTT_HGI_ID, DEFAULT_HGI_ID)
-        elif isinstance(_port_name_raw, str) and _port_name_raw.startswith(
-            "mqtt://"
-        ):
-            # Custom mqtt:// URL — extract HGI ID from the URL path
-            # (e.g. mqtt://user:pass@host:1883/topic/18:001234)
-            if self.options.get(CONF_MQTT_HGI_ID):
-                hgi_id = self.options.get(CONF_MQTT_HGI_ID)
-            else:
+            hgi_id = self.options.get(CONF_MQTT_HGI_ID)
+            if not hgi_id and _is_mqtt_url:
+                # Extract HGI ID from the mqtt:// URL path
+                # (e.g. mqtt://user:pass@host:1883/topic/18:001234)
                 import re as _re
 
                 m = _re.search(r"(18:[0-9]{6})(?:/|$)", _port_name_raw)
                 if m:
                     hgi_id = m.group(1)
+            if not hgi_id:
+                hgi_id = DEFAULT_HGI_ID
+            # Also extract the MQTT topic from the URL if not already set
+            if not self.options.get(CONF_MQTT_TOPIC) and _is_mqtt_url:
+                import re as _re
+
+                # Topic is the path after the host:port, before the HGI ID
+                # e.g. mqtt://host:1883/RAMSES/GATEWAY/18:001234 -> RAMSES/GATEWAY
+                m = _re.search(
+                    r"mqtt://[^/]+/(.+?)/18:[0-9]{6}(?:/|$)",
+                    _port_name_raw,
+                )
+                if m:
+                    topic = m.group(1).rstrip("/")
+                    if topic:
+                        self.options[CONF_MQTT_TOPIC] = topic
+                        _LOGGER.info(
+                            "Extracted MQTT topic '%s' from mqtt:// URL",
+                            topic,
+                        )
         if hgi_id:
             device_entry = sanitized_known_list.setdefault(hgi_id, {})
             device_entry["class"] = "HGI"

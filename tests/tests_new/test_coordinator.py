@@ -1699,44 +1699,32 @@ async def test_create_client_pool_transport(
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
         patch(
-            "ramses_tx.transport.pooled_transport_factory",
-            create=True,
-            new_callable=AsyncMock,
-        ) as mock_pool_factory,
+            "custom_components.ramses_cc.coordinator.RamsesMqttPoolBridge"
+        ) as mock_bridge_cls,
+        patch(
+            "custom_components.ramses_cc.coordinator._MqttHgiDiscoveryCallback"
+        ),
+        patch.object(
+            mock_coordinator.hass.config_entries,
+            "async_entries",
+            return_value=["mqtt"],
+        ),
     ):
         mock_client = mock_gwy.return_value
-        # Make the pool factory return a mock with set_accepted_hgis
-        mock_transport = MagicMock()
-        mock_pool_factory.return_value = mock_transport
+        mock_bridge = mock_bridge_cls.return_value
+        mock_bridge.async_transport_factory = MagicMock()
 
         # Act
         result = mock_coordinator._create_client({})
 
-        # Assert — Gateway called with transport_constructor
+        # Assert — Gateway called with transport_constructor from pool bridge
         cast(Any, mock_gwy).assert_called_once()
         _, kwargs = cast(Any, mock_gwy).call_args
         assert "transport_constructor" in kwargs
-        assert kwargs["port_name"] == "mqtt://broker:1883"
-
-        # The transport_constructor is a closure — verify it calls
-        # pooled_transport_factory with the right ports
-        constructor = kwargs["transport_constructor"]
-        assert callable(constructor)
-
-        # Call the constructor to verify it delegates to pool factory
-        await constructor(
-            protocol=MagicMock(),
-            config=MagicMock(),
-            extra=None,
-            loop=mock_coordinator.hass.loop,
+        assert (
+            kwargs["transport_constructor"]
+            == mock_bridge.async_transport_factory
         )
-
-        cast(Any, mock_pool_factory).assert_called_once()
-        _, pool_kwargs = cast(Any, mock_pool_factory).call_args
-        assert pool_kwargs["port_names"] == [
-            "mqtt://broker:1883",
-            "mqtt://broker:1883/RAMSES/GATEWAY/18:001234",
-        ]
 
         # Assert — result is the Gateway instance
         assert result is mock_client
@@ -6738,7 +6726,15 @@ def test_coordinator_derive_known_list_mqtt_url(
     }
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
-        patch("custom_components.ramses_cc.coordinator.RamsesMqttBridge"),
+        patch("custom_components.ramses_cc.coordinator.RamsesMqttPoolBridge"),
+        patch(
+            "custom_components.ramses_cc.coordinator._MqttHgiDiscoveryCallback"
+        ),
+        patch.object(
+            mock_coordinator.hass.config_entries,
+            "async_entries",
+            return_value=["mqtt"],
+        ),
     ):
         mock_coordinator._create_client(config)
         assert mock_gwy.called
@@ -6950,10 +6946,14 @@ def test_create_client_filters_non_mqtt_ports(
 
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
-        patch("custom_components.ramses_cc.coordinator.RamsesMqttBridge"),
+        patch("custom_components.ramses_cc.coordinator.RamsesMqttPoolBridge"),
         patch(
-            "ramses_tx.transport.pooled_transport_factory",
-            new_callable=AsyncMock,
+            "custom_components.ramses_cc.coordinator._MqttHgiDiscoveryCallback"
+        ),
+        patch.object(
+            mock_coordinator.hass.config_entries,
+            "async_entries",
+            return_value=["mqtt"],
         ),
     ):
         mock_coordinator._create_client(
@@ -6972,7 +6972,11 @@ def test_create_client_filters_non_mqtt_ports(
 def test_create_client_no_pool_for_single_mqtt(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _create_client does not use pool for single MQTT without additional ports."""
+    """Test _create_client uses pool bridge even for single MQTT (issue 1119).
+
+    The pool bridge is always used for MQTT — even with a single HGI —
+    so the wildcard subscription and discovery callback are active.
+    """
     mock_coordinator.options = {
         SZ_SERIAL_PORT: {
             SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
@@ -6985,8 +6989,20 @@ def test_create_client_no_pool_for_single_mqtt(
 
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
-        patch("custom_components.ramses_cc.coordinator.RamsesMqttBridge"),
+        patch(
+            "custom_components.ramses_cc.coordinator.RamsesMqttPoolBridge"
+        ) as mock_bridge_cls,
+        patch(
+            "custom_components.ramses_cc.coordinator._MqttHgiDiscoveryCallback"
+        ),
+        patch.object(
+            mock_coordinator.hass.config_entries,
+            "async_entries",
+            return_value=["mqtt"],
+        ),
     ):
+        mock_bridge = mock_bridge_cls.return_value
+        mock_bridge.async_transport_factory = MagicMock()
         mock_coordinator._create_client(
             {
                 SZ_SERIAL_PORT: {
@@ -6998,8 +7014,8 @@ def test_create_client_no_pool_for_single_mqtt(
         )
         assert mock_gwy.called
         kwargs = mock_gwy.call_args[1]
-        # No transport_constructor → no pool
-        assert "transport_constructor" not in kwargs
+        # Pool bridge always provides transport_constructor
+        assert "transport_constructor" in kwargs
 
 
 async def test_register_pool_hgis_with_pool_transport(
