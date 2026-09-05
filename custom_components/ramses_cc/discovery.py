@@ -2445,6 +2445,13 @@ class DiscoveryManager:
 
         :return: List of new device IDs that were found this round.
         """
+        _LOGGER.debug(
+            "check_for_new_devices: called, _schema_no_owner_ids=%s, "
+            "_active_hgi_id=%s, _notified=%s",
+            self._schema_no_owner_ids,
+            self._active_hgi_id,
+            self._notified,
+        )
         engine_devices = {d.device_id: d for d in self._scan.get_devices()}
         new_ids: list[str] = []
 
