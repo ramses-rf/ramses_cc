@@ -3035,6 +3035,70 @@ def test_sync_learned_topology_no_backfill_when_root_exists() -> None:
     assert result is None
 
 
+def test_sync_learned_topology_backfills_owner_for_existing_entry() -> None:
+    """Backfill _owner on existing entry that's missing it (issue 1119).
+
+    HGIs discovered via MQTT may have _class but no _owner.
+    sync_learned_topology should inherit the root _owner.
+    """
+    config: dict[str, Any] = {
+        "01:123456": {"_class": "CTL"},  # no _owner, in orphans
+        SZ_ORPHANS_HEAT: ["01:123456"],
+        SZ_OWNER: "me",
+    }
+    learned: dict[str, Any] = {
+        "01:123456": {"_class": "CTL"},
+    }
+    result = sync_learned_topology(config, learned)
+    # Should return a new schema with _owner backfilled
+    assert result is not None
+    assert result["01:123456"][SZ_TR_OWNER] == "me"
+
+
+def test_sync_learned_topology_no_backfill_owner_for_hgi_discovery_candidate() -> (
+    None
+):
+    """18: HGI discovery candidates must NOT get _owner backfilled (issue 1119).
+
+    An HGI discovered via the MQTT wildcard topic is inserted into the
+    schema with _class: HGI but no _owner (a discovery candidate).
+    sync_learned_topology must NOT backfill _owner onto it — that would
+    silently promote it to an accepted pool member without explicit user
+    action.  The user must accept it via the config flow.
+    """
+    config: dict[str, Any] = {
+        "18:999999": {"_class": "HGI"},  # discovery candidate, no _owner
+        "01:123456": {"_class": "CTL"},  # regular device, no _owner
+        SZ_ORPHANS_HEAT: ["01:123456"],
+        SZ_OWNER: "me",
+    }
+    learned: dict[str, Any] = {
+        "01:123456": {"_class": "CTL"},
+    }
+    result = sync_learned_topology(config, learned)
+    # 01: device should get _owner backfilled
+    assert result is not None
+    assert result["01:123456"][SZ_TR_OWNER] == "me"
+    # 18: HGI discovery candidate should NOT get _owner backfilled
+    assert SZ_TR_OWNER not in result.get("18:999999", {})
+
+
+def test_sync_learned_topology_no_backfill_owner_when_no_root_owner() -> None:
+    """No _owner backfill when schema has no root _owner."""
+    config: dict[str, Any] = {
+        "01:123456": {"_class": "CTL"},  # no _owner
+        SZ_ORPHANS_HEAT: ["01:123456"],
+        # no SZ_OWNER at root
+    }
+    learned: dict[str, Any] = {
+        "01:123456": {"_class": "CTL"},
+    }
+    result = sync_learned_topology(config, learned)
+    # Should not backfill _owner (no root owner to inherit)
+    if result is not None:
+        assert SZ_TR_OWNER not in result.get("01:123456", {})
+
+
 def test_strip_traits_no_duplicate_for_remotes_device() -> None:
     """A device in remotes[] with a backfilled root entry must not also
     appear in orphans_hvac after strip_traits_for_validation.

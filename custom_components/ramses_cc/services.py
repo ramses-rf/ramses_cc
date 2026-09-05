@@ -53,6 +53,7 @@ from .const import (
     ATTR_POLLING_INTERVAL,
     CONF_SCHEMA,
     DOMAIN,
+    HGI_PREFIX,
     SZ_DEVICE_COMMENTS,
     SZ_TR_SKIPPED,
 )
@@ -1276,7 +1277,7 @@ class RamsesServiceHandler:
             is_hgi = (
                 isinstance(entry, dict)
                 and str(entry.get("_class", "")).upper() == "HGI"
-            ) or device_id.startswith("18:")
+            ) or device_id.startswith(HGI_PREFIX)
 
             if device_id in device_by_id:
                 already_present.append(device_id)
@@ -1921,7 +1922,7 @@ class RamsesServiceHandler:
         dev_entry = schema.get(device_id, {})
         if isinstance(dev_entry, dict) and (
             str(dev_entry.get("_class", "")).upper() == "HGI"
-            or str(device_id).startswith("18:")
+            or str(device_id).startswith(HGI_PREFIX)
         ):
             raise ServiceValidationError(
                 f"Cannot remove the HGI gateway device ({device_id})"

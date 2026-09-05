@@ -39,6 +39,7 @@ from custom_components.ramses_cc.config_flow import (
     get_usb_ports,
 )
 from custom_components.ramses_cc.const import (
+    CONF_ADDITIONAL_PORTS,
     CONF_FRESH_START,
     CONF_GATEWAY_TIMEOUT,
     CONF_MESSAGE_EVENTS,
@@ -47,6 +48,7 @@ from custom_components.ramses_cc.const import (
     CONF_MQTT_USE_HA,
     CONF_RAMSES_RF,
     CONF_SCHEMA,
+    CONF_WAIT_ONLINE_TIMEOUT,
     DEFAULT_HGI_ID,
     DOMAIN,
     SZ_CLIENT_STATE,
@@ -683,6 +685,164 @@ async def test_options_flow_serial_port_save(hass: HomeAssistant) -> None:
     data = result.get("data")
     assert data is not None
     assert data[SZ_SERIAL_PORT][SZ_PORT_NAME] == "/dev/ttyUSB_NEW"
+
+
+async def test_options_flow_manage_pool_add_port(hass: HomeAssistant) -> None:
+    """Test manage_pool step adds additional MQTT ports (issue 1119)."""
+
+    # Arrange — primary MQTT port
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    # Act — navigate to manage_pool
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+        # Assert — form is shown
+        assert result.get("type") == FlowResultType.FORM
+        assert result.get("step_id") == "manage_pool"
+
+        # Act — add an MQTT broker via the add_new_port dropdown
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+
+    # Assert — navigated to MQTT sub-step
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "manage_pool_mqtt"
+
+
+async def test_options_flow_manage_pool_serial_gated(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool blocks serial ports in Phase 1 (issue 1119)."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={"/dev/ttyUSB1": "USB Serial 1"},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+        # Try to add a serial port — should be blocked
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": "/dev/ttyUSB1",
+            },
+        )
+
+    # Assert — error form shown, not saved
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "pool_serial_not_supported"}
+
+
+async def test_options_flow_manage_pool_zigbee_gated(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool blocks Zigbee in Phase 1 (issue 1119)."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+        # Try to add Zigbee — should be blocked
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_ZIGBEE_DEVICE,
+            },
+        )
+
+    # Assert — error form shown, not saved
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "pool_zigbee_not_supported"}
+
+
+async def test_options_flow_manage_pool_duplicate_primary(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool rejects primary port in additional (issue 1119)."""
+
+    # Arrange — primary is /dev/ttyUSB0, already in additional_ports
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB0"],
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    # Act — navigate to manage_pool and submit with primary still checked
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={"/dev/ttyUSB0": "USB 0", "/dev/ttyUSB1": "USB 1"},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: ["/dev/ttyUSB0"],
+                "add_new_port": "__none__",
+            },
+        )
+
+    # Assert — error shown, not saved
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "pool_duplicate_primary"}
 
 
 async def test_options_flow_schema_save_preserves_serial_port(
@@ -3956,8 +4116,13 @@ async def test_review_discovered_foreign_device_sync_with_schema(
     )
 
     # Assert
+    expected_schema = {
+        SZ_OWNER: "me",
+        "18:072981": {SZ_TR_CLASS: "HGI", SZ_TR_OWNER: "not-me"},
+        "01:216136": {},
+    }
     mock_coord.discovery_manager.sync_with_schema.assert_called_once_with(
-        {"01:216136", "18:072981"}, {"18:072981"}
+        {"01:216136", "18:072981"}, {"18:072981"}, expected_schema
     )
 
 
@@ -4751,3 +4916,627 @@ async def test_review_device_health_empty_and_error(
         user_input={"lost_04:999999": "remove"}
     )
     assert result2.get("type") == FlowResultType.CREATE_ENTRY
+
+
+async def test_options_flow_manage_pool_mqtt_add_port(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_mqtt adds an HGI to the schema (Phase 1)."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        # Navigate to MQTT sub-step
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+        assert result.get("type") == FlowResultType.FORM
+        assert result.get("step_id") == "manage_pool_mqtt"
+
+        # Submit MQTT form with just the HGI ID (Phase 1: no
+        # host/port/credentials — broker comes from HA MQTT).
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                "hgi_id": "18:009999",
+            },
+        )
+
+    # Should save (CREATE_ENTRY) — no URL stored in additional_ports
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    # Schema entry should be created with _owner
+    schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert "18:009999" in schema
+    assert schema["18:009999"].get("_class") == "HGI"
+    assert schema["18:009999"].get(SZ_TR_OWNER) is not None
+
+
+async def test_options_flow_manage_pool_mqtt_missing_hgi_id(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_mqtt shows error when HGI ID is missing."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+        # Submit with empty hgi_id
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"hgi_id": ""},
+        )
+
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "hgi_id_required"}
+
+
+async def test_options_flow_manage_pool_mqtt_invalid_hgi_id(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_mqtt shows error for non-18: HGI ID."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+        # Submit with a non-HGI device ID (32: is not an HGI)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={"hgi_id": "32:153289"},
+        )
+
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "hgi_id_invalid"}
+
+
+async def test_options_flow_manage_pool_mqtt_serial_primary_blocked(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool blocks MQTT add when primary is serial (Phase 1)."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyACM0"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        # Try to add MQTT pool member with serial primary
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+
+    # Should show the form with an error — not navigate to MQTT sub-step
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"base": "pool_mqtt_requires_mqtt_primary"}
+
+
+async def test_options_flow_manage_pool_mqtt_form_display(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_mqtt form is displayed with just hgi_id field."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {
+                SZ_PORT_NAME: "mqtt://user:pass@broker.local:1883/RAMSES/GATEWAY"
+            },
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+
+    # Should show the form (no user_input → just display)
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "manage_pool_mqtt"
+
+
+async def test_options_flow_manage_pool_remove_schema_member(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool demotes schema HGI by unchecking it (issue 1119)."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {
+                SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+            },
+            CONF_SCHEMA: {
+                SZ_OWNER: "me",
+                "18:001111": {
+                    "_class": "HGI",
+                    SZ_TR_OWNER: "me",
+                },
+                "18:002222": {
+                    "_class": "HGI",
+                    SZ_TR_OWNER: "me",
+                },
+            },
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        # Uncheck 18:002222 (keep only 18:001111 which is primary)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "schema_pool_members": ["18:001111"],
+                "add_new_port": "__none__",
+            },
+        )
+
+    # Should save
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    # 18:002222 should have _owner removed (demoted)
+    schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert SZ_TR_OWNER not in schema.get("18:002222", {})
+
+
+async def test_options_flow_manage_pool_zigbee_form_display(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_zigbee shows form when no device selected."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    flow = RamsesOptionsFlowHandler(config_entry)
+    flow.hass = hass
+    flow.get_options()
+
+    result = await flow.async_step_manage_pool_zigbee(user_input=None)
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "manage_pool_zigbee"
+
+
+async def test_options_flow_manage_pool_zigbee_invalid_device(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_zigbee shows error for invalid device input."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    flow = RamsesOptionsFlowHandler(config_entry)
+    flow.hass = hass
+    flow.get_options()
+
+    result = await flow.async_step_manage_pool_zigbee(
+        user_input={"device": 12345}  # not a string
+    )
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"device": "invalid_device"}
+
+
+async def test_options_flow_manage_pool_zigbee_device_not_found(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_zigbee shows error for non-existent device."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    flow = RamsesOptionsFlowHandler(config_entry)
+    flow.hass = hass
+    flow.get_options()
+
+    result = await flow.async_step_manage_pool_zigbee(
+        user_input={"device": "nonexistent-device-id"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"device": "device_not_found"}
+
+
+async def test_options_flow_manage_pool_zigbee_no_ieee(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_zigbee shows error when device has no IEEE."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    # Create a device in the registry without IEEE identifier
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        connections=set(),
+        identifiers={("ramses_cc", "test-device-no-ieee")},
+        name="Test Device No IEEE",
+        model="ramses_esp32c6",
+    )
+
+    flow = RamsesOptionsFlowHandler(config_entry)
+    flow.hass = hass
+    flow.get_options()
+
+    result = await flow.async_step_manage_pool_zigbee(
+        user_input={"device": device.id}
+    )
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("errors") == {"device": "no_ieee_identifier"}
+
+
+async def test_options_flow_manage_pool_zigbee_with_ieee(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_zigbee adds Zigbee URL when device has IEEE."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+            CONF_ADDITIONAL_PORTS: [],
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    # Create a device with an IEEE identifier
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        connections={("zigbee", "00:12:4b:00:1c:aa:bb")},
+        identifiers={("ramses_cc", "00:12:4b:00:1c:aa:bb")},
+        name="Test Zigbee Device",
+        model="ramses_esp32c6",
+    )
+
+    flow = RamsesOptionsFlowHandler(config_entry)
+    flow.hass = hass
+    flow.get_options()
+
+    result = await flow.async_step_manage_pool_zigbee(
+        user_input={"device": device.id}
+    )
+    # Should save with the zigbee URL added
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    # Check flow.options (which _async_save persists)
+    updated = flow.options.get(CONF_ADDITIONAL_PORTS, [])
+    assert any("zigbee://" in p for p in updated)
+
+
+async def test_options_flow_manage_pool_zigbee_exception(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_zigbee handles exceptions gracefully."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    flow = RamsesOptionsFlowHandler(config_entry)
+    flow.hass = hass
+    flow.get_options()
+
+    # Patch dr.async_get to raise an exception
+    with patch(
+        "custom_components.ramses_cc.config_flow.dr.async_get",
+        side_effect=RuntimeError("device registry error"),
+    ):
+        result = await flow.async_step_manage_pool_zigbee(user_input=None)
+
+    # Should show form with error (not crash)
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "manage_pool_zigbee"
+    assert result.get("errors") == {"base": "zigbee_error"}
+
+
+async def test_options_flow_manage_pool_mqtt_creates_schema_entry(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool_mqtt creates a schema HGI entry with _owner."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+            CONF_SCHEMA: {SZ_OWNER: "me"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": CONF_MQTT_PATH,
+            },
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                "hgi_id": "18:007777",
+            },
+        )
+
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert "18:007777" in schema
+    assert schema["18:007777"].get("_class") == "HGI"
+    assert schema["18:007777"].get(SZ_TR_OWNER) == "me"
+
+
+async def test_options_flow_manage_pool_wait_online_timeout(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool saves wait_online_timeout option."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": "__none__",
+                CONF_WAIT_ONLINE_TIMEOUT: 60,
+            },
+        )
+
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    assert config_entry.options.get(CONF_WAIT_ONLINE_TIMEOUT) == 60.0
+
+
+async def test_options_flow_manage_pool_with_schema_members(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool displays schema pool members with labels."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {
+                SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+            },
+            CONF_SCHEMA: {
+                SZ_OWNER: "me",
+                "18:001111": {"_class": "HGI", SZ_TR_OWNER: "me"},
+                "18:002222": {"_class": "HGI", SZ_TR_OWNER: "me"},
+            },
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+    # Should show the form with schema pool members
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "manage_pool"
+
+
+async def test_options_flow_manage_pool_with_credentialed_primary(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool masks credentials in primary URL for display."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {
+                SZ_PORT_NAME: "mqtt://user:secret@broker:1883/RAMSES/GATEWAY/18:001111"
+            },
+            CONF_SCHEMA: {
+                SZ_OWNER: "me",
+                "18:001111": {"_class": "HGI", SZ_TR_OWNER: "me"},
+                "18:002222": {"_class": "HGI", SZ_TR_OWNER: "me"},
+            },
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+
+    # Should show the form (credential masking happens in label builder)
+    assert result.get("type") == FlowResultType.FORM
+    assert result.get("step_id") == "manage_pool"
+
+
+async def test_options_flow_manage_pool_no_add_save(
+    hass: HomeAssistant,
+) -> None:
+    """Test manage_pool saves when no new port is selected (just removals)."""
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
+            CONF_ADDITIONAL_PORTS: [
+                "mqtt://broker:1883/RAMSES/GATEWAY/18:009999"
+            ],
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ramses_cc.config_flow.async_get_usb_ports",
+        return_value={},
+    ):
+        result = await hass.config_entries.options.async_init(
+            config_entry.entry_id
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], user_input={"next_step_id": "manage_pool"}
+        )
+        # Remove the additional port (uncheck it) and no new port
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ADDITIONAL_PORTS: [],
+                "add_new_port": "__none__",
+            },
+        )
+
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    assert config_entry.options.get(CONF_ADDITIONAL_PORTS) == []

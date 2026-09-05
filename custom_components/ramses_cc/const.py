@@ -55,9 +55,20 @@ CONF_SCHEMA: Final = "schema"
 CONF_SEND_PACKET: Final = "send_packet"
 CONF_UNKNOWN_CODES: Final = "unknown_codes"
 
+# Gateway pool (multi-HGI) — issue 1119
+CONF_ADDITIONAL_PORTS: Final = "additional_ports"
+CONF_WAIT_ONLINE_TIMEOUT: Final = "wait_online_timeout"
+
+# HGI device prefix — all HGI/gateway device IDs start with "18:".
+# Used for HGI-specific logic (pool membership, discovery candidates,
+# schema cleanup, backfill exemptions).  Centralised here to avoid
+# scattering the literal across the codebase (architectural concern).
+HGI_PREFIX: Final = "18:"
+
 # Defaults
 DEFAULT_MQTT_TOPIC: Final = "RAMSES/GATEWAY"
 DEFAULT_HGI_ID: Final = HGI_DEVICE_ID
+DEFAULT_WAIT_ONLINE_TIMEOUT: Final = 30.0
 
 # State
 SZ_CLIENT_STATE: Final = "client_state"

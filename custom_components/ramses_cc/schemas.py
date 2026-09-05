@@ -95,6 +95,7 @@ from .const import (
     CONF_SCHEMA,
     CONF_SEND_PACKET,
     CONF_UNKNOWN_CODES,
+    HGI_PREFIX,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
     SZ_TR_CLASS,
@@ -353,7 +354,7 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
         # ramses_rf doesn't need them in the schema (the HGI is the gateway
         # itself, not a controlled device).  Keeping them here would cause
         # ramses_rf to try loading them as TCS/VCS entries.
-        if isinstance(k, str) and k.startswith("18:"):
+        if isinstance(k, str) and k.startswith(HGI_PREFIX):
             continue
         # Remove _disabled, _skipped, & foreign-owner devices from orphan lists
         if k in (SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC) and isinstance(v, list):
@@ -449,7 +450,7 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
         for dev_id in undisabled_ids:
             # Skip HGI gateways — they are not heating or HVAC devices
             # and should not be in any orphan list.
-            if dev_id.startswith("18:"):
+            if dev_id.startswith(HGI_PREFIX):
                 continue
             if dev_id[:3] not in _HEAT_PREFIXES:
                 hvac_orphans.add(dev_id)
@@ -556,7 +557,7 @@ _HEAT_PREFIXES_SET = frozenset(
     )
 )
 # HVAC-side prefixes (ventilation domain)
-_HVAC_PREFIXES_SET = frozenset(("18:", "29:", "32:", "37:", "63:"))
+_HVAC_PREFIXES_SET = frozenset((HGI_PREFIX, "29:", "32:", "37:", "63:"))
 
 
 def order_schema(schema: _SchemaT) -> _SchemaT:
@@ -1217,7 +1218,7 @@ def sync_learned_topology(
     )
     for dev_id, dev_entry in new_schema.items():
         if not isinstance(dev_entry, dict) or not str(dev_id).startswith(
-            "18:"
+            HGI_PREFIX
         ):
             continue
         if dev_id in config_only_keys:
@@ -1240,7 +1241,9 @@ def sync_learned_topology(
     for orphan_key in (SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC):
         orphan_list = new_schema.get(orphan_key)
         if isinstance(orphan_list, list):
-            cleaned = [d for d in orphan_list if not str(d).startswith("18:")]
+            cleaned = [
+                d for d in orphan_list if not str(d).startswith(HGI_PREFIX)
+            ]
             if cleaned != orphan_list:
                 if cleaned:
                     new_schema[orphan_key] = cleaned
@@ -1306,6 +1309,8 @@ def sync_learned_topology(
     # TRV in zones[], etc.) were accepted without a root entry — so _owner
     # and other traits could never be set on them.  This backfill creates
     # a root entry with the root _owner so SSOT works for these devices.
+    # Also backfills _owner on existing entries that are missing it (e.g.
+    # HGI gateways discovered via MQTT that have _class but no _owner).
     root_owner = new_schema.get(SZ_OWNER)
     backfill_count = 0
     for dev_id in active_device_ids:
@@ -1317,6 +1322,40 @@ def sync_learned_topology(
             backfill_count += 1
             _LOGGER.info(
                 "sync_learned_topology: backfilled root entry for %s",
+                dev_id,
+            )
+        elif (
+            root_owner
+            and isinstance(new_schema[dev_id], dict)
+            and SZ_TR_OWNER not in new_schema[dev_id]
+        ):
+            # Existing entry without _owner — inherit root owner.
+            # This happens for auto-discovered devices (e.g. HGIs
+            # discovered via MQTT packets) that were added with
+            # _class but no _owner.
+            #
+            # EXCEPT: 18: HGI entries with _class: HGI are discovery
+            # candidates (issue 1119).  They must NOT get _owner
+            # backfilled — that would silently promote them to
+            # accepted pool members without explicit user action.
+            # The user must accept them via the config flow, which
+            # sets _owner and triggers a reload.
+            if (
+                dev_id.startswith(HGI_PREFIX)
+                and isinstance(new_schema[dev_id], dict)
+                and new_schema[dev_id].get("_class", "").upper() == "HGI"
+            ):
+                _LOGGER.debug(
+                    "sync_learned_topology: skipping _owner "
+                    "backfill for HGI discovery candidate %s",
+                    dev_id,
+                )
+                continue
+            new_schema[dev_id][SZ_TR_OWNER] = root_owner
+            changed = True
+            backfill_count += 1
+            _LOGGER.info(
+                "sync_learned_topology: backfilled _owner for %s",
                 dev_id,
             )
     # Also check remotes/sensors lists (not in active_device_ids above)
@@ -1502,7 +1541,7 @@ def sync_learned_topology(
             # not a TCS.  Comments like "bound to 18:072981" on a CTL
             # mean the CTL is paired with that gateway, not that the HGI
             # is a temperature control system with zones.
-            if comment_tcs_id and comment_tcs_id.startswith("18:"):
+            if comment_tcs_id and comment_tcs_id.startswith(HGI_PREFIX):
                 continue
             # Skip invalid zone indices (ramses_rf only allows 00-0B)
             if zone_index and not _VALID_ZONE_INDEX_RE.match(zone_index):
@@ -2236,7 +2275,7 @@ def sync_learned_topology(
         to_remove |= {
             d
             for d in config_heat_orphans
-            if isinstance(d, str) and d.startswith("18:")
+            if isinstance(d, str) and d.startswith(HGI_PREFIX)
         }
         if to_remove:
             remaining = sorted(
@@ -2628,7 +2667,7 @@ def sync_learned_topology(
         to_remove |= {
             d
             for d in config_hvac_orphans
-            if isinstance(d, str) and d.startswith("18:")
+            if isinstance(d, str) and d.startswith(HGI_PREFIX)
         }
         if to_remove:
             remaining = sorted(config_hvac_orphans - to_remove)
@@ -2656,13 +2695,13 @@ def sync_learned_topology(
     if (
         active_hgi_id
         and isinstance(active_hgi_id, str)
-        and active_hgi_id.startswith("18:")
+        and active_hgi_id.startswith(HGI_PREFIX)
     ):
         hgi_ids.add(active_hgi_id)
     device_comments = new_schema.get(SZ_DEVICE_COMMENTS, {})
     if isinstance(device_comments, dict):
         for dev_id in device_comments:
-            if isinstance(dev_id, str) and dev_id.startswith("18:"):
+            if isinstance(dev_id, str) and dev_id.startswith(HGI_PREFIX):
                 hgi_ids.add(dev_id)
     for dev_id in sorted(hgi_ids):
         if dev_id not in new_schema:

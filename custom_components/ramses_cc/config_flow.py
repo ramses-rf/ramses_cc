@@ -55,6 +55,7 @@ from ramses_tx.schemas import (
 )
 
 from .const import (
+    CONF_ADDITIONAL_PORTS,
     CONF_ADVANCED_FEATURES,
     CONF_AUTO_NOTIFY,
     CONF_FRESH_START,
@@ -69,9 +70,12 @@ from .const import (
     CONF_RAMSES_RF,
     CONF_SCHEMA,
     CONF_SEND_PACKET,
+    CONF_WAIT_ONLINE_TIMEOUT,
     DEFAULT_HGI_ID,
     DEFAULT_MQTT_TOPIC,
+    DEFAULT_WAIT_ONLINE_TIMEOUT,
     DOMAIN,
+    HGI_PREFIX,
     STORAGE_KEY,
     STORAGE_VERSION,
     SZ_CLIENT_STATE,
@@ -288,7 +292,7 @@ class BaseRamsesFlow:
             try:
                 parts = msg.topic.split("/")
                 for part in parts:
-                    if part.startswith("18:"):
+                    if part.startswith(HGI_PREFIX):
                         _LOGGER.debug("Discovery found device: %s", part)
                         found_device.set_result(part)
                         return
@@ -1146,7 +1150,17 @@ class BaseRamsesFlow:
                             continue
                         existing = v.get(SZ_TR_OWNER)
                         if not isinstance(existing, str):
-                            # No _owner → backfill
+                            # No _owner → backfill, EXCEPT for 18: HGI
+                            # discovery candidates (issue 1119).  Those
+                            # must stay ownerless until the user
+                            # explicitly accepts them via the config
+                            # flow, otherwise they'd be silently
+                            # promoted to accepted pool members.
+                            if (
+                                k.startswith(HGI_PREFIX)
+                                and v.get("_class", "").upper() == "HGI"
+                            ):
+                                continue
                             v[SZ_TR_OWNER] = owner_name
                         elif old_owner and existing == old_owner:
                             # Had the old root owner → rename
@@ -1692,6 +1706,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             step_id="init",
             menu_options=[
                 "choose_serial_port",
+                "manage_pool",
                 "config",
                 "schema",
                 "advanced_features",
@@ -1721,6 +1736,497 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             )
 
         return result
+
+    async def async_step_manage_pool(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the gateway pool (multi-HGI, issue 1119).
+
+        Shows the current primary port and any additional pool members.
+        The user can remove additional ports (uncheck them) or add a
+        new one (select a port type from the dropdown).  The primary
+        port is managed via ``choose_serial_port``.
+
+        :param user_input: Dict containing user-provided input data.
+        :return: The generated config flow result.
+        """
+        self.get_options()  # not available during init
+        errors: dict[str, str] = {}
+
+        # Sentinel value for "no new port selected"
+        ADD_NEW = "__add_new__"
+        NO_ADD = "__none__"
+
+        if user_input is not None:
+            # Save the current additional ports (removals applied)
+            additional: list[str] = user_input.get(CONF_ADDITIONAL_PORTS, [])
+            # Schema pool members that the user wants to keep (checked)
+            keep_schema_members: list[str] = user_input.get(
+                "schema_pool_members", []
+            )
+            add_choice = user_input.get("add_new_port", NO_ADD)
+            # Wait-online timeout (seconds) for MQTT pool bridge
+            wait_timeout = user_input.get(CONF_WAIT_ONLINE_TIMEOUT)
+
+            # Validate: no duplicates, primary port not in additional
+            primary = self.options.get(SZ_SERIAL_PORT, {}).get(SZ_PORT_NAME)
+            if primary and primary in additional:
+                errors["base"] = "pool_duplicate_primary"
+            else:
+                # Determine the primary HGI ID — it cannot be removed
+                # from the pool via this form (it's managed via
+                # choose_serial_port).
+                primary_hgi_id_input: str | None = None
+                if isinstance(primary, str) and primary.startswith("mqtt://"):
+                    primary_hgi_id_input = self.options.get(CONF_MQTT_HGI_ID)
+                    if not primary_hgi_id_input:
+                        import re as _re
+
+                        m = _re.search(r"(18:[0-9]{6})", primary)
+                        if m:
+                            primary_hgi_id_input = m.group(1)
+
+                # Process schema pool member removals — unchecking a
+                # schema pool member removes _owner from its schema entry,
+                # demoting it back to a discovery candidate (issue 1119).
+                # The primary HGI is always kept (cannot be demoted here).
+                schema_dict = dict(self.options.get(CONF_SCHEMA, {}))
+                if isinstance(schema_dict, dict):
+                    root_owner = schema_dict.get(SZ_OWNER, "me")
+                    for dev_id, entry in list(schema_dict.items()):
+                        if (
+                            dev_id.startswith(HGI_PREFIX)
+                            and isinstance(entry, dict)
+                            and entry.get("_class", "").upper() == "HGI"
+                            and entry.get(SZ_TR_OWNER) == root_owner
+                        ):
+                            if dev_id == primary_hgi_id_input:
+                                continue  # primary — always kept
+                            if dev_id not in keep_schema_members:
+                                # Demote: remove _owner
+                                entry.pop(SZ_TR_OWNER, None)
+                                schema_dict[dev_id] = entry
+                    self.options[CONF_SCHEMA] = schema_dict
+
+                if add_choice == CONF_MQTT_PATH:
+                    # Phase 1: MQTT pool children require an MQTT
+                    # primary transport (HA MQTT integration).  A
+                    # serial primary + MQTT additional would require
+                    # paho inside HA, which is not allowed
+                    # (issue 1119).
+                    if not isinstance(primary, str) or not primary.startswith(
+                        "mqtt://"
+                    ):
+                        errors["base"] = "pool_mqtt_requires_mqtt_primary"
+                    else:
+                        # Save current state and go to MQTT sub-step
+                        self.options[CONF_ADDITIONAL_PORTS] = additional
+                        if wait_timeout is not None:
+                            self.options[CONF_WAIT_ONLINE_TIMEOUT] = float(
+                                wait_timeout
+                            )
+                        return await self.async_step_manage_pool_mqtt()
+                elif add_choice == CONF_ZIGBEE_DEVICE:
+                    # Zigbee pool members are not yet supported (Phase 3,
+                    # PR 6).  Block the sub-step and show an error.
+                    errors["base"] = "pool_zigbee_not_supported"
+                elif add_choice not in (NO_ADD, ADD_NEW):
+                    # Serial/USB pool members are not yet supported
+                    # (Phase 2, PR 3).  Block and show an error.
+                    errors["base"] = "pool_serial_not_supported"
+                else:
+                    # No new port — just save removals
+                    self.options[CONF_ADDITIONAL_PORTS] = additional
+                    if wait_timeout is not None:
+                        self.options[CONF_WAIT_ONLINE_TIMEOUT] = float(
+                            wait_timeout
+                        )
+                    return self._async_save()
+
+        # Build the current state for display
+        primary_port = self.options.get(SZ_SERIAL_PORT, {}).get(
+            SZ_PORT_NAME, "(not set)"
+        )
+        current_additional = self.options.get(CONF_ADDITIONAL_PORTS, [])
+
+        # Schema-derived pool members (HGIs with _owner: me and _class:
+        # HGI) — these are active pool members managed via the schema.
+        # Show them in the form with a checkbox for each; unchecking
+        # demotes them back to discovery candidates (removes _owner).
+        # The primary HGI is also listed (marked as "primary") so the
+        # user can see the full pool composition.
+        schema = self.options.get(CONF_SCHEMA, {})
+        if not isinstance(schema, dict):
+            schema = {}
+        root_owner = schema.get(SZ_OWNER, "me")
+        schema_pool_members: list[str] = []
+        for dev_id, entry in schema.items():
+            if (
+                dev_id.startswith(HGI_PREFIX)
+                and isinstance(entry, dict)
+                and entry.get("_class", "").upper() == "HGI"
+                and entry.get(SZ_TR_OWNER) == root_owner
+                and not entry.get("_disabled")
+            ):
+                schema_pool_members.append(dev_id)
+
+        # Determine the primary HGI ID (from the MQTT URL or CONF_MQTT_HGI_ID)
+        # so we can label it in the pool list.
+        primary_hgi_id: str | None = None
+        if isinstance(primary_port, str) and primary_port.startswith(
+            "mqtt://"
+        ):
+            primary_hgi_id = self.options.get(CONF_MQTT_HGI_ID)
+            if not primary_hgi_id:
+                import re as _re
+
+                m = _re.search(r"(18:[0-9]{6})", primary_port)
+                if m:
+                    primary_hgi_id = m.group(1)
+
+        # Build a label for each pool member showing its broker info.
+        # For the primary HGI: the primary_port URL.
+        # For additional HGIs: the explicit per-HGI MQTT URL.
+        def _pool_member_label(dev_id: str) -> str:
+            """Build a human-readable label with broker info."""
+            if dev_id == primary_hgi_id:
+                # Mask credentials in the primary URL for display
+                from urllib.parse import urlparse, urlunparse
+
+                display_url = primary_port
+                try:
+                    parsed = urlparse(primary_port)
+                    if parsed.username:
+                        netloc = f"***:***@{parsed.hostname}"
+                        if parsed.port:
+                            netloc += f":{parsed.port}"
+                        display_url = urlunparse(
+                            parsed._replace(netloc=netloc)
+                        )
+                except (ValueError, AttributeError):
+                    pass
+                return f"HGI: {dev_id} (primary, {display_url})"
+            # Build the explicit MQTT URL for this HGI
+            if isinstance(primary_port, str) and primary_port.startswith(
+                "mqtt://"
+            ):
+                from .coordinator import RamsesCoordinator
+
+                explicit = RamsesCoordinator._build_explicit_mqtt_url(
+                    primary_port, dev_id
+                )
+                if explicit:
+                    # Mask credentials in the URL for display
+                    from urllib.parse import urlparse, urlunparse
+
+                    parsed = urlparse(explicit)
+                    if parsed.username:
+                        netloc = f"***:***@{parsed.hostname}"
+                        if parsed.port:
+                            netloc += f":{parsed.port}"
+                        explicit = urlunparse(parsed._replace(netloc=netloc))
+                    return f"HGI: {dev_id} ({explicit})"
+            return f"HGI: {dev_id} (schema, _owner: {root_owner})"
+
+        # Build options for the "current ports" multi-select (for removal)
+        # Show each current additional port with a friendly label
+        current_options: list[selector.SelectOptionDict] = []
+        for port in current_additional:
+            if port.startswith("mqtt://"):
+                label = f"MQTT: {port}"
+            elif port.startswith("zigbee://"):
+                label = f"Zigbee: {port}"
+            else:
+                label = port
+            current_options.append(
+                selector.SelectOptionDict(value=port, label=label)
+            )
+
+        # Build options for the "add new port" dropdown.
+        # Phase 1: only MQTT HGIs are supported as pool children.
+        # Serial and Zigbee are gated with "(not yet supported)" markers
+        # until Phase 2 (PR 3) and Phase 3 (PR 6) respectively.
+        # TODO: re-enable serial when Phase 2 (PR 3) lands.
+        # TODO: re-enable zigbee when Phase 3 (PR 6) lands.
+        ports = await async_get_usb_ports(self.hass)
+        add_options: list[selector.SelectOptionDict] = [
+            selector.SelectOptionDict(value=NO_ADD, label="(nothing to add)"),
+        ]
+        # Serial ports — gated (not yet supported for pool membership).
+        for k, v in ports.items():
+            if k not in current_additional:
+                add_options.append(
+                    selector.SelectOptionDict(
+                        value=k, label=f"{v} (not yet supported)"
+                    )
+                )
+        # MQTT — supported in Phase 1.
+        add_options.append(
+            selector.SelectOptionDict(
+                value=CONF_MQTT_PATH, label="MQTT Broker..."
+            )
+        )
+        # Zigbee — gated (not yet supported for pool membership).
+        add_options.append(
+            selector.SelectOptionDict(
+                value=CONF_ZIGBEE_DEVICE,
+                label="Zigbee device (not yet supported)",
+            )
+        )
+
+        # Build the data schema — if there are current ports, show them
+        # in a multi-select for removal; always show the "add new" dropdown
+        if current_options:
+            ports_selector = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=current_options,
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=True,
+                )
+            )
+        else:
+            ports_selector = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value="__none__", label="(no additional ports)"
+                        )
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=True,
+                )
+            )
+
+        # Schema pool members selector (multi-select for removal).
+        # Include the primary HGI in the list (it's also a pool member)
+        # but mark it as "primary" so the user knows which one is the
+        # primary gateway.  The primary cannot be removed here — it's
+        # managed via choose_serial_port.
+        all_pool_hgis = sorted(
+            set(schema_pool_members)
+            | ({primary_hgi_id} if primary_hgi_id else set())
+        )
+        if all_pool_hgis:
+            schema_pool_selector = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value=dev_id,
+                            label=_pool_member_label(dev_id),
+                        )
+                        for dev_id in all_pool_hgis
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=True,
+                )
+            )
+        else:
+            schema_pool_selector = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value="__none__",
+                            label="(no schema pool members)",
+                        )
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=True,
+                )
+            )
+
+        data_schema: dict[str, Any] = {
+            prob.Optional(
+                "schema_pool_members",
+                default=all_pool_hgis,
+            ): schema_pool_selector,
+            prob.Optional(
+                CONF_ADDITIONAL_PORTS,
+                default=current_additional,
+            ): ports_selector,
+            prob.Optional(
+                "add_new_port",
+                default=NO_ADD,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=add_options,
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=False,
+                )
+            ),
+            prob.Optional(
+                CONF_WAIT_ONLINE_TIMEOUT,
+                default=self.options.get(
+                    CONF_WAIT_ONLINE_TIMEOUT,
+                    DEFAULT_WAIT_ONLINE_TIMEOUT,
+                ),
+            ): prob.All(
+                selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=300,
+                        step=1,
+                        unit_of_measurement="s",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                prob.Coerce(float),
+            ),
+        }
+
+        return self.async_show_form(
+            step_id="manage_pool",
+            data_schema=vol_schema(data_schema),
+            errors=errors,
+            description_placeholders={
+                "primary_port": str(primary_port),
+                "current_count": str(len(current_additional)),
+                "schema_pool_members": (
+                    ", ".join(schema_pool_members)
+                    if schema_pool_members
+                    else "(none)"
+                ),
+            },
+            last_step=False,
+        )
+
+    async def async_step_manage_pool_mqtt(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure a new MQTT HGI pool member.
+
+        Creates a schema HGI entry with ``_owner`` set to the root
+        owner so the coordinator includes it in the pool on reload.
+
+        :param user_input: Dict containing user-provided input data.
+        :return: The generated config flow result.
+        """
+        self.get_options()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            hgi_id = (user_input.get("hgi_id") or "").strip().upper()
+
+            if not hgi_id:
+                errors["base"] = "hgi_id_required"
+            elif not re.match(
+                r"^\d{2}:\d{6}$", hgi_id
+            ) or not hgi_id.startswith(HGI_PREFIX):
+                errors["base"] = "hgi_id_invalid"
+            else:
+                # Phase 1: MQTT pool children share the HA MQTT
+                # integration's broker/topic — no separate host/port
+                # or credentials are needed, and no paho client is
+                # created inside HA (issue 1119).
+                # Create/update schema HGI entry with _owner = root_owner
+                # so the coordinator's _extract_pool_hgis_from_schema()
+                # includes it as an accepted pool member.
+                schema_dict = dict(self.options.get(CONF_SCHEMA, {}))
+                root_owner = schema_dict.get(SZ_OWNER, "me")
+                if hgi_id not in schema_dict or not isinstance(
+                    schema_dict.get(hgi_id), dict
+                ):
+                    schema_dict[hgi_id] = {}
+                schema_dict[hgi_id]["_class"] = "HGI"
+                schema_dict[hgi_id][SZ_TR_OWNER] = root_owner
+                self.options[CONF_SCHEMA] = schema_dict
+                _LOGGER.info(
+                    "Added MQTT pool HGI %s (schema entry with _owner=%s)",
+                    hgi_id,
+                    root_owner,
+                )
+                return self._async_save()
+
+        # Phase 1: only the HGI ID is needed — the broker and topic
+        # come from the HA MQTT integration.  No host/port/credentials
+        # are stored, and no paho client is created (issue 1119).
+        data_schema = {
+            prob.Required("hgi_id", default=""): selector.TextSelector(
+                selector.TextSelectorConfig(
+                    type=selector.TextSelectorType.TEXT,
+                )
+            ),
+        }
+
+        return self.async_show_form(
+            step_id="manage_pool_mqtt",
+            data_schema=vol_schema(data_schema),
+            errors=errors,
+            description_placeholders={},
+            last_step=False,
+        )
+
+    async def async_step_manage_pool_zigbee(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Select a Zigbee device as an additional port for the pool.
+
+        :param user_input: Dict containing user-provided input data.
+        :return: The generated config flow result.
+        """
+        self.get_options()
+        errors: dict[str, str] = {}
+
+        try:
+            dev_reg = dr.async_get(self.hass)
+
+            if user_input is not None and "device" in user_input:
+                device_id = user_input.get("device")
+                if isinstance(device_id, str):
+                    device_entry = dev_reg.async_get(device_id)
+                    if device_entry:
+                        ieee = _extract_ieee_from_device(device_entry)
+                        if ieee:
+                            zigbee_url = (
+                                f"zigbee://{ieee}"
+                                "/0xfc00/0x0000/10/0xfc01/0x0000/10"
+                            )
+                            additional = self.options.get(
+                                CONF_ADDITIONAL_PORTS, []
+                            )
+                            if zigbee_url not in additional:
+                                additional = additional + [zigbee_url]
+                            self.options[CONF_ADDITIONAL_PORTS] = additional
+                            _LOGGER.info(
+                                "Added Zigbee additional port: %s",
+                                zigbee_url,
+                            )
+                            return self._async_save()
+                        errors["device"] = "no_ieee_identifier"
+                    else:
+                        errors["device"] = "device_not_found"
+                else:
+                    errors["device"] = "invalid_device"
+
+            data_schema = {
+                prob.Required("device"): selector.DeviceSelector(
+                    selector.DeviceSelectorConfig(
+                        model="ramses_esp32c6",
+                    )
+                ),
+            }
+
+            return self.async_show_form(
+                step_id="manage_pool_zigbee",
+                data_schema=vol_schema(data_schema),
+                errors=errors,
+                description_placeholders={},
+                last_step=False,
+            )
+        except Exception as err:
+            _LOGGER.error(
+                "EXCEPTION in async_step_manage_pool_zigbee: %s",
+                err,
+                exc_info=True,
+            )
+            errors["base"] = "zigbee_error"
+            return self.async_show_form(
+                step_id="manage_pool_zigbee",
+                data_schema=vol_schema(
+                    {prob.Required("device"): selector.DeviceSelector()}
+                ),
+                errors=errors,
+                last_step=False,
+            )
 
     async def async_step_review_discovered(
         self, user_input: dict[str, Any] | None = None
@@ -1767,7 +2273,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 config_schema_for_sync
             )
             coordinator.discovery_manager.sync_with_schema(
-                schema_device_ids, foreign_device_ids
+                schema_device_ids, foreign_device_ids, config_schema_for_sync
             )
 
         # Run an immediate check so devices found by the scan since the
@@ -1790,6 +2296,11 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
         new_devices = coordinator.discovery_manager.get_devices(
             status=DiscoveryStatus.NEW
+        )
+        _LOGGER.debug(
+            "review_discovered: get_devices(NEW) returned %d devices: %s",
+            len(new_devices),
+            [d.device.device_id for d in new_devices],
         )
         mismatched_devices = (
             coordinator.discovery_manager.get_mismatched_devices()
@@ -1897,6 +2408,16 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     if skip_meta:
                         skip_meta.missing_class = None
                         skip_meta.missing_class_dismissed = True
+                    else:
+                        # Edge case: device has no metadata yet (e.g. it
+                        # was added to the schema externally).  Create
+                        # metadata with the dismissal pre-set so
+                        # check_missing_class won't re-flag it (issue 1136).
+                        from .discovery import DeviceMetadata
+
+                        coordinator.discovery_manager._metadata[device_id] = (
+                            DeviceMetadata(missing_class_dismissed=True)
+                        )
                     changed = True
                     continue
                 if action == SZ_ACCEPT:
