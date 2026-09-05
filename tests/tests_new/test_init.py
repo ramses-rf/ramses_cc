@@ -940,16 +940,21 @@ async def test_yaml_known_list_cleanup_backs_up_and_notifies(
     call_kwargs = mock_notify.call_args.kwargs
     assert "known_list" in call_kwargs["message"]
     assert "block_list" in call_kwargs["message"]
-    assert "enforce_known_list" in call_kwargs["message"]
     assert (
         call_kwargs["notification_id"] == "ramses_cc_yaml_known_list_cleanup"
     )
 
 
-async def test_yaml_known_list_cleanup_noop_without_known_list(
+async def test_yaml_cleanup_notifies_even_without_legacy_keys(
     hass: HomeAssistant, tmp_path: Any
 ) -> None:
-    """async_setup does nothing if no known_list or enforce_known_list."""
+    """Notification fires for any ramses_cc: block, not just legacy keys.
+
+    The entire ramses_cc YAML configuration is deprecated — any
+    ramses_cc: block in configuration.yaml should produce the
+    notification, even without known_list/block_list/enforce_known_list
+    (issues 1140, 1149).
+    """
     domain_config = {"ramses_rf": {}}
 
     with (
@@ -971,9 +976,52 @@ async def test_yaml_known_list_cleanup_noop_without_known_list(
 
         await async_setup(hass, {"ramses_cc": domain_config})
 
-    # No backup, no notification
+    # No backup (no legacy keys), but notification should still fire
     backup_dir = tmp_path / "ramses_cc_backups"
     assert not backup_dir.exists() or not list(
         backup_dir.glob("backup_*_yaml_known_list.yaml")
     )
-    mock_notify.assert_not_called()
+    mock_notify.assert_called_once()
+    call_kwargs = mock_notify.call_args.kwargs
+    assert "ramses_cc:" in call_kwargs["message"]
+    assert (
+        call_kwargs["notification_id"] == "ramses_cc_yaml_known_list_cleanup"
+    )
+
+
+async def test_yaml_cleanup_notifies_with_schema_default_enforce(
+    hass: HomeAssistant, tmp_path: Any
+) -> None:
+    """Notification fires even when enforce_known_list is the schema default.
+
+    CONFIG_SCHEMA injects ``enforce_known_list: False`` via
+    SCH_ENGINE_DICT's ``vol.Optional(..., default=False)``.  The
+    notification should still fire because the entire ramses_cc: block
+    is deprecated (issue 1149).
+    """
+    # Simulate what CONFIG_SCHEMA produces for a user who has a
+    # ramses_cc: block but never wrote enforce_known_list themselves
+    domain_config = {
+        "ramses_rf": {"enforce_known_list": False},
+    }
+
+    with (
+        patch.object(
+            hass.config,
+            "path",
+            side_effect=lambda x: str(tmp_path / x if "/" not in x else x),
+        ),
+        patch.object(
+            hass.config_entries,
+            "async_entries",
+            return_value=[MagicMock()],
+        ),
+        patch(
+            "homeassistant.components.persistent_notification.async_create",
+        ) as mock_notify,
+    ):
+        from custom_components.ramses_cc import async_setup
+
+        await async_setup(hass, {"ramses_cc": domain_config})
+
+    mock_notify.assert_called_once()

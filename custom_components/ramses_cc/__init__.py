@@ -81,7 +81,6 @@ from .const import (
     CONF_MQTT_TOPIC,
     CONF_MQTT_USE_HA,
     CONF_PASSIVE_SCAN,
-    CONF_RAMSES_RF,
     CONF_SEND_PACKET,
     DOMAIN,
     STORAGE_KEY,
@@ -163,32 +162,26 @@ PLATFORMS = [Platform.EVENT]
 async def _async_cleanup_yaml_known_list(
     hass: HomeAssistant, domain_config: dict[str, Any]
 ) -> None:
-    """Warn about legacy known_list/block_list in configuration.yaml (issue 1055).
+    """Warn about legacy ramses_cc configuration in configuration.yaml.
 
-    Phase 4 migrated known_list and block_list into the config entry
-    schema (block_list is now derived from _owner/_skipped traits at
-    runtime).  The YAML file was never cleaned up.  This does NOT modify
-    configuration.yaml (to preserve user comments and formatting).
-    Instead it:
+    The entire ``ramses_cc:`` YAML configuration has been migrated to the
+    config flow (Settings > Devices & Services > Ramses RF).  The YAML
+    block is no longer used and will be dropped in a future release.
 
-    1. Backs up the known_list/block_list to ``ramses_cc_backups/`` as a
-       YAML file
+    This does NOT modify configuration.yaml (to preserve user comments and
+    formatting).  Instead it:
+
+    1. Backs up any known_list/block_list to ``ramses_cc_backups/`` as a
+       YAML file (so no data is lost)
     2. Creates a persistent notification telling the user to remove the
-       ``known_list``, ``block_list`` and ``enforce_known_list`` keys
-       manually
+       entire ``ramses_cc:`` block manually
 
-    The backup ensures no data is lost — the user can copy/paste values
-    from the backup into the schema editor if needed.
+    The notification fires for *any* ``ramses_cc:`` block, not just when
+    legacy keys (known_list/block_list/enforce_known_list) are present
+    (issues 1140, 1149).
     """
     known_list = domain_config.get("known_list")
     block_list = domain_config.get("block_list")
-    ramses_rf = domain_config.get(CONF_RAMSES_RF, {})
-    has_enforce = (
-        isinstance(ramses_rf, dict) and "enforce_known_list" in ramses_rf
-    )
-
-    if not known_list and not block_list and not has_enforce:
-        return
 
     # 1. Back up known_list and/or block_list to ramses_cc_backups/
     backup_data: dict[str, Any] = {}
@@ -246,25 +239,20 @@ async def _async_cleanup_yaml_known_list(
     )
 
     lines = [
-        "The `known_list` and `block_list` configuration has been migrated",
-        "to the config flow schema (Phase 4).  `block_list` is now derived",
-        "from `_owner`/`_skipped` traits at runtime.  Please remove the",
-        "following keys from `configuration.yaml` under `ramses_cc:`:",
-        "",
+        "The `ramses_cc` configuration has been migrated to the config",
+        "flow (Settings > Devices & Services > Ramses RF).  Please remove",
+        "the entire `ramses_cc:` block from `configuration.yaml` — it is",
+        "no longer used and will generate this warning on every restart.",
     ]
-    if known_list:
-        lines.append("- `known_list` (backed up to `ramses_cc_backups/`)")
-    if block_list:
-        lines.append(
-            "- `block_list` (now derived from schema `_owner`/`_skipped`)"
-        )
-    if has_enforce:
-        lines.append("- `enforce_known_list` (now always-on)")
-    lines += [
-        "",
-        "The integration will continue to work, but these keys are no",
-        "longer used and will generate warnings on every restart.",
-    ]
+    if known_list or block_list:
+        lines.append("")
+        lines.append("The following legacy keys were backed up:")
+        if known_list:
+            lines.append("- `known_list` (backed up to `ramses_cc_backups/`)")
+        if block_list:
+            lines.append(
+                "- `block_list` (now derived from schema `_owner`/`_skipped`)"
+            )
     if backup_path:
         lines += [
             "",
@@ -274,14 +262,14 @@ async def _async_cleanup_yaml_known_list(
     async_create_notification(
         hass,
         message="\n".join(lines),
-        title="RAMSES CC: Remove legacy known_list from configuration.yaml",
+        title="RAMSES CC: Remove ramses_cc block from configuration.yaml",
         notification_id=f"{DOMAIN}_yaml_known_list_cleanup",
     )
     _LOGGER.warning(
-        "Legacy known_list/block_list/enforce_known_list found in "
-        "configuration.yaml. A backup has been saved and a persistent "
-        "notification created. Please remove these keys from "
-        "configuration.yaml manually."
+        "Legacy ramses_cc configuration found in configuration.yaml. "
+        "The entire ramses_cc: block should be removed — configuration "
+        "is now managed via the config flow. A persistent notification "
+        "has been created."
     )
 
 
