@@ -361,6 +361,48 @@ class TestGetDevices:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
         assert manager.get_device("99:999999") is None
 
+    def test_status_filter_skips_devices_without_metadata(self) -> None:
+        """Devices in the scan engine but with no persisted metadata must
+        not appear when a status filter is applied.
+
+        Without this, a live-scan device already in the schema but
+        lacking discovery metadata (e.g. after a reload) would get a
+        default DeviceMetadata() with status=NEW and appear in the
+        Review discovered devices config flow (issue 1132).
+        """
+        dev = make_discovered_device("04:056053")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        # Device is in the scan engine but has no metadata entry
+        assert "04:056053" not in manager._metadata  # noqa: SLF001
+
+        # Filtering by NEW must NOT return it — no metadata means we
+        # can't know its real status.
+        new_devices = manager.get_devices(status=DiscoveryStatus.NEW)
+        assert len(new_devices) == 0
+
+        # Filtering by ACCEPTED must also not return it.
+        accepted = manager.get_devices(status=DiscoveryStatus.ACCEPTED)
+        assert len(accepted) == 0
+
+        # Without a filter, the device should still be returned (with a
+        # default metadata) so callers that want all devices still work.
+        all_devices = manager.get_devices()
+        assert len(all_devices) == 1
+        assert all_devices[0].device.device_id == "04:056053"
+
+    def test_enabled_filter_skips_devices_without_metadata(self) -> None:
+        """The enabled filter must also skip devices without metadata."""
+        dev = make_discovered_device("04:056053")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+
+        assert "04:056053" not in manager._metadata  # noqa: SLF001
+
+        enabled = manager.get_devices(enabled=True)
+        assert len(enabled) == 0
+
 
 class TestNewDeviceDetection:
     """Tests for new device detection and notifications."""
