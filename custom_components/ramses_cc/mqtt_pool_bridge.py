@@ -82,6 +82,10 @@ class RamsesMqttPoolBridge:
         observed on the wildcard topic.
     :param wait_online_timeout: Seconds to wait for at least one
         child to come online during transport creation.
+    :param accepted_hgi_ids: Optional set of HGI IDs that are
+        accepted pool members (may transmit).  HGIs not in this
+        set are receive-only discovery candidates.  If ``None``,
+        all configured HGIs are accepted (backward-compatible).
     """
 
     def __init__(
@@ -92,6 +96,7 @@ class RamsesMqttPoolBridge:
         *,
         discovery_callback: MqttDiscoveryCallback | None = None,
         wait_online_timeout: float = _DEFAULT_WAIT_ONLINE_TIMEOUT,
+        accepted_hgi_ids: set[str] | None = None,
     ) -> None:
         """Initialise the multi-HGI MQTT pool bridge."""
         self._hass = hass
@@ -99,6 +104,7 @@ class RamsesMqttPoolBridge:
         self._configured_hgi_ids = configured_hgi_ids
         self._discovery_callback = discovery_callback
         self._wait_online_timeout = wait_online_timeout
+        self._accepted_hgi_ids = accepted_hgi_ids
 
         self._pool: PooledTransport | None = None
         self._adapter: MqttCallbackPoolAdapter | None = None
@@ -183,6 +189,7 @@ class RamsesMqttPoolBridge:
             self._configured_hgi_ids,
             self,  # self implements MqttPoolOutbound
             discovery_callback=self._discovery_callback,
+            accepted_hgi_ids=self._accepted_hgi_ids,
         )
 
         # 4. Wait for at least one child to come online.

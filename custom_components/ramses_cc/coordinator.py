@@ -1275,6 +1275,35 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # HGIs with a foreign owner are excluded
         return pool_hgis
 
+    def _get_accepted_hgi_ids(self) -> set[str]:
+        """Return the set of accepted HGI IDs (including primary).
+
+        Accepted HGIs have ``_owner`` matching the root ``_owner``.
+        Ownerless discovery candidates are excluded — they are
+        receive-only and cannot transmit until accepted.
+
+        :return: Set of accepted HGI device IDs.
+        """
+        schema = self.entry.options.get(CONF_SCHEMA, {})
+        if not isinstance(schema, dict):
+            return set()
+        root_owner = schema.get(SZ_OWNER)
+        primary_hgi = self._get_primary_hgi_id()
+        accepted: set[str] = set()
+        if primary_hgi:
+            accepted.add(primary_hgi)
+        for dev_id, entry in schema.items():
+            if not (
+                dev_id.startswith(HGI_PREFIX)
+                and isinstance(entry, dict)
+                and entry.get("_class", "").upper() == "HGI"
+                and not entry.get("_disabled")
+            ):
+                continue
+            if entry.get(SZ_TR_OWNER) == root_owner:
+                accepted.add(dev_id)
+        return accepted
+
     def _get_primary_hgi_id(self) -> str | None:
         """Return the primary HGI ID from the transport config.
 
@@ -2207,6 +2236,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                         DEFAULT_WAIT_ONLINE_TIMEOUT,
                     )
                 ),
+                accepted_hgi_ids=self._get_accepted_hgi_ids(),
             )
             self.entry.async_on_unload(self.mqtt_bridge.close)
 

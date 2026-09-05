@@ -143,7 +143,10 @@
             "invalid_traits": "Ongeldige device-kenmerken: {error_detail}",
             "pool_duplicate_primary": "De primaire poort kan geen extra poort zijn.",
             "pool_serial_not_supported": "Seriële/USB-poolleden worden nog niet ondersteund (gepland voor Fase 2).",
-            "pool_zigbee_not_supported": "Zigbee-poolleden worden nog niet ondersteund (gepland voor Fase 3)."
+            "pool_zigbee_not_supported": "Zigbee-poolleden worden nog niet ondersteund (gepland voor Fase 3).",
+            "mqtt_host_required": "MQTT-brokerhost is vereist.",
+            "hgi_id_required": "HGI-apparaat-ID is vereist.",
+            "hgi_id_invalid": "HGI-apparaat-ID moet de indeling 18:NNNNNN hebben."
         },
         "step": {
             "init": {
