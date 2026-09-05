@@ -18,7 +18,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.ramses_cc.const import DOMAIN
 from custom_components.ramses_cc.coordinator import RamsesCoordinator
 from custom_components.ramses_cc.entity import RamsesEntity
-from ramses_rf.devices import DeviceHvac, UfhCircuit, UfhController
+from ramses_rf.devices import Controller, DeviceHvac, UfhCircuit, UfhController
 from ramses_rf.systems import System, Zone
 from ramses_rf.topology import Child
 
@@ -87,6 +87,80 @@ async def test_zone_registered_as_child_of_tcs(
     )
     assert child_entry is not None
     assert child_entry.parent_device_id == parent_tcs_entry.id
+
+
+async def test_unnamed_zone_fallback_to_friendly_name(
+    mock_coordinator: RamsesCoordinator,
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    # Arrange
+    dev_reg = dr.async_get(hass)
+    parent_tcs_entry = dev_reg.async_get_or_create(
+        config_entry_id=mock_config_entry.entry_id,
+        identifiers={(DOMAIN, "01:123456")},
+        name="Controller 01:123456",
+        model="Controller",
+    )
+
+    mock_tcs = MagicMock(spec=System)
+    mock_tcs.id = "01:123456"
+
+    mock_zone = MagicMock(spec=Zone)
+    mock_zone.id = "01:123456_04"
+    mock_zone.name = None
+    mock_zone._child_id = "04"
+    mock_zone.tcs = mock_tcs
+
+    # Act
+    await mock_coordinator._async_update_device(mock_zone)
+
+    # Assert
+    cached_info = mock_coordinator._device_info.get("01:123456_04")
+    assert cached_info is not None
+    assert cached_info["identifiers"] == {(DOMAIN, "01:123456_04")}
+    assert cached_info["name"] == "Zone 4"
+    assert cached_info["parent_device_id"] == parent_tcs_entry.id
+
+    child_entry = dev_reg.async_get_child_device_by_identifier(
+        (DOMAIN, "01:123456_04"), mock_config_entry.entry_id
+    )
+    assert child_entry is not None
+    assert child_entry.name == "Zone 4"
+    assert child_entry.parent_device_id == parent_tcs_entry.id
+
+
+async def test_controller_device_registration_and_model(
+    mock_coordinator: RamsesCoordinator,
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    # Arrange
+    dev_reg = dr.async_get(hass)
+
+    mock_ctl = MagicMock(spec=Controller)
+    mock_ctl.id = "01:088175"
+    mock_ctl.name = None
+    mock_ctl._SLUG = "CTL"
+    mock_ctl.state_store = None
+
+    # Act
+    await mock_coordinator._async_update_device(mock_ctl)
+
+    # Assert
+    ctl_info = mock_coordinator._device_info.get("01:088175")
+    assert ctl_info is not None
+    assert ctl_info["name"] == "Controller 01:088175"
+    assert ctl_info["model"] == "Controller"
+    assert ctl_info.get("manufacturer") is None
+
+    ctl_entry = dev_reg.async_get_device_by_identifier(
+        (DOMAIN, "01:088175"), mock_config_entry.entry_id
+    )
+    assert ctl_entry is not None
+    assert ctl_entry.name == "Controller 01:088175"
+    assert ctl_entry.model == "Controller"
+    assert ctl_entry.manufacturer is None
 
 
 async def test_ufh_circuit_registered_as_child_of_ufc(

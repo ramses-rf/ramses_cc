@@ -4,7 +4,7 @@
     StateSnapshot({
       'attributes': ReadOnlyDict({
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038 System status',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038 System status',
         'id': '01:145038',
         'working_schema': dict({
           'orphans': list([
@@ -28,7 +28,7 @@
         }),
       }),
       'context': <ANY>,
-      'entity_id': 'binary_sensor.ctl_01_145038_system_status',
+      'entity_id': 'binary_sensor.controller_01_145038_system_status',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -38,13 +38,13 @@
       'attributes': ReadOnlyDict({
         'active_faults': None,
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038 Active fault',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038 Active fault',
         'id': '01:145038',
         'latest_event': None,
         'latest_fault': None,
       }),
       'context': <ANY>,
-      'entity_id': 'binary_sensor.ctl_01_145038_active_fault',
+      'entity_id': 'binary_sensor.controller_01_145038_active_fault',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -53,11 +53,11 @@
     StateSnapshot({
       'attributes': ReadOnlyDict({
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'window',
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '01:145038_00 Window open',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Zone 0 Window open',
         'id': '01:145038_00',
       }),
       'context': <ANY>,
-      'entity_id': 'binary_sensor.01_145038_00_window_open',
+      'entity_id': 'binary_sensor.zone_0_window_open',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -324,7 +324,7 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038 System info',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038 System info',
         'id': '01:145038',
         'working_schema': dict({
           'orphans': list([
@@ -348,7 +348,7 @@
         }),
       }),
       'context': <ANY>,
-      'entity_id': 'sensor.ctl_01_145038_system_info',
+      'entity_id': 'sensor.controller_01_145038_system_info',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -356,14 +356,14 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038 Heat demand',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038 Heat demand',
         <EntityStateAttribute.ICON: 'icon'>: 'mdi:radiator-off',
         'id': '01:145038',
         <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
         <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: '%',
       }),
       'context': <ANY>,
-      'entity_id': 'sensor.ctl_01_145038_heat_demand',
+      'entity_id': 'sensor.controller_01_145038_heat_demand',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -371,14 +371,14 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '01:145038_00 Heat demand',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Zone 0 Heat demand',
         <EntityStateAttribute.ICON: 'icon'>: 'mdi:radiator-off',
         'id': '01:145038_00',
         <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
         <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: '%',
       }),
       'context': <ANY>,
-      'entity_id': 'sensor.01_145038_00_heat_demand',
+      'entity_id': 'sensor.zone_0_heat_demand',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -662,7 +662,7 @@
     StateSnapshot({
       'attributes': ReadOnlyDict({
         <ClimateEntityStateAttribute.CURRENT_TEMPERATURE: 'current_temperature'>: None,
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038',
         'heat_demand': None,
         'heat_demands': None,
         <ClimateEntityCapabilityAttribute.HVAC_MODES: 'hvac_modes'>: list([
@@ -689,7 +689,7 @@
         'tpi_params': None,
       }),
       'context': <ANY>,
-      'entity_id': 'climate.ctl_01_145038',
+      'entity_id': 'climate.controller_01_145038',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -699,7 +699,7 @@
       'attributes': ReadOnlyDict({
         'config': None,
         <ClimateEntityStateAttribute.CURRENT_TEMPERATURE: 'current_temperature'>: None,
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: '01:145038_00',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Zone 0',
         'heat_demand': None,
         'heating_type': None,
         <ClimateEntityCapabilityAttribute.HVAC_MODES: 'hvac_modes'>: list([
@@ -738,7 +738,7 @@
         'zone_index': '00',
       }),
       'context': <ANY>,
-      'entity_id': 'climate.01_145038_00',
+      'entity_id': 'climate.zone_0',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -789,7 +789,7 @@
     StateSnapshot({
       'attributes': ReadOnlyDict({
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038 System status',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038 System status',
         'id': '01:145038',
         'working_schema': dict({
           'orphans': list([
@@ -806,7 +806,7 @@
         }),
       }),
       'context': <ANY>,
-      'entity_id': 'binary_sensor.ctl_01_145038_system_status',
+      'entity_id': 'binary_sensor.controller_01_145038_system_status',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -816,13 +816,13 @@
       'attributes': ReadOnlyDict({
         'active_faults': None,
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038 Active fault',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038 Active fault',
         'id': '01:145038',
         'latest_event': None,
         'latest_fault': None,
       }),
       'context': <ANY>,
-      'entity_id': 'binary_sensor.ctl_01_145038_active_fault',
+      'entity_id': 'binary_sensor.controller_01_145038_active_fault',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -864,7 +864,7 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038 System info',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038 System info',
         'id': '01:145038',
         'working_schema': dict({
           'orphans': list([
@@ -881,7 +881,7 @@
         }),
       }),
       'context': <ANY>,
-      'entity_id': 'sensor.ctl_01_145038_system_info',
+      'entity_id': 'sensor.controller_01_145038_system_info',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -889,14 +889,14 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038 Heat demand',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038 Heat demand',
         <EntityStateAttribute.ICON: 'icon'>: 'mdi:radiator-off',
         'id': '01:145038',
         <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
         <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: '%',
       }),
       'context': <ANY>,
-      'entity_id': 'sensor.ctl_01_145038_heat_demand',
+      'entity_id': 'sensor.controller_01_145038_heat_demand',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -905,7 +905,7 @@
     StateSnapshot({
       'attributes': ReadOnlyDict({
         <ClimateEntityStateAttribute.CURRENT_TEMPERATURE: 'current_temperature'>: None,
-        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'CTL 01:145038',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Controller 01:145038',
         'heat_demand': None,
         'heat_demands': None,
         <ClimateEntityCapabilityAttribute.HVAC_MODES: 'hvac_modes'>: list([
@@ -932,7 +932,7 @@
         'tpi_params': None,
       }),
       'context': <ANY>,
-      'entity_id': 'climate.ctl_01_145038',
+      'entity_id': 'climate.controller_01_145038',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
