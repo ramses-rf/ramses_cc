@@ -1263,8 +1263,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
             ):
                 continue
             owner = entry.get(SZ_TR_OWNER)
-            if owner == root_owner:
-                # Accepted pool member — full send + receive
+            if owner is not None and owner == root_owner:
+                # Accepted pool member — full send + receive.
+                # Guard against None == None: when the schema has no
+                # root _owner, no HGI is "accepted" via this branch
+                # (issue 1119).
                 pool_hgis.append(dev_id)
             elif owner is None:
                 # Discovery candidate — receive-only so packets are
@@ -1292,6 +1295,12 @@ class RamsesCoordinator(DataUpdateCoordinator):
         accepted: set[str] = set()
         if primary_hgi:
             accepted.add(primary_hgi)
+        # When the schema has no root _owner, no schema-derived HGI can
+        # be proven to be owned by "me" — only the primary (configured
+        # transport) is accepted.  Ownerless candidates remain
+        # receive-only (issue 1119).
+        if root_owner is None:
+            return accepted
         for dev_id, entry in schema.items():
             if not (
                 dev_id.startswith(HGI_PREFIX)
@@ -2283,22 +2292,37 @@ class RamsesCoordinator(DataUpdateCoordinator):
             schema_accepted_hgis = self._extract_pool_hgis_from_schema()
 
         # Merge additional_ports and schema-derived HGI ports.
-        # Phase 1: only MQTT pool children are supported.  Serial and
-        # Zigbee are gated in the config flow, but filter defensively
-        # here too in case stale config entries exist.
-        # TODO: re-enable serial when Phase 2 (PR 3) lands.
+        # Phase 1: only MQTT pool children are supported, and only
+        # when the primary transport is also MQTT (via the HA-native
+        # RamsesMqttPoolBridge).  When the primary is serial/USB,
+        # MQTT additional ports would require paho-mqtt inside HA,
+        # which is not allowed — ramses_cc must use HA's MQTT
+        # integration exclusively (issue 1119).
+        # TODO: re-enable serial pool when Phase 2 (PR 3) lands.
         # TODO: re-enable zigbee when Phase 3 (PR 6) lands.
-        all_additional_ports = [
+        all_additional_ports: list[str] = []
+        mqtt_additional = [
             p
             for p in additional_ports
             if isinstance(p, str) and p.startswith("mqtt://")
         ]
+        if mqtt_additional:
+            _LOGGER.warning(
+                "Serial primary + MQTT additional ports is not "
+                "supported in Phase 1 (ramses_cc must not use paho). "
+                "Ignoring MQTT additional ports: %s",
+                mqtt_additional,
+            )
+        # Schema-derived HGI ports are only valid when the primary
+        # is MQTT — they share the same broker/topic.  When the
+        # primary is serial, schema HGIs are handled via the
+        # discovery callback on the HA MQTT integration, not via
+        # paho transports.
         if schema_accepted_hgis:
-            # Construct explicit MQTT URLs for schema-accepted HGIs
-            for hgi_id in schema_accepted_hgis:
-                explicit_url = self._build_explicit_mqtt_url(port_name, hgi_id)
-                if explicit_url and explicit_url not in all_additional_ports:
-                    all_additional_ports.append(explicit_url)
+            _LOGGER.debug(
+                "Schema HGI ports ignored for serial primary: %s",
+                schema_accepted_hgis,
+            )
 
         _LOGGER.debug(
             "Gateway pool check: additional_ports=%s, schema_hgis=%s, "

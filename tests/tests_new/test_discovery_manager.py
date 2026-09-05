@@ -3484,3 +3484,207 @@ class TestNameMismatch:
             msg = mock_notify.call_args[1]["message"]
             assert "orphaned device(s)" in msg
             assert "weak signal device(s)" in msg
+
+
+# -- Coverage tests for issue 1119 paths ----------------------------------
+
+
+class TestHgiLikelyType:
+    """Tests for _hgi_likely_type (line 332)."""
+
+    def test_hgi_likely_type_unknown(self) -> None:
+        """HGI with 'unknown' likely_type returns 'HGI'."""
+        assert (
+            DiscoveryManager._hgi_likely_type("18:001111", "unknown") == "HGI"
+        )
+
+    def test_hgi_likely_type_none(self) -> None:
+        """HGI with None likely_type returns 'HGI'."""
+        assert DiscoveryManager._hgi_likely_type("18:001111", None) == "HGI"
+
+    def test_hgi_likely_type_already_set(self) -> None:
+        """HGI with a non-unknown likely_type keeps it."""
+        assert DiscoveryManager._hgi_likely_type("18:001111", "HGI") == "HGI"
+
+    def test_non_hgi_likely_type(self) -> None:
+        """Non-HGI device returns the likely_type as-is."""
+        assert DiscoveryManager._hgi_likely_type("04:056053", "TRV") == "TRV"
+
+    def test_non_hgi_likely_type_none(self) -> None:
+        """Non-HGI device with None likely_type returns 'unknown'."""
+        assert (
+            DiscoveryManager._hgi_likely_type("04:056053", None) == "unknown"
+        )
+
+
+class TestSyncWithSchemaNoOwner:
+    """Tests for sync_with_schema populating _schema_no_owner_ids."""
+
+    def test_sync_with_schema_no_owner_ids_populated(self) -> None:
+        """sync_with_schema populates _schema_no_owner_ids for ownerless devices."""
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        manager.sync_with_schema(
+            schema_device_ids={"18:001111", "01:145038"},
+            schema={
+                "18:001111": {"_class": "HGI"},  # no _owner
+                "01:145038": {"_class": "CTL", "_owner": "me"},
+            },
+        )
+        assert "18:001111" in manager._schema_no_owner_ids
+        assert "01:145038" not in manager._schema_no_owner_ids
+
+    def test_sync_with_schema_no_owner_skips_non_dict(self) -> None:
+        """sync_with_schema skips non-dict entries."""
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        manager.sync_with_schema(
+            schema_device_ids=set(),
+            schema={"not_a_device": "bad_value"},
+        )
+        assert manager._schema_no_owner_ids == set()
+
+
+class TestHgiNoOwnerKeepsNew:
+    """Test that HGIs without _owner keep NEW status (line 658)."""
+
+    def test_hgi_no_owner_keeps_new_status(self) -> None:
+        """HGI in schema without _owner keeps NEW status for review."""
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        # First sync to populate _schema_no_owner_ids
+        manager.sync_with_schema(
+            schema_device_ids={"18:001111"},
+            schema={"18:001111": {"_class": "HGI"}},  # no _owner
+        )
+        # Manually add metadata with NEW status (simulating prior discovery)
+        from custom_components.ramses_cc.discovery import DeviceMetadata
+
+        meta = DeviceMetadata()
+        meta.status = DiscoveryStatus.NEW
+        manager._metadata["18:001111"] = meta
+        # Re-sync — the NEW status should be kept (not ACCEPTED)
+        manager.sync_with_schema(
+            schema_device_ids={"18:001111"},
+            schema={"18:001111": {"_class": "HGI"}},  # no _owner
+        )
+        assert manager._metadata["18:001111"].status == DiscoveryStatus.NEW
+
+
+class TestHgiLostStatusCleared:
+    """Test that HGIs with stale LOST status get cleared (lines 679-681)."""
+
+    def test_hgi_lost_status_cleared_to_accepted(self) -> None:
+        """HGI with LOST status is cleared to ACCEPTED."""
+        hgi = make_discovered_device("18:001111", "HGI")
+        scan = make_mock_scan([hgi])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        # First sync to populate schema_device_ids
+        manager.sync_with_schema(
+            schema_device_ids={"18:001111"},
+            schema={"18:001111": {"_class": "HGI", "_owner": "me"}},
+        )
+        # Manually set LOST status
+        from custom_components.ramses_cc.discovery import DeviceMetadata
+
+        meta = DeviceMetadata()
+        meta.status = DiscoveryStatus.LOST
+        manager._metadata["18:001111"] = meta
+        # Re-sync — the LOST status should be cleared to ACCEPTED
+        manager.sync_with_schema(
+            schema_device_ids={"18:001111"},
+            schema={"18:001111": {"_class": "HGI", "_owner": "me"}},
+        )
+        assert (
+            manager._metadata["18:001111"].status == DiscoveryStatus.ACCEPTED
+        )
+
+
+class TestForeignDeviceSkipped:
+    """Test that foreign-owner devices are skipped (line 701)."""
+
+    def test_foreign_device_not_added_to_metadata(self) -> None:
+        """Foreign-owner device in scan is not added to discovery metadata."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        manager.sync_with_schema(
+            schema_device_ids=set(),
+            foreign_device_ids={"04:056053"},
+        )
+        manager.check_for_new_devices()
+        assert "04:056053" not in manager._metadata
+
+
+class TestClassMismatchDismissed:
+    """Test that dismissed class mismatches are skipped (line 770)."""
+
+    def test_dismissed_mismatch_not_re_flagged(self) -> None:
+        """A dismissed class mismatch is not re-flagged."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        # Set up metadata with dismissed mismatch
+        from custom_components.ramses_cc.discovery import DeviceMetadata
+
+        meta = DeviceMetadata()
+        meta.class_mismatch_dismissed = True
+        manager._metadata["04:056053"] = meta
+        # Schema has a different class
+        schema = {"04:056053": {"_class": "BDR", "_owner": "me"}}
+        count = manager.check_class_mismatches(schema)
+        assert count == 0  # dismissed — not counted
+
+
+class TestClassMismatchLocked:
+    """Test that locked devices are skipped (line 774)."""
+
+    def test_locked_device_mismatch_skipped(self) -> None:
+        """A _locked device with a class mismatch is skipped."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        # Schema has a different class and _locked
+        schema = {
+            "04:056053": {"_class": "BDR", "_owner": "me", "_locked": True}
+        }
+        count = manager.check_class_mismatches(schema)
+        assert count == 0  # locked — not counted
+
+
+class TestClassMismatchAllResolved:
+    """Test that all mismatches resolved clears warned set (lines 848-849)."""
+
+    def test_all_mismatches_resolved_clears_warned(self) -> None:
+        """When all mismatches are resolved, _warned_mismatches is cleared."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        # Pre-populate warned set
+        manager._warned_mismatches = {"04:056053"}
+        # Schema now matches
+        schema = {"04:056053": {"_class": "TRV", "_owner": "me"}}
+        count = manager.check_class_mismatches(schema)
+        assert count == 0
+        assert manager._warned_mismatches == set()
+
+
+class TestClassMismatchPersistentDebug:
+    """Test that persistent mismatches log debug (line 839)."""
+
+    def test_persistent_mismatch_logs_debug(self) -> None:
+        """A persistent mismatch (already warned) logs debug, not warning."""
+        dev = make_discovered_device("04:056053", "TRV")
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        # Pre-populate warned set with the mismatch
+        manager._warned_mismatches = {"04:056053"}
+        # Schema has a mismatch
+        schema = {"04:056053": {"_class": "BDR", "_owner": "me"}}
+        with patch(
+            "custom_components.ramses_cc.discovery._LOGGER"
+        ) as mock_logger:
+            count = manager.check_class_mismatches(schema)
+            assert count == 1
+            # Debug should be called for persistent mismatch
+            assert mock_logger.debug.called

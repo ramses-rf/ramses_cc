@@ -286,30 +286,36 @@ class RamsesMqttPoolBridge:
 
         Implements :class:`MqttPoolOutbound`.
 
+        Awaits the HA MQTT publish so that transport-layer errors
+        propagate to :meth:`PooledTransport._send_routed_frame` and
+        are reported as ``WriteOutcome.AMBIGUOUS`` instead of being
+        silently swallowed by a fire-and-forget background task
+        (issue 1119).
+
         :param child_id: The HGI device ID to publish to.
         :param frame: The serialized RAMSES frame string.
         """
         if frame.startswith("!"):
-            self._publish_command(child_id, frame)
+            await self._publish_command(child_id, frame)
         else:
             payload = json.dumps({"msg": frame})
-            self._publish_tx(child_id, payload)
+            await self._publish_tx(child_id, payload)
 
     # -- Publishing helpers ---------------------------------------------
 
-    def _publish_tx(self, hgi_id: str, payload: PublishPayloadType) -> None:
+    async def _publish_tx(
+        self, hgi_id: str, payload: PublishPayloadType
+    ) -> None:
         """Publish to ``{prefix}/{hgi_id}/tx``.
 
         :param hgi_id: The target HGI device ID.
         :param payload: The payload to publish.
         """
         topic = f"{self._topic_prefix}/{hgi_id}/tx"
-        self._hass.async_create_task(
-            mqtt.async_publish(self._hass, topic, payload)
-        )
+        await mqtt.async_publish(self._hass, topic, payload)
         _LOGGER.debug("MqttPoolBridge: TX -> %s on %s", payload, topic)
 
-    def _publish_command(
+    async def _publish_command(
         self, hgi_id: str, payload: PublishPayloadType
     ) -> None:
         """Publish to ``{prefix}/{hgi_id}/cmd/cmd``.
@@ -318,9 +324,7 @@ class RamsesMqttPoolBridge:
         :param payload: The command to publish.
         """
         topic = f"{self._topic_prefix}/{hgi_id}/cmd/cmd"
-        self._hass.async_create_task(
-            mqtt.async_publish(self._hass, topic, payload)
-        )
+        await mqtt.async_publish(self._hass, topic, payload)
         _LOGGER.debug("MqttPoolBridge: CMD -> %s on %s", payload, topic)
 
     # -- Inbound message handlers ---------------------------------------
@@ -471,8 +475,14 @@ class RamsesMqttPoolBridge:
             self._online_hgis.add(hgi_id)
             if hgi_id in self._configured_hgi_ids:
                 self._adapter.on_child_online(hgi_id)
-                # Send identity handshake to this HGI only.
-                self._publish_command(hgi_id, "!V")
+                # Send identity handshake only to accepted HGIs.
+                # Receive-only discovery candidates must not be sent
+                # any outbound communication before acceptance
+                # (issue 1119).
+                if self._is_accepted(hgi_id):
+                    self._hass.async_create_task(
+                        self._publish_command(hgi_id, "!V")
+                    )
             else:
                 self._adapter.on_unknown_hgi(
                     DeviceIdT(hgi_id), topic=msg.topic
@@ -499,15 +509,32 @@ class RamsesMqttPoolBridge:
 
     # -- Helpers --------------------------------------------------------
 
+    def _is_accepted(self, hgi_id: str) -> bool:
+        """Return whether ``hgi_id`` is an accepted pool member.
+
+        When ``_accepted_hgi_ids`` is ``None`` (backward-compatible),
+        all configured HGIs are accepted.  When it is a set, only
+        HGIs in that set may transmit (issue 1119).
+
+        :param hgi_id: The HGI device ID to check.
+        :returns: ``True`` if the HGI is accepted.
+        """
+        if self._accepted_hgi_ids is None:
+            return True
+        return hgi_id in self._accepted_hgi_ids
+
     def _extract_hgi_from_topic(self, topic: str, suffix: str) -> str | None:
         """Extract the HGI ID from an MQTT topic.
 
         Topics have the form ``{prefix}/{hgi_id}{suffix}``.
-        The HGI ID is a 9-character string like ``18:123456``.
+        The HGI ID must be a 9-character string matching the HGI
+        device-id format ``18:NNNNNN`` — non-HGI device IDs such
+        as ``32:153289`` are rejected so they cannot be mistaken
+        for gateways (issue 1119).
 
         :param topic: The MQTT topic.
         :param suffix: The topic suffix (e.g. ``/rx``).
-        :returns: The HGI ID, or ``None`` if not found.
+        :returns: The HGI ID, or ``None`` if not found or invalid.
         """
         prefix = self._topic_prefix + "/"
         if not topic.startswith(prefix):
@@ -520,8 +547,8 @@ class RamsesMqttPoolBridge:
         if not parts:
             return None
         hgi_id = parts[-1]
-        # Validate format: NN:NNNNNN
-        if len(hgi_id) == 9 and hgi_id[2] == ":":
+        # Validate format: 18:NNNNNN (HGI devices only).
+        if len(hgi_id) == 9 and hgi_id.startswith("18:") and hgi_id[2] == ":":
             return hgi_id
         return None
 

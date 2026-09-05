@@ -119,6 +119,26 @@ def test_extract_hgi_invalid_topic(hass: HomeAssistant) -> None:
     )
 
 
+def test_extract_hgi_rejects_non_hgi_device_id(hass: HomeAssistant) -> None:
+    """Test that non-HGI device IDs (e.g. 32:NNNNNN) are rejected (issue 1119)."""
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    # 32:153289 is a real device, not an HGI — must not be accepted
+    assert (
+        bridge._extract_hgi_from_topic("RAMSES/GATEWAY/32:153289/rx", "/rx")
+        is None
+    )
+    # 37:168270 is a faked device — must not be accepted
+    assert (
+        bridge._extract_hgi_from_topic("RAMSES/GATEWAY/37:168270/rx", "/rx")
+        is None
+    )
+    # 18:001111 is a valid HGI — must be accepted
+    assert (
+        bridge._extract_hgi_from_topic("RAMSES/GATEWAY/18:001111/rx", "/rx")
+        == TEST_HGI_1
+    )
+
+
 # -- Wildcard subscription ------------------------------------------------
 
 
@@ -665,3 +685,542 @@ async def test_wait_online_timeout_default(
         [TEST_HGI_1],
     )
     assert bridge._wait_online_timeout == 30.0
+
+
+# -- !V gating on acceptance (issue 1119) ---------------------------------
+
+
+def test_is_accepted_all_when_none(hass: HomeAssistant) -> None:
+    """Test that _is_accepted returns True for all when accepted_hgi_ids is None."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
+    )
+    assert bridge._is_accepted(TEST_HGI_1)
+    assert bridge._is_accepted(TEST_HGI_2)
+    assert bridge._is_accepted("18:999999")
+
+
+def test_is_accepted_only_in_set(hass: HomeAssistant) -> None:
+    """Test that _is_accepted returns True only for HGIs in the accepted set."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
+        accepted_hgi_ids={TEST_HGI_1},
+    )
+    assert bridge._is_accepted(TEST_HGI_1)
+    assert not bridge._is_accepted(TEST_HGI_2)
+
+
+def test_is_accepted_empty_set(hass: HomeAssistant) -> None:
+    """Test that _is_accepted returns False for all when accepted set is empty."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
+        accepted_hgi_ids=set(),
+    )
+    assert not bridge._is_accepted(TEST_HGI_1)
+    assert not bridge._is_accepted(TEST_HGI_2)
+
+
+async def test_lwt_online_no_v_for_unaccepted(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that !V is not sent to unaccepted (receive-only) HGIs (issue 1119)."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
+        accepted_hgi_ids={TEST_HGI_1},
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    # LWT online for the unaccepted HGI 2.
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_2}"
+    msg.payload = b"online"
+    bridge._handle_status_message(msg)
+
+    # !V should NOT have been published for HGI 2.
+    for call in mock_mqtt_pool["publish"].call_args_list:
+        topic = call.args[1]
+        assert TEST_HGI_2 not in topic, (
+            f"!V was sent to unaccepted HGI {TEST_HGI_2}"
+        )
+
+
+async def test_lwt_online_v_for_accepted(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test that !V is sent to accepted HGIs."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1, TEST_HGI_2],
+        accepted_hgi_ids={TEST_HGI_1},
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    # LWT online for the accepted HGI 1.
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}"
+    msg.payload = b"online"
+    bridge._handle_status_message(msg)
+
+    # !V should have been published for HGI 1.
+    publish_calls = [
+        call.args[1] for call in mock_mqtt_pool["publish"].call_args_list
+    ]
+    assert any(TEST_HGI_1 in t and "/cmd/cmd" in t for t in publish_calls), (
+        "!V was not sent to accepted HGI"
+    )
+
+
+# -- publish_frame awaits mqtt.async_publish (issue 1119) ------------------
+
+
+async def test_publish_frame_awaits_publish(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+) -> None:
+    """Test that publish_frame awaits mqtt.async_publish (no fire-and-forget)."""
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    await bridge.publish_frame(
+        TEST_HGI_1,
+        " 000 I --- 01:123456 18:000730 --:------ 30C9 000 00",
+    )
+    # async_publish should have been called and awaited
+    mock_mqtt_pool["publish"].assert_called_once()
+
+
+async def test_publish_frame_propagates_error(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+) -> None:
+    """Test that publish_frame propagates MQTT publish errors."""
+    mock_mqtt_pool["publish"].side_effect = RuntimeError("MQTT broker down")
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    with pytest.raises(RuntimeError, match="MQTT broker down"):
+        await bridge.publish_frame(TEST_HGI_1, "!V")
+
+
+# -- CMD result handling ---------------------------------------------------
+
+
+async def test_cmd_message_v_response(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_cmd_message processes !V command result."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/cmd/result"
+    msg.payload = json.dumps({"cmd": "!V", "return": 0}).encode()
+    bridge._handle_cmd_message(msg)  # should not crash
+
+
+async def test_cmd_message_int_return(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_cmd_message with non-!V int return."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/cmd/result"
+    msg.payload = json.dumps({"cmd": "!S", "return": 42}).encode()
+    bridge._handle_cmd_message(msg)  # should not crash
+
+
+async def test_cmd_message_str_return(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_cmd_message with string return."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/cmd/result"
+    msg.payload = json.dumps(
+        {"cmd": "!V", "return": "ramses_esp_eth 0.7.0"}
+    ).encode()
+    bridge._handle_cmd_message(msg)  # should not crash
+
+
+async def test_cmd_message_invalid_json(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_cmd_message with invalid JSON doesn't crash."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/cmd/result"
+    msg.payload = b"not json"
+    bridge._handle_cmd_message(msg)  # should not crash
+
+
+async def test_cmd_message_no_adapter(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+) -> None:
+    """Test _handle_cmd_message with no adapter returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+    )
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/cmd/result"
+    msg.payload = b"{}"
+    bridge._handle_cmd_message(msg)  # should not crash
+
+
+async def test_cmd_message_invalid_topic(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_cmd_message with invalid topic returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = "other/topic/cmd/result"
+    msg.payload = b"{}"
+    bridge._handle_cmd_message(msg)  # should not crash
+
+
+async def test_cmd_message_empty_payload(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_cmd_message with empty payload returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/cmd/result"
+    msg.payload = b""
+    bridge._handle_cmd_message(msg)  # should not crash
+
+
+async def test_cmd_message_no_return_key(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_cmd_message with no 'return' key in JSON."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/cmd/result"
+    msg.payload = json.dumps({"cmd": "!V"}).encode()  # no "return"
+    bridge._handle_cmd_message(msg)  # should not crash
+
+
+# -- RX edge cases ---------------------------------------------------------
+
+
+async def test_rx_message_no_adapter(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+) -> None:
+    """Test _handle_rx_message with no adapter returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+    )
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/rx"
+    msg.payload = b"{}"
+    bridge._handle_rx_message(msg)  # should not crash
+
+
+async def test_rx_message_invalid_topic(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_rx_message with invalid topic returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = "other/topic/rx"
+    msg.payload = b"{}"
+    bridge._handle_rx_message(msg)  # should not crash
+
+
+async def test_rx_message_empty_payload(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_rx_message with empty payload returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/rx"
+    msg.payload = b""
+    bridge._handle_rx_message(msg)  # should not crash
+
+
+async def test_rx_message_no_msg_key(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_rx_message with JSON but no 'msg' key."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/rx"
+    msg.payload = json.dumps({"other": "data"}).encode()
+    bridge._handle_rx_message(msg)  # should not crash
+
+
+async def test_rx_message_empty_frame(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_rx_message with empty frame string."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}/rx"
+    msg.payload = json.dumps({"msg": ""}).encode()
+    bridge._handle_rx_message(msg)  # should not crash
+
+
+# -- Status and broker edge cases ------------------------------------------
+
+
+async def test_status_message_no_adapter(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+) -> None:
+    """Test _handle_status_message with no adapter returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+    )
+    msg = MagicMock()
+    msg.topic = f"RAMSES/GATEWAY/{TEST_HGI_1}"
+    msg.payload = b"online"
+    bridge._handle_status_message(msg)  # should not crash
+
+
+async def test_status_message_invalid_topic(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test _handle_status_message with invalid topic returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = "other/topic"
+    msg.payload = b"online"
+    bridge._handle_status_message(msg)  # should not crash
+
+
+async def test_broker_status_no_adapter(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+) -> None:
+    """Test _handle_broker_status with no adapter returns early."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+    )
+    bridge._handle_broker_status(True)  # should not crash
+
+
+# -- Payload extraction ----------------------------------------------------
+
+
+def test_extract_payload_bytes(hass: HomeAssistant) -> None:
+    """Test _extract_payload with bytes payload."""
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    msg = MagicMock()
+    msg.payload = b"hello"
+    assert bridge._extract_payload(msg) == "hello"
+
+
+def test_extract_payload_string(hass: HomeAssistant) -> None:
+    """Test _extract_payload with string payload."""
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    msg = MagicMock()
+    msg.payload = "hello"
+    assert bridge._extract_payload(msg) == "hello"
+
+
+def test_extract_payload_int(hass: HomeAssistant) -> None:
+    """Test _extract_payload with non-bytes/non-string payload."""
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    msg = MagicMock()
+    msg.payload = 42
+    assert bridge._extract_payload(msg) == "42"
+
+
+# -- Transport factory with config -----------------------------------------
+
+
+async def test_transport_factory_with_existing_config(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test async_transport_factory with an existing config object."""
+    from ramses_tx.transport import TransportConfig
+
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    config = TransportConfig(disable_sending=False, autostart=False)
+    transport = await bridge.async_transport_factory(
+        mock_protocol, config=config
+    )
+    assert transport is not None
+    assert config.autostart is True
+
+
+# -- Subscription failure --------------------------------------------------
+
+
+async def test_async_attach_subscription_failure(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+) -> None:
+    """Test _async_attach handles subscription failure gracefully."""
+    mock_mqtt_pool["subscribe"].side_effect = RuntimeError("MQTT down")
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+    )
+    await bridge._async_attach()  # should not crash
+
+
+# -- Close with no subscriptions -------------------------------------------
+
+
+def test_close_no_subscriptions(hass: HomeAssistant) -> None:
+    """Test close with no subscriptions doesn't crash."""
+    bridge = RamsesMqttPoolBridge(hass, TEST_TOPIC_PREFIX, [TEST_HGI_1])
+    bridge.close()  # should not crash
+
+
+# -- LWT offline for unconfigured HGI --------------------------------------
+
+
+async def test_lwt_offline_unknown_hgi_no_crash(
+    hass: HomeAssistant,
+    mock_mqtt_pool: dict[str, Any],
+    mock_protocol: MagicMock,
+) -> None:
+    """Test LWT offline for unknown HGI doesn't crash."""
+    bridge = RamsesMqttPoolBridge(
+        hass,
+        TEST_TOPIC_PREFIX,
+        [TEST_HGI_1],
+        wait_online_timeout=0.01,
+    )
+    await bridge.async_transport_factory(mock_protocol)
+
+    msg = MagicMock()
+    msg.topic = "RAMSES/GATEWAY/18:999999"
+    msg.payload = b"offline"
+    bridge._handle_status_message(msg)  # should not crash

@@ -440,3 +440,82 @@ async def test_bridge_connection_status_toggles_transport_reading(
 
     # Assert
     assert transport._reading is True
+
+
+async def test_bridge_writer_command_frame(
+    hass: HomeAssistant, mock_mqtt: dict[str, Any], mock_protocol: MagicMock
+) -> None:
+    """Test io_writer sends command frames to cmd topic."""
+    bridge = RamsesMqttBridge(hass, "RAMSES/GATEWAY", TEST_DEVICE_ID)
+
+    with patch(
+        "custom_components.ramses_cc.mqtt_bridge.CallbackTransport"
+    ) as mock_transport_cls:
+        await bridge.async_transport_factory(mock_protocol)
+        call_args = mock_transport_cls.call_args[0]
+        io_writer = call_args[1]
+
+        # Test command frame (starts with !)
+        await io_writer("!V")
+        mock_mqtt["publish"].assert_called_with(
+            hass, f"RAMSES/GATEWAY/{TEST_DEVICE_ID}/cmd/cmd", "!V"
+        )
+
+
+async def test_bridge_writer_regular_frame(
+    hass: HomeAssistant, mock_mqtt: dict[str, Any], mock_protocol: MagicMock
+) -> None:
+    """Test io_writer sends regular frames to tx topic."""
+    bridge = RamsesMqttBridge(hass, "RAMSES/GATEWAY", TEST_DEVICE_ID)
+
+    with patch(
+        "custom_components.ramses_cc.mqtt_bridge.CallbackTransport"
+    ) as mock_transport_cls:
+        await bridge.async_transport_factory(mock_protocol)
+        call_args = mock_transport_cls.call_args[0]
+        io_writer = call_args[1]
+
+        # Test regular frame
+        frame = " 000 I --- 01:123456 18:000730 --:------ 30C9 000 00"
+        await io_writer(frame)
+        expected_topic = f"RAMSES/GATEWAY/{TEST_DEVICE_ID}/tx"
+        mock_mqtt["publish"].assert_called_with(
+            hass, expected_topic, json.dumps({"msg": frame})
+        )
+
+
+async def test_bridge_transport_factory_with_existing_config(
+    hass: HomeAssistant, mock_mqtt: dict[str, Any], mock_protocol: MagicMock
+) -> None:
+    """Test transport_factory with an existing config object."""
+    from ramses_tx.transport import TransportConfig
+
+    bridge = RamsesMqttBridge(hass, "RAMSES/GATEWAY", TEST_DEVICE_ID)
+    config = TransportConfig(disable_sending=False, autostart=False)
+    transport = await bridge.async_transport_factory(
+        mock_protocol, config=config
+    )
+    assert transport is not None
+    assert config.autostart is True
+
+
+def test_bridge_publish_tx(
+    hass: HomeAssistant, mock_mqtt: dict[str, Any]
+) -> None:
+    """Test publish_tx publishes to the correct tx topic."""
+    bridge = RamsesMqttBridge(hass, "RAMSES/GATEWAY", TEST_DEVICE_ID)
+    bridge.publish_tx("test_payload")
+    mock_mqtt["publish"].assert_called_with(
+        hass, f"RAMSES/GATEWAY/{TEST_DEVICE_ID}/tx", "test_payload"
+    )
+
+
+def test_bridge_publish_command(
+    hass: HomeAssistant, mock_mqtt: dict[str, Any]
+) -> None:
+    """Test publish_command publishes to the correct cmd topic."""
+    bridge = RamsesMqttBridge(hass, "RAMSES/GATEWAY", TEST_DEVICE_ID)
+    bridge.publish_command("!V")
+    mock_mqtt["publish"].assert_called_with(
+        hass, f"RAMSES/GATEWAY/{TEST_DEVICE_ID}/cmd/cmd", "!V"
+    )

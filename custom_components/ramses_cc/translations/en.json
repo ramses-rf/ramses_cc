@@ -144,6 +144,7 @@
             "pool_duplicate_primary": "The primary port cannot also be an additional port.",
             "pool_serial_not_supported": "Serial/USB pool members are not yet supported (planned for Phase 2).",
             "pool_zigbee_not_supported": "Zigbee pool members are not yet supported (planned for Phase 3).",
+            "pool_mqtt_requires_mqtt_primary": "MQTT pool members require an MQTT primary transport. Switch the primary port to MQTT first.",
             "mqtt_host_required": "MQTT broker host is required.",
             "hgi_id_required": "HGI device ID is required.",
             "hgi_id_invalid": "HGI device ID must be in the format 18:NNNNNN."
@@ -275,13 +276,8 @@
             },
             "manage_pool_mqtt": {
                 "title": "Add MQTT HGI to Pool",
-                "description": "Enter the MQTT broker details and the HGI device ID (18:NNNNNN) for this pool member.",
+                "description": "Enter the HGI device ID (18:NNNNNN) for this pool member. The MQTT broker and topic are configured via the Home Assistant MQTT integration.",
                 "data": {
-                    "host": "MQTT broker host",
-                    "port": "MQTT broker port",
-                    "username": "MQTT username (optional)",
-                    "password": "MQTT password (optional)",
-                    "topic_path": "MQTT topic path (e.g. RAMSES/GATEWAY)",
                     "hgi_id": "HGI device ID (18:NNNNNN)"
                 }
             }

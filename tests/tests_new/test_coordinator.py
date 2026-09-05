@@ -7245,3 +7245,197 @@ async def test_mqtt_hgi_discovery_callback_does_not_overwrite(
     schema = mock_coordinator.entry.options.get(CONF_SCHEMA, {})
     # Should still have the owner (not overwritten)
     assert schema["18:999999"].get(SZ_TR_OWNER) == "me"
+
+
+# -- _get_accepted_hgi_ids tests (issue 1119) -----------------------------
+
+
+def test_get_accepted_hgi_ids_no_root_owner(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _get_accepted_hgi_ids returns only primary when no root owner.
+
+    When the schema has no root _owner, no schema-derived HGI can be
+    proven to be owned by "me" — only the primary (configured transport)
+    is accepted.  Ownerless candidates remain receive-only.
+    """
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
+        CONF_SCHEMA: {
+            # No SZ_OWNER at root
+            "18:001111": {"_class": "HGI"},  # ownerless
+            "18:002222": {"_class": "HGI"},  # ownerless
+        },
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+    accepted = mock_coordinator._get_accepted_hgi_ids()
+    # Only the primary HGI from the URL is accepted
+    assert accepted == {"18:001111"}
+
+
+def test_get_accepted_hgi_ids_with_root_owner(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _get_accepted_hgi_ids accepts HGIs with matching owner."""
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
+        CONF_SCHEMA: {
+            SZ_OWNER: "me",
+            "18:001111": {"_class": "HGI", SZ_TR_OWNER: "me"},
+            "18:002222": {"_class": "HGI", SZ_TR_OWNER: "me"},
+            "18:003333": {"_class": "HGI"},  # ownerless — not accepted
+            "18:004444": {"_class": "HGI", SZ_TR_OWNER: "other"},  # foreign
+        },
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+    accepted = mock_coordinator._get_accepted_hgi_ids()
+    assert "18:001111" in accepted
+    assert "18:002222" in accepted
+    assert "18:003333" not in accepted  # ownerless
+    assert "18:004444" not in accepted  # foreign owner
+
+
+def test_get_accepted_hgi_ids_empty_schema(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _get_accepted_hgi_ids with empty schema returns just primary."""
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
+        CONF_SCHEMA: {},
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+    accepted = mock_coordinator._get_accepted_hgi_ids()
+    assert accepted == {"18:001111"}
+
+
+def test_get_accepted_hgi_ids_non_dict_schema(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _get_accepted_hgi_ids with non-dict schema returns empty set."""
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
+        CONF_SCHEMA: "not_a_dict",  # invalid type
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+    accepted = mock_coordinator._get_accepted_hgi_ids()
+    assert accepted == set()
+
+
+def test_get_accepted_hgi_ids_no_primary(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _get_accepted_hgi_ids with no primary returns only schema-accepted."""
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyACM0"},
+        CONF_SCHEMA: {
+            SZ_OWNER: "me",
+            "18:002222": {"_class": "HGI", SZ_TR_OWNER: "me"},
+        },
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+    accepted = mock_coordinator._get_accepted_hgi_ids()
+    # Serial primary has no known HGI ID, so only schema-accepted
+    assert accepted == {"18:002222"}
+
+
+def test_get_accepted_hgi_ids_disabled_excluded(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _get_accepted_hgi_ids excludes disabled HGIs."""
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
+        CONF_SCHEMA: {
+            SZ_OWNER: "me",
+            "18:001111": {"_class": "HGI", SZ_TR_OWNER: "me"},
+            "18:002222": {
+                "_class": "HGI",
+                SZ_TR_OWNER: "me",
+                "_disabled": True,
+            },
+        },
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+    accepted = mock_coordinator._get_accepted_hgi_ids()
+    assert "18:001111" in accepted
+    assert "18:002222" not in accepted  # disabled
+
+
+# -- _extract_pool_hgis_from_schema with no root owner --------------------
+
+
+def test_extract_pool_hgis_no_root_owner(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test _extract_pool_hgis includes ownerless but not None==None accepted."""
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
+        CONF_SCHEMA: {
+            # No SZ_OWNER at root
+            "18:001111": {
+                "_class": "HGI"
+            },  # ownerless — included as candidate
+            "18:002222": {
+                "_class": "HGI"
+            },  # ownerless — included as candidate
+        },
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    # Primary 18:001111 is excluded from pool_hgis (it's the primary)
+    # 18:002222 is included as a discovery candidate
+    assert "18:002222" in pool_hgis
+    assert "18:001111" not in pool_hgis  # primary is excluded
+
+
+# -- Serial primary + MQTT additional blocked (issue 1119) -----------------
+
+
+def test_create_client_serial_primary_ignores_mqtt_additional(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test serial primary + MQTT additional ports are ignored (no paho in HA)."""
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyACM0"},
+        CONF_ADDITIONAL_PORTS: ["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
+        CONF_RAMSES_RF: {},
+        CONF_SCHEMA: {},
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+
+    with (
+        patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
+        patch.object(
+            mock_coordinator,
+            "_create_pool_transport_constructor",
+        ) as mock_pool_ctor,
+        patch(
+            "custom_components.ramses_cc.coordinator.extract_serial_port",
+            return_value=("/dev/ttyACM0", {}),
+        ),
+    ):
+        mock_coordinator._create_client(
+            {
+                SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyACM0"},
+                CONF_ADDITIONAL_PORTS: [
+                    "mqtt://broker:1883/RAMSES/GATEWAY/18:002222"
+                ],
+                CONF_RAMSES_RF: {},
+                CONF_SCHEMA: {},
+            }
+        )
+        assert mock_gwy.called
+        # Pool constructor should NOT be called — MQTT additional ports
+        # are ignored for serial primary (no paho in HA).
+        mock_pool_ctor.assert_not_called()

@@ -1809,13 +1809,23 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     self.options[CONF_SCHEMA] = schema_dict
 
                 if add_choice == CONF_MQTT_PATH:
-                    # Save current state and go to MQTT sub-step
-                    self.options[CONF_ADDITIONAL_PORTS] = additional
-                    if wait_timeout is not None:
-                        self.options[CONF_WAIT_ONLINE_TIMEOUT] = float(
-                            wait_timeout
-                        )
-                    return await self.async_step_manage_pool_mqtt()
+                    # Phase 1: MQTT pool children require an MQTT
+                    # primary transport (HA MQTT integration).  A
+                    # serial primary + MQTT additional would require
+                    # paho inside HA, which is not allowed
+                    # (issue 1119).
+                    if not isinstance(primary, str) or not primary.startswith(
+                        "mqtt://"
+                    ):
+                        errors["base"] = "pool_mqtt_requires_mqtt_primary"
+                    else:
+                        # Save current state and go to MQTT sub-step
+                        self.options[CONF_ADDITIONAL_PORTS] = additional
+                        if wait_timeout is not None:
+                            self.options[CONF_WAIT_ONLINE_TIMEOUT] = float(
+                                wait_timeout
+                            )
+                        return await self.async_step_manage_pool_mqtt()
                 elif add_choice == CONF_ZIGBEE_DEVICE:
                     # Zigbee pool members are not yet supported (Phase 3,
                     # PR 6).  Block the sub-step and show an error.
@@ -2094,42 +2104,19 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            host = user_input.get("host")
-            port = user_input.get("port", 1883)
-            username = user_input.get("username")
-            password = user_input.get("password")
-            topic_path = user_input.get("topic_path", "")
             hgi_id = (user_input.get("hgi_id") or "").strip().upper()
 
-            if not host:
-                errors["base"] = "mqtt_host_required"
-            elif not hgi_id:
+            if not hgi_id:
                 errors["base"] = "hgi_id_required"
             elif not re.match(
                 r"^\d{2}:\d{6}$", hgi_id
             ) or not hgi_id.startswith(HGI_PREFIX):
                 errors["base"] = "hgi_id_invalid"
             else:
-                # Construct the MQTT URL (for CONF_ADDITIONAL_PORTS
-                # — used by the non-HA-MQTT pool path).
-                auth = ""
-                if username or password:
-                    safe_user = username if username else ""
-                    safe_pass = password if password else ""
-                    auth = f"{safe_user}:{safe_pass}@"
-                url = f"mqtt://{auth}{host}:{port}"
-                if topic_path:
-                    # Ensure it starts with RAMSES/GATEWAY
-                    if not topic_path.startswith("RAMSES/"):
-                        topic_path = f"RAMSES/GATEWAY/{topic_path}"
-                    url = f"{url}/{topic_path}"
-
-                # Add to additional_ports (for non-HA-MQTT pool path)
-                additional = self.options.get(CONF_ADDITIONAL_PORTS, [])
-                if url not in additional:
-                    additional = additional + [url]
-                self.options[CONF_ADDITIONAL_PORTS] = additional
-
+                # Phase 1: MQTT pool children share the HA MQTT
+                # integration's broker/topic — no separate host/port
+                # or credentials are needed, and no paho client is
+                # created inside HA (issue 1119).
                 # Create/update schema HGI entry with _owner = root_owner
                 # so the coordinator's _extract_pool_hgis_from_schema()
                 # includes it as an accepted pool member.
@@ -2143,49 +2130,16 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 schema_dict[hgi_id][SZ_TR_OWNER] = root_owner
                 self.options[CONF_SCHEMA] = schema_dict
                 _LOGGER.info(
-                    "Added MQTT pool HGI %s (schema entry with "
-                    "_owner=%s, additional_ports URL=%s)",
+                    "Added MQTT pool HGI %s (schema entry with _owner=%s)",
                     hgi_id,
                     root_owner,
-                    url,
                 )
                 return self._async_save()
 
-        # Pre-fill from current primary MQTT port if applicable
-        current_path = self.options.get(SZ_SERIAL_PORT, {}).get(
-            SZ_PORT_NAME, ""
-        )
-        default_host = ""
-        default_port = 1883
-        default_user = ""
-        default_pass = ""
-        default_topic = ""
-        if current_path and current_path.startswith("mqtt://"):
-            try:
-                from urllib.parse import urlparse
-
-                parsed = urlparse(current_path)
-                default_host = parsed.hostname or ""
-                default_port = parsed.port or 1883
-                default_user = parsed.username or ""
-                default_pass = parsed.password or ""
-                if parsed.path and parsed.path != "/":
-                    default_topic = parsed.path.lstrip("/")
-            except Exception:
-                pass
-
+        # Phase 1: only the HGI ID is needed — the broker and topic
+        # come from the HA MQTT integration.  No host/port/credentials
+        # are stored, and no paho client is created (issue 1119).
         data_schema = {
-            prob.Required("host", default=default_host): str,
-            prob.Required("port", default=default_port): int,
-            prob.Optional("username", default=default_user): str,
-            prob.Optional("password", default=default_pass): str,
-            prob.Optional(
-                "topic_path", default=default_topic
-            ): selector.TextSelector(
-                selector.TextSelectorConfig(
-                    type=selector.TextSelectorType.TEXT
-                )
-            ),
             prob.Required("hgi_id", default=""): selector.TextSelector(
                 selector.TextSelectorConfig(
                     type=selector.TextSelectorType.TEXT,
