@@ -75,6 +75,7 @@ from .const import (
     DEFAULT_MQTT_TOPIC,
     DEFAULT_WAIT_ONLINE_TIMEOUT,
     DOMAIN,
+    HGI_PREFIX,
     STORAGE_KEY,
     STORAGE_VERSION,
     SZ_CLIENT_STATE,
@@ -291,7 +292,7 @@ class BaseRamsesFlow:
             try:
                 parts = msg.topic.split("/")
                 for part in parts:
-                    if part.startswith("18:"):
+                    if part.startswith(HGI_PREFIX):
                         _LOGGER.debug("Discovery found device: %s", part)
                         found_device.set_result(part)
                         return
@@ -1156,7 +1157,7 @@ class BaseRamsesFlow:
                             # flow, otherwise they'd be silently
                             # promoted to accepted pool members.
                             if (
-                                k.startswith("18:")
+                                k.startswith(HGI_PREFIX)
                                 and v.get("_class", "").upper() == "HGI"
                             ):
                                 continue
@@ -1794,7 +1795,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     root_owner = schema_dict.get(SZ_OWNER, "me")
                     for dev_id, entry in list(schema_dict.items()):
                         if (
-                            dev_id.startswith("18:")
+                            dev_id.startswith(HGI_PREFIX)
                             and isinstance(entry, dict)
                             and entry.get("_class", "").upper() == "HGI"
                             and entry.get(SZ_TR_OWNER) == root_owner
@@ -1851,7 +1852,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         schema_pool_members: list[str] = []
         for dev_id, entry in schema.items():
             if (
-                dev_id.startswith("18:")
+                dev_id.startswith(HGI_PREFIX)
                 and isinstance(entry, dict)
                 and entry.get("_class", "").upper() == "HGI"
                 and entry.get(SZ_TR_OWNER) == root_owner
@@ -2106,7 +2107,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 errors["base"] = "hgi_id_required"
             elif not re.match(
                 r"^\d{2}:\d{6}$", hgi_id
-            ) or not hgi_id.startswith("18:"):
+            ) or not hgi_id.startswith(HGI_PREFIX):
                 errors["base"] = "hgi_id_invalid"
             else:
                 # Construct the MQTT URL (for CONF_ADDITIONAL_PORTS

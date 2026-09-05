@@ -43,6 +43,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
+    HGI_PREFIX,
     SZ_DEVICE_COMMENTS,
     SZ_TR_BOUND,
     SZ_TR_CLASS,
@@ -653,7 +654,7 @@ class DiscoveryManager:
                 # accepted yet.  Keep status NEW so they appear in the
                 # review form for the user to accept (issue 1119).
                 if (
-                    device_id.startswith("18:")
+                    device_id.startswith(HGI_PREFIX)
                     and device_id in self._schema_no_owner_ids
                 ):
                     _LOGGER.info(
@@ -671,7 +672,7 @@ class DiscoveryManager:
                         device_id,
                     )
             elif (
-                device_id.startswith("18:")
+                device_id.startswith(HGI_PREFIX)
                 and meta.status == DiscoveryStatus.LOST
             ):
                 # HGI gateways are never "lost" — they are the receiver,
@@ -2558,6 +2559,12 @@ class DiscoveryManager:
         self._notified.update(new_ids)
 
         if new_ids and self._auto_notify:
+            _LOGGER.info(
+                "check_for_new_devices: sending notification for %d "
+                "new device(s): %s",
+                len(new_ids),
+                new_ids,
+            )
             self._send_notification(new_ids)
 
         return new_ids
