@@ -41,10 +41,11 @@ from homeassistant.util import dt as dt_util
 from serialx import SerialException
 
 from ramses_rf.config import strip_and_map_traits as _strip_and_map_traits
-from ramses_rf.const import SZ_NAME
+from ramses_rf.const import SZ_NAME, DevType
 from ramses_rf.devices import (
     _CLASS_BY_SLUG,
     DEV_TYPE_MAP,
+    Controller,
     Device,
     DeviceHvac,
     HvacRemoteBase,
@@ -2572,40 +2573,41 @@ class RamsesCoordinator(DataUpdateCoordinator):
         suggested_area: str | None = None
 
         # Fallback names if the device doesn't supply a valid one
+        info: dict[str, Any] | None = None
+        state_store = getattr(device, "state_store", None)
+        if state_store:
+            info = await state_store._msg_value_code(Code._10E0)
+
+        description: str | None = info.get("description") if info else None
+
         if isinstance(device, UfhCircuit):
             device_name = f"UFH Circuit {device.id}"
             model: str | None = f"UFH Circuit {device.ufh_index}"
             if device.zone and getattr(device.zone, SZ_NAME, None):
                 suggested_area = str(device.zone.name)
-        elif not device_name:
-            if isinstance(device, System):
+        elif isinstance(device, Zone):
+            if not device_name:
+                with suppress(ValueError):
+                    device_name = f"Zone {int(device._child_id, 16)}"
+                if not device_name:
+                    device_name = f"Zone {device._child_id}"
+            model = description or getattr(device, "_SLUG", None)
+        elif (
+            isinstance(device, (System, Controller))
+            or getattr(device, "_SLUG", None) == DevType.CTL
+        ):
+            if not device_name:
                 device_name = f"Controller {device.id}"
-            elif getattr(device, "_SLUG", None):
+            model = description or "Controller"
+        elif not device_name:
+            if getattr(device, "_SLUG", None):
                 device_name = f"{getattr(device, '_SLUG', None)} {device.id}"
             else:
                 device_name = str(device.id)
 
-            info: dict[str, Any] | None = None
-            state_store = getattr(device, "state_store", None)
-            if state_store:
-                info = await state_store._msg_value_code(Code._10E0)
-
-            model = (
-                info.get("description")
-                if info
-                else getattr(device, "_SLUG", None)
-            )
+            model = description or getattr(device, "_SLUG", None)
         else:
-            info = None
-            state_store = getattr(device, "state_store", None)
-            if state_store:
-                info = await state_store._msg_value_code(Code._10E0)
-
-            model = (
-                info.get("description")
-                if info
-                else getattr(device, "_SLUG", None)
-            )
+            model = description or getattr(device, "_SLUG", None)
 
         device_registry = dr.async_get(self.hass)
 
