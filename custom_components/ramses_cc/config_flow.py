@@ -1149,7 +1149,17 @@ class BaseRamsesFlow:
                             continue
                         existing = v.get(SZ_TR_OWNER)
                         if not isinstance(existing, str):
-                            # No _owner → backfill
+                            # No _owner → backfill, EXCEPT for 18: HGI
+                            # discovery candidates (issue 1119).  Those
+                            # must stay ownerless until the user
+                            # explicitly accepts them via the config
+                            # flow, otherwise they'd be silently
+                            # promoted to accepted pool members.
+                            if (
+                                k.startswith("18:")
+                                and v.get("_class", "").upper() == "HGI"
+                            ):
+                                continue
                             v[SZ_TR_OWNER] = owner_name
                         elif old_owner and existing == old_owner:
                             # Had the old root owner → rename

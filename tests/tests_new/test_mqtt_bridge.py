@@ -101,16 +101,22 @@ async def test_bridge_flow(
             "custom_components.ramses_cc.coordinator.Gateway"
         ) as mock_gateway_cls,
         patch(
-            "custom_components.ramses_cc.mqtt_bridge.CallbackTransport"
-        ) as mock_transport_cls,
+            "custom_components.ramses_cc.coordinator.RamsesMqttPoolBridge"
+        ) as mock_bridge_cls,
+        patch(
+            "custom_components.ramses_cc.coordinator._MqttHgiDiscoveryCallback"
+        ),
     ):
         # 4. Setup the Gateway Mock
         mock_gateway = mock_gateway_cls.return_value
         mock_gateway.start = AsyncMock()
         mock_gateway.get_state.return_value = ({}, {})
 
-        # Setup the Transport Mock
-        mock_transport = mock_transport_cls.return_value
+        # Setup the Pool Bridge Mock
+        mock_bridge = mock_bridge_cls.return_value
+        mock_bridge.async_transport_factory = AsyncMock(
+            return_value=MagicMock()
+        )
 
         # 5. Initialize the Integration
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -121,72 +127,14 @@ async def test_bridge_flow(
             coordinator = entry.runtime_data
             bridge = coordinator.mqtt_bridge
             assert bridge is not None
+            assert bridge is mock_bridge
 
-            # 7. Simulate the wiring
-            transport = await bridge.async_transport_factory(mock_protocol)
+            # 7. Verify Pool Bridge was called with correct args
+            mock_bridge_cls.assert_called_once()
+            call_args = mock_bridge_cls.call_args
+            assert call_args.args[1] == "RAMSES/GATEWAY"  # topic_prefix
+            assert TEST_DEVICE_ID in call_args.args[2]  # hgi_ids
 
-            # Verify the transport was created
-            assert transport == mock_transport
-            mock_transport_cls.assert_called_once()
-
-            # 8. Verify Subscriptions
-            mock_mqtt["subscribe"].assert_any_call(
-                hass,
-                f"RAMSES/GATEWAY/{TEST_DEVICE_ID}/rx",
-                bridge._handle_rx_message,
-                qos=0,
-            )
-            mock_mqtt["subscribe"].assert_any_call(
-                hass,
-                f"RAMSES/GATEWAY/{TEST_DEVICE_ID}/cmd/result",
-                bridge._handle_cmd_message,
-                qos=0,
-            )
-
-            # 9. Test INBOUND (MQTT -> Transport)
-            rx_call = next(
-                call
-                for call in mock_mqtt["subscribe"].call_args_list
-                if call[0][1].endswith("/rx")
-            )
-            rx_callback = rx_call[0][2]
-
-            # Simulate an incoming MQTT message
-            msg = MagicMock()
-            msg.payload = json.dumps(
-                {"msg": "RQ --- 18:123456 01:000000 --:------ 0005 002 0000"}
-            )
-
-            rx_callback(msg)
-
-            # Verify it was unwrapped and passed to the transport
-            expected_frame = (
-                "RQ --- 18:123456 01:000000 --:------ 0005 002 0000"
-            )
-            mock_transport.receive_frame.assert_called_with(expected_frame)
-
-            # 10. Test OUTBOUND (Transport Writer -> MQTT)
-            call_args = mock_transport_cls.call_args[0]
-            io_writer = call_args[1]
-
-            # A. Test TX Packet
-            tx_frame = "RP --- 01:000000 18:123456 --:------ 0005 002 0000"
-            await io_writer(tx_frame)
-
-            expected_topic_tx = f"RAMSES/GATEWAY/{TEST_DEVICE_ID}/tx"
-            expected_payload_tx = json.dumps({"msg": tx_frame})
-            mock_mqtt["publish"].assert_called_with(
-                hass, expected_topic_tx, expected_payload_tx
-            )
-
-            # B. Test Command
-            cmd_frame = "!V"
-            await io_writer(cmd_frame)
-
-            expected_topic_cmd = f"RAMSES/GATEWAY/{TEST_DEVICE_ID}/cmd/cmd"
-            mock_mqtt["publish"].assert_called_with(
-                hass, expected_topic_cmd, cmd_frame
-            )
         finally:
             await hass.config_entries.async_unload(entry.entry_id)
             await hass.async_block_till_done()

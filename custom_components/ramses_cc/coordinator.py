@@ -2151,69 +2151,46 @@ class RamsesCoordinator(DataUpdateCoordinator):
             assert hgi_id is not None
 
             # Check for additional configured HGIs from the schema.
-            # When multiple HGIs are configured, use the pool bridge
-            # that drives them through the PR 4A callback contract.
+            # Always use the pool bridge for MQTT — even with a single
+            # HGI, the pool bridge subscribes to the wildcard topic and
+            # can discover unknown HGIs via the discovery callback.
             schema_pool_hgis = self._extract_pool_hgis_from_schema()
             all_hgi_ids = [hgi_id]
             for extra_hgi in schema_pool_hgis:
                 if extra_hgi not in all_hgi_ids:
                     all_hgi_ids.append(extra_hgi)
 
-            if len(all_hgi_ids) > 1:
-                # Multi-HGI path: use RamsesMqttPoolBridge.
-                _LOGGER.info(
-                    "MqttPoolBridge: %d configured HGIs: %s",
-                    len(all_hgi_ids),
-                    all_hgi_ids,
-                )
-                self.mqtt_bridge = RamsesMqttPoolBridge(
-                    self.hass,
-                    mqtt_topic,
-                    all_hgi_ids,
-                    discovery_callback=_MqttHgiDiscoveryCallback(self),
-                    wait_online_timeout=float(
-                        self.options.get(
-                            CONF_WAIT_ONLINE_TIMEOUT,
-                            DEFAULT_WAIT_ONLINE_TIMEOUT,
-                        )
-                    ),
-                )
-                self.entry.async_on_unload(self.mqtt_bridge.close)
-
-                engine_kwargs["hgi_id"] = hgi_id
-                self._port_name = str(_port_name_raw or "mqtt")
-
-                engine_config = EngineConfig(**engine_kwargs)
-                gwy_config = GatewayConfig(
-                    engine=engine_config, **gateway_kwargs
-                )
-                return Gateway(
-                    port_name=_port_name_raw or "mqtt",
-                    config=gwy_config,
-                    loop=self.hass.loop,
-                    transport_constructor=(
-                        self.mqtt_bridge.async_transport_factory
-                    ),
-                )
-
-            # Single-HGI path: existing RamsesMqttBridge (unchanged).
-            self.mqtt_bridge = RamsesMqttBridge(self.hass, mqtt_topic, hgi_id)
-
-            # Ensure the bridge unsubscribes from MQTT on shutdown
+            _LOGGER.info(
+                "MqttPoolBridge: %d configured HGI(s): %s",
+                len(all_hgi_ids),
+                all_hgi_ids,
+            )
+            self.mqtt_bridge = RamsesMqttPoolBridge(
+                self.hass,
+                mqtt_topic,
+                all_hgi_ids,
+                discovery_callback=_MqttHgiDiscoveryCallback(self),
+                wait_online_timeout=float(
+                    self.options.get(
+                        CONF_WAIT_ONLINE_TIMEOUT,
+                        DEFAULT_WAIT_ONLINE_TIMEOUT,
+                    )
+                ),
+            )
             self.entry.async_on_unload(self.mqtt_bridge.close)
 
-            # Pass the configured HGI ID to ramses_rf.
             engine_kwargs["hgi_id"] = hgi_id
             self._port_name = str(_port_name_raw or "mqtt")
 
             engine_config = EngineConfig(**engine_kwargs)
             gwy_config = GatewayConfig(engine=engine_config, **gateway_kwargs)
-
             return Gateway(
                 port_name=_port_name_raw or "mqtt",
                 config=gwy_config,
                 loop=self.hass.loop,
-                transport_constructor=self.mqtt_bridge.async_transport_factory,
+                transport_constructor=(
+                    self.mqtt_bridge.async_transport_factory
+                ),
             )
 
         # Standard Serial/USB setup

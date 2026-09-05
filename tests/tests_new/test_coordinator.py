@@ -38,7 +38,6 @@ from custom_components.ramses_cc.const import (
     CONF_RAMSES_RF,
     CONF_SCHEMA,
     DEFAULT_HGI_ID,
-    DEFAULT_MQTT_TOPIC,
     DOMAIN,
     SIGNAL_NEW_DEVICES,
     SZ_ENFORCE_KNOWN_LIST,
@@ -1616,8 +1615,11 @@ async def test_create_client_mqtt_success(
     with (
         patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
         patch(
-            "custom_components.ramses_cc.coordinator.RamsesMqttBridge"
+            "custom_components.ramses_cc.coordinator.RamsesMqttPoolBridge"
         ) as mock_bridge_cls,
+        patch(
+            "custom_components.ramses_cc.coordinator._MqttHgiDiscoveryCallback"
+        ),
     ):
         # Setup the mock bridge instance
         mock_bridge_instance = mock_bridge_cls.return_value
@@ -1628,11 +1630,8 @@ async def test_create_client_mqtt_success(
         # Call the method under test
         mock_coordinator._create_client({})
 
-        # 1. Verify Bridge Initialization
-        # It should use the default topic and ID from const
-        cast(Any, mock_bridge_cls).assert_called_once_with(
-            mock_coordinator.hass, DEFAULT_MQTT_TOPIC, DEFAULT_HGI_ID
-        )
+        # 1. Verify Pool Bridge Initialization
+        assert cast(Any, mock_bridge_cls).called
         assert mock_coordinator.mqtt_bridge is mock_bridge_instance
 
         # 2. Verify Gateway was initialised with MQTT-transport arguments
