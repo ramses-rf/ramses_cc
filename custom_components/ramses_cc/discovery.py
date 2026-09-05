@@ -2500,6 +2500,15 @@ class DiscoveryManager:
             # (device_id != active_hgi_id) are discoverable devices.
             if self._active_hgi_id and device_id == self._active_hgi_id:
                 continue
+            # Skip HGI discovery candidates — they're handled by the
+            # HGI loop above (issue 1119).  Without this, an HGI that's
+            # both in _schema_no_owner_ids and in the scan engine (e.g.
+            # a receive-only pool child) would be added to new_ids twice.
+            if (
+                self._is_hgi(device_id)
+                and device_id in self._schema_no_owner_ids
+            ):
+                continue
             # Skip foreign-owner devices (neighbour's devices) — the
             # scan engine sees all RF traffic, but foreign devices
             # should not be offered for discovery/review.

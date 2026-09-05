@@ -2245,6 +2245,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # For MQTT transports, also check the schema for accepted HGIs
         # that share the same broker.  Each accepted HGI gets its own
         # child transport with an explicit per-HGI MQTT URL (issue 1119).
+        # For hybrid setups (serial primary + MQTT additional), the
+        # MQTT broker URL is added to additional_ports via the config
+        # flow (manage_pool_mqtt step).
         schema_accepted_hgis: list[str] = []
         if isinstance(port_name, str) and port_name.startswith("mqtt://"):
             schema_accepted_hgis = self._extract_pool_hgis_from_schema()

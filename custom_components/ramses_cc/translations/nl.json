@@ -266,7 +266,7 @@
                 "data": {
                     "schema_pool_members": "Pool-leden (vink uit om uit pool te verwijderen)",
                     "additional_ports": "Extra poorten (USB, Zigbee, externe MQTT)",
-                    "add_new_port": "Voeg nieuwe poort toe"
+                    "add_new_port": "Poort toevoegen/wijzigen"
                 }
             }
         }
