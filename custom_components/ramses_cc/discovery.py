@@ -1752,7 +1752,24 @@ class DiscoveryManager:
             # coordinator and auto-registered in the schema.
             if self._active_hgi_id and device_id == self._active_hgi_id:
                 continue
-            meta = self._metadata.get(device_id, DeviceMetadata())
+            meta = self._metadata.get(device_id)
+
+            # When a status/enabled filter is applied, skip devices that
+            # have no persisted metadata rather than synthesizing a
+            # default DeviceMetadata() (whose status defaults to NEW).
+            # Without this, live-scan devices already in the schema but
+            # lacking metadata (e.g. after a reload where .storage/ wasn't
+            # updated before teardown) would implicitly satisfy
+            # status=DiscoveryStatus.NEW and appear in the Review
+            # discovered devices config flow even though they're already
+            # configured (issue 1132).  check_for_new_devices() already
+            # suppresses the *notification* for such devices (issue 917),
+            # but get_devices() is a separate code path used by the
+            # review UI.
+            if meta is None:
+                if status is not None or enabled is not None:
+                    continue
+                meta = DeviceMetadata()
 
             if status is not None and meta.status != status:
                 continue
