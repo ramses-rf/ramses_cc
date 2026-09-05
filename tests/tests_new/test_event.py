@@ -311,6 +311,76 @@ async def test_ramses_regex_event_async_process_msg(
         )
 
 
+@pytest.mark.asyncio
+async def test_ramses_regex_event_bytes_in_dict_payload(
+    mock_hass: MagicMock, mock_coordinator: MagicMock
+) -> None:
+    """Test regex event converts bytes values in dict payload to hex."""
+    regex = re.compile("001122")
+    event = RamsesRegexEvent(
+        mock_coordinator,
+        mock_hass,
+        {"type": RamsesEventType.REGEX},
+        regex=regex,
+    )
+    dto = PacketDTO(
+        timestamp=dt(2023, 1, 1, 12, 0, tzinfo=UTC),
+        rssi="000",
+        verb=" I",
+        seq="000",
+        addr1="01:111111",
+        addr2="01:222222",
+        addr3="--:------",
+        code="1234",
+        length="003",
+        payload="001122",
+    )
+    with patch.object(event, "update_data") as mock_update:
+        event._event_callback(dto)
+        call_args = mock_update.call_args[0][0]
+        # The payload should be a dict (parsed from the packet)
+        assert isinstance(call_args["payload"], dict)
+
+
+@pytest.mark.asyncio
+async def test_ramses_regex_event_bytes_payload(
+    mock_hass: MagicMock, mock_coordinator: MagicMock
+) -> None:
+    """Test regex event converts raw bytes payload to hex string."""
+    regex = re.compile("001122")
+    event = RamsesRegexEvent(
+        mock_coordinator,
+        mock_hass,
+        {"type": RamsesEventType.REGEX},
+        regex=regex,
+    )
+    dto = PacketDTO(
+        timestamp=dt(2023, 1, 1, 12, 0, tzinfo=UTC),
+        rssi="000",
+        verb=" I",
+        seq="000",
+        addr1="01:111111",
+        addr2="01:222222",
+        addr3="--:------",
+        code="1234",
+        length="003",
+        payload="001122",
+    )
+    # Patch msg.payload to return bytes directly
+    with (
+        patch.object(event, "update_data") as mock_update,
+        patch(
+            "ramses_rf.messages.base.Message.payload",
+            new_callable=PropertyMock,
+            return_value=b"\x00\x11\x22",
+        ),
+    ):
+        event._event_callback(dto)
+        call_args = mock_update.call_args[0][0]
+        # bytes payload should be converted to hex string
+        assert call_args["payload"] == "001122"
+
+
 # next 3 moved here from test_init events 0.55.6
 
 

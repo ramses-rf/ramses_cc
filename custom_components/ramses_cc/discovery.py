@@ -272,6 +272,9 @@ class DiscoveryManager:
         # after a reload where .storage/ wasn't updated before teardown
         # (issue 917).
         self._schema_device_ids: set[str] = set()
+        # Devices in schema without _owner — need review (issue 1119).
+        # Populated by sync_with_schema().
+        self._schema_no_owner_ids: set[str] = set()
         self._foreign_device_ids: set[str] = set()
         # Devices in schema without _owner — need review (issue 1119).
         self._schema_no_owner_ids: set[str] = set()
@@ -644,12 +647,42 @@ class DiscoveryManager:
                 # of the review form — it's already in the schema.  If there's
                 # a class mismatch, the review form will show it in the
                 # mismatch section where the user can resolve it.
+                #
+                # Exception: HGIs (18:) without _owner are discovery
+                # candidates — they're in the schema but haven't been
+                # accepted yet.  Keep status NEW so they appear in the
+                # review form for the user to accept (issue 1119).
+                if (
+                    device_id.startswith("18:")
+                    and device_id in self._schema_no_owner_ids
+                ):
+                    _LOGGER.info(
+                        "DiscoveryManager: HGI %s is in schema without "
+                        "_owner, keeping NEW status for review (issue 1119)",
+                        device_id,
+                    )
+                else:
+                    meta.status = DiscoveryStatus.ACCEPTED
+                    meta.enabled = True
+                    self._metadata[device_id] = meta
+                    _LOGGER.info(
+                        "DiscoveryManager: device %s is in schema but had "
+                        "NEW status, marked as ACCEPTED",
+                        device_id,
+                    )
+            elif (
+                device_id.startswith("18:")
+                and meta.status == DiscoveryStatus.LOST
+            ):
+                # HGI gateways are never "lost" — they are the receiver,
+                # not remote devices.  Clear any stale LOST status that
+                # may have been set before the HGI-skip was added to
+                # check_for_lost_devices / check_communication_quality.
                 meta.status = DiscoveryStatus.ACCEPTED
-                meta.enabled = True
                 self._metadata[device_id] = meta
                 _LOGGER.info(
-                    "DiscoveryManager: device %s is in schema but had NEW "
-                    "status, marked as ACCEPTED",
+                    "DiscoveryManager: HGI %s had stale LOST status, "
+                    "cleared to ACCEPTED",
                     device_id,
                 )
 
@@ -1095,6 +1128,11 @@ class DiscoveryManager:
             # Skip structural keys (main_tcs, _owner, etc.)
             if device_id.startswith("_") or device_id in ("main_tcs",):
                 continue
+            # Skip faked devices — they are virtual/impersonated and don't
+            # have real RF signal.  Flagging them as orphaned is a false
+            # positive (issue 1119).
+            if schema_entry.get("_faked") is True:
+                continue
 
             dev = scan_devices.get(device_id)
             if dev is None:
@@ -1428,6 +1466,12 @@ class DiscoveryManager:
             # Skip foreign-owner devices.
             if device_id in self._foreign_device_ids:
                 continue
+            # Skip faked devices — their RSSI reflects the HGI's own
+            # transmissions (heard by the other HGI), not a real
+            # device's signal strength.  Warning about "weak signal"
+            # is meaningless for a virtual/impersonated device.
+            if getattr(device, "is_faked", False):
+                continue
 
             quality = getattr(device, "communication_quality", None)
             if quality is None:
@@ -1451,6 +1495,24 @@ class DiscoveryManager:
                         device_id,
                         quality.best_rssi,
                     )
+
+                # Also clear _suppress_not_seen from the schema (unless
+                # it's set to True for permanent suppression).  The int
+                # form (e.g. 7) is set by review_device_health as a
+                # temporary suppress — once the device is heard again,
+                # it should be cleared so the user gets a fresh
+                # notification if it goes quiet later (issue 988).
+                schema_entry = schema.get(device_id)
+                if isinstance(schema_entry, dict):
+                    suppress_val = schema_entry.get("_suppress_not_seen")
+                    if suppress_val is not None and suppress_val is not True:
+                        schema_entry.pop("_suppress_not_seen", None)
+                        _LOGGER.info(
+                            "DiscoveryManager: device %s seen again, "
+                            "cleared _suppress_not_seen=%s from schema",
+                            device_id,
+                            suppress_val,
+                        )
 
             # Determine if the device has weak signal (RSSI only).
             # Staleness is not checked — see docstring above.
@@ -1751,6 +1813,11 @@ class DiscoveryManager:
             # Skip local active HGI gateway — it is managed directly by the
             # coordinator and auto-registered in the schema.
             if self._active_hgi_id and device_id == self._active_hgi_id:
+                _LOGGER.debug(
+                    "get_devices: skipping %s (active_hgi_id=%s)",
+                    device_id,
+                    self._active_hgi_id,
+                )
                 continue
             meta = self._metadata.get(device_id, DeviceMetadata())
 
@@ -2436,13 +2503,24 @@ class DiscoveryManager:
                 # (e.g. metadata lost during reload because .storage/ wasn't
                 # updated before teardown), do NOT flag it as NEW — it's
                 # already configured, not a new discovery (issue 917).
-                if device_id in self._schema_device_ids:
+                # Exception: devices in the schema without an _owner need
+                # review (issue 1119 — e.g. HGI discovered via MQTT that
+                # hasn't been accepted/rejected yet).
+                if device_id in self._schema_device_ids and (
+                    device_id not in self._schema_no_owner_ids
+                ):
                     _LOGGER.info(
                         "check_for_new_devices: %s is in schema but has no"
                         " metadata — suppressing NEW notification (issue 917)",
                         device_id,
                     )
                     continue
+                if device_id in self._schema_no_owner_ids:
+                    _LOGGER.info(
+                        "check_for_new_devices: %s is in schema but has no"
+                        " _owner — flagging for review (issue 1119)",
+                        device_id,
+                    )
                 # Brand new device — create metadata
                 self._metadata[device_id] = DeviceMetadata()
                 new_ids.append(device_id)
@@ -2450,6 +2528,23 @@ class DiscoveryManager:
                 meta.status == DiscoveryStatus.NEW
                 and device_id not in self._notified
             ):
+                new_ids.append(device_id)
+            elif (
+                meta.status == DiscoveryStatus.ACCEPTED
+                and device_id in self._schema_no_owner_ids
+                and device_id not in self._notified
+            ):
+                # Accepted device that lost its _owner in the schema
+                # (e.g. during a merge/migration) — re-flag for review
+                # so the user can re-accept and set _owner (issue 1119).
+                # Reset status to NEW so it appears in review_discovered.
+                _LOGGER.info(
+                    "check_for_new_devices: %s is accepted but has no"
+                    " _owner in schema — re-flagging for review (issue 1119)",
+                    device_id,
+                )
+                meta.status = DiscoveryStatus.NEW
+                self._metadata[device_id] = meta
                 new_ids.append(device_id)
             elif meta.status == DiscoveryStatus.REMOVED:
                 # Re-mark REMOVED devices as NEW if they're still seen
@@ -2497,6 +2592,17 @@ class DiscoveryManager:
             # ServiceValidationError).  Mirrors check_orphaned_devices.
             if self._is_hgi(device_id):
                 continue
+
+            # Skip faked devices — they are virtual/impersonated and don't
+            # have real RF signal.  Flagging them as lost is a false
+            # positive (issue 1119).
+            if schema is not None:
+                schema_entry = schema.get(device_id)
+                if (
+                    isinstance(schema_entry, dict)
+                    and schema_entry.get("_faked") is True
+                ):
+                    continue
 
             # Respect _suppress_not_seen from schema (issue 988)
             # Accepted values: True (suppress forever) or N int (suppress
