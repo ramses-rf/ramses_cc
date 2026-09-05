@@ -1478,6 +1478,213 @@ class TestCheckForNewDevicesReReport:
         assert "04:056053" in new_ids
 
 
+class TestHgiDiscoveryCandidate:
+    """Tests for HGI discovery candidates from MQTT (issue 1119).
+
+    HGI gateways discovered via MQTT appear in the schema without _owner
+    but are NOT in the scan engine (HGIs are gateways, not RF devices).
+    check_for_new_devices must still flag them as NEW so the user gets
+    a notification and can review/accept them.
+    """
+
+    def test_hgi_candidate_flagged_as_new(self) -> None:
+        """An 18: device in schema without _owner is flagged as NEW."""
+        scan = make_mock_scan([])  # no scan engine devices
+        manager = DiscoveryManager(
+            make_mock_hass(),
+            scan,
+            auto_notify=False,
+            active_hgi_id="18:130236",
+        )
+        # Simulate sync_with_schema with a schema containing an HGI
+        # discovery candidate (18:149488, no _owner)
+        manager.sync_with_schema(
+            {"18:130236", "18:149488"},
+            schema={
+                "18:130236": {"_class": "HGI", "_owner": "me"},
+                "18:149488": {"_class": "HGI"},  # no _owner
+            },
+        )
+
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" in new_ids
+        assert "18:130236" not in new_ids  # active HGI skipped
+
+    def test_hgi_candidate_not_re_notified(self) -> None:
+        """Once notified, HGI candidate is not re-reported."""
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(
+            make_mock_hass(),
+            scan,
+            auto_notify=False,
+            active_hgi_id="18:130236",
+        )
+        manager.sync_with_schema(
+            {"18:149488"},
+            schema={"18:149488": {"_class": "HGI"}},
+        )
+
+        # First check — flagged
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" in new_ids
+
+        # Second check — already notified, not re-flagged
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" not in new_ids
+
+    def test_accepted_hgi_without_owner_re_flagged(self) -> None:
+        """An accepted HGI that lost _owner is re-flagged as NEW."""
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(
+            make_mock_hass(),
+            scan,
+            auto_notify=False,
+            active_hgi_id="18:130236",
+        )
+        # Pre-populate metadata as ACCEPTED (e.g. user previously accepted
+        # but later cleared _owner from the schema)
+        manager._metadata["18:149488"] = DeviceMetadata(
+            status=DiscoveryStatus.ACCEPTED,
+            enabled=True,
+            owner=None,
+        )
+        manager.sync_with_schema(
+            {"18:149488"},
+            schema={"18:149488": {"_class": "HGI"}},  # no _owner
+        )
+
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" in new_ids
+        assert manager._metadata["18:149488"].status == DiscoveryStatus.NEW
+
+    def test_non_hgi_schema_no_owner_not_flagged_by_hgi_loop(self) -> None:
+        """Non-18: devices in _schema_no_owner_ids are skipped by HGI loop."""
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(
+            make_mock_hass(),
+            scan,
+            auto_notify=False,
+        )
+        manager.sync_with_schema(
+            {"04:056053"},
+            schema={"04:056053": {"_class": "TRV"}},  # no _owner but not 18:
+        )
+
+        new_ids = manager.check_for_new_devices()
+        # 04: device is in _schema_no_owner_ids but not 18:, so the HGI
+        # loop skips it.  It's also not in the scan engine, so the engine
+        # loop doesn't flag it either.
+        assert "04:056053" not in new_ids
+
+    def test_active_hgi_in_no_owner_ids_skipped(self) -> None:
+        """Active HGI without _owner is still skipped by the HGI loop."""
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(
+            make_mock_hass(),
+            scan,
+            auto_notify=False,
+            active_hgi_id="18:130236",
+        )
+        # Active HGI is in schema without _owner (edge case)
+        manager.sync_with_schema(
+            {"18:130236"},
+            schema={"18:130236": {"_class": "HGI"}},  # no _owner
+        )
+
+        new_ids = manager.check_for_new_devices()
+        assert "18:130236" not in new_ids  # active HGI always skipped
+
+    def test_hgi_candidate_new_status_re_reported(self) -> None:
+        """HGI candidate with NEW status is re-reported if not notified."""
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(
+            make_mock_hass(),
+            scan,
+            auto_notify=False,
+            active_hgi_id="18:130236",
+        )
+        manager.sync_with_schema(
+            {"18:149488"},
+            schema={"18:149488": {"_class": "HGI"}},
+        )
+
+        # First check — creates metadata with NEW status
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" in new_ids
+
+        # Clear _notified to simulate "not yet notified"
+        manager._notified.clear()
+
+        # Second check — NEW status and not in _notified, re-reported
+        new_ids = manager.check_for_new_devices()
+        assert "18:149488" in new_ids
+
+    def test_get_devices_stub_uses_hgi_class(self) -> None:
+        """get_devices stub for 18: device uses 'HGI' as likely_type."""
+        scan = make_mock_scan([])  # no scan engine devices
+        manager = DiscoveryManager(
+            make_mock_hass(),
+            scan,
+            auto_notify=False,
+            active_hgi_id="18:130236",
+        )
+        # Add metadata for an HGI not in the scan engine
+        manager._metadata["18:149488"] = DeviceMetadata(
+            status=DiscoveryStatus.NEW,
+        )
+
+        devices = manager.get_devices()
+        hgi_entry = next(
+            (d for d in devices if d.device.device_id == "18:149488"), None
+        )
+        assert hgi_entry is not None
+        assert hgi_entry.device.likely_type == "HGI"
+
+    def test_accept_device_uses_hgi_class(self) -> None:
+        """accept_device for an 18: device generates _class: HGI."""
+        scan = make_mock_scan([])
+        manager = DiscoveryManager(
+            make_mock_hass(),
+            scan,
+            auto_notify=False,
+            active_hgi_id="18:130236",
+        )
+        # Add as NEW so accept_device can find it
+        manager._metadata["18:149488"] = DeviceMetadata(
+            status=DiscoveryStatus.NEW,
+        )
+
+        accepted = manager.accept_device("18:149488", owner="me")
+        assert accepted.metadata.schema_entry is not None
+        # The schema entry should have _class: HGI, not UNKNOWN
+        entry = accepted.metadata.schema_entry.get("18:149488", {})
+        assert entry.get("_class") == "HGI"
+
+    def test_notification_includes_hgi_candidate(self) -> None:
+        """Notification text includes HGI candidates not in scan engine."""
+        scan = make_mock_scan([])
+        hass = make_mock_hass()
+        manager = DiscoveryManager(
+            hass,
+            scan,
+            auto_notify=True,
+            active_hgi_id="18:130236",
+        )
+        manager.sync_with_schema(
+            {"18:149488"},
+            schema={"18:149488": {"_class": "HGI"}},
+        )
+
+        with patch(
+            "custom_components.ramses_cc.discovery.async_create_notification"
+        ) as mock_notify:
+            manager.check_for_new_devices()
+            assert mock_notify.called
+            msg = mock_notify.call_args.kwargs.get("message", "")
+            assert "18:149488" in msg
+            assert "HGI" in msg
+
+
 class TestCheckClassMismatches:
     """Tests for DiscoveryManager.check_class_mismatches.
 

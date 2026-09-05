@@ -1885,6 +1885,18 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         config_schema[device_id] = {}
                     config_schema[device_id][SZ_TR_SKIPPED] = True
                     config_schema[device_id][SZ_TR_OWNER] = root_owner
+                    # Also dismiss missing_class so check_missing_class
+                    # doesn't immediately re-flag this device on the next
+                    # checkpoint (issue 1136).  The NEW-section skip writes
+                    # schema _skipped, but check_missing_class only consults
+                    # metadata.missing_class_dismissed — set both so neither
+                    # review path re-surfaces the device.
+                    skip_meta = coordinator.discovery_manager._metadata.get(
+                        device_id
+                    )
+                    if skip_meta:
+                        skip_meta.missing_class = None
+                        skip_meta.missing_class_dismissed = True
                     changed = True
                     continue
                 if action == SZ_ACCEPT:
@@ -1934,6 +1946,17 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                                 if per_device_owner
                                 else root_owner
                             )
+                        # Clear any prior missing_class dismissal so that
+                        # if the user later removes _class from the schema,
+                        # check_missing_class can re-flag the device
+                        # (issue 1136).
+                        accept_meta = (
+                            coordinator.discovery_manager._metadata.get(
+                                device_id
+                            )
+                        )
+                        if accept_meta:
+                            accept_meta.missing_class_dismissed = False
                         changed = True
                 elif action == "decline":
                     # Decline — mark foreign owner so it goes to block_list

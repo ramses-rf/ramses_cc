@@ -2293,6 +2293,78 @@ async def test_review_discovered_skip_device(hass: HomeAssistant) -> None:
     mock_coord.discovery_manager.discard_device.assert_not_called()
 
 
+async def test_review_discovered_skip_dismisses_missing_class(
+    hass: HomeAssistant,
+) -> None:
+    """Skipping a NEW device must also dismiss missing_class (issue 1136).
+
+    The NEW-section skip writes ``_skipped`` to the schema, but
+    ``check_missing_class`` only consults ``missing_class_dismissed`` on
+    the discovery metadata.  Without also setting that flag, the device
+    reappears immediately under "device(s) with missing _class" on the
+    next checkpoint.
+    """
+    from custom_components.ramses_cc.discovery import DeviceMetadata
+    from custom_components.ramses_cc.schemas import SZ_TR_SKIPPED
+
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            CONF_SCHEMA: {},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "13:018996"
+    mock_entry.device.likely_type = "BDR"
+    mock_entry.device.confidence = "low"
+    mock_entry.device.rssi = -80.0
+    mock_entry.device.codes_seen = ["3EF1"]
+    mock_entry.device.bound_to = None
+    mock_entry.device.zone_index = None
+    mock_entry.device.is_battery = False
+    mock_entry.device.source_count = 1
+    mock_entry.device.destination_count = 0
+
+    # Use a real DeviceMetadata so we can inspect the dismissed flag
+    real_meta = DeviceMetadata()
+
+    mock_coord = MagicMock()
+    mock_coord.discovery_manager = MagicMock()
+    mock_coord.discovery_manager.get_devices.return_value = [mock_entry]
+    mock_coord.discovery_manager._metadata = {"13:018996": real_meta}
+    config_entry.runtime_data = mock_coord
+
+    result = await hass.config_entries.options.async_init(
+        config_entry.entry_id
+    )
+
+    flow_handler = hass.config_entries.options._progress[result["flow_id"]]
+    assert isinstance(flow_handler, OptionsFlow)
+    cast(Any, flow_handler).config_entry = config_entry
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "review_discovered"}
+    )
+
+    # Submit form with skip action
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={"device_13:018996": "skip"},
+    )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+
+    # The missing_class flag must be cleared and dismissed
+    assert real_meta.missing_class is None
+    assert real_meta.missing_class_dismissed is True
+
+    # The schema entry must carry _skipped
+    saved_schema = config_entry.options.get(CONF_SCHEMA, {})
+    assert saved_schema.get("13:018996", {}).get(SZ_TR_SKIPPED) is True
+
+
 async def test_review_discovered_missing_class_add_class(
     hass: HomeAssistant,
 ) -> None:

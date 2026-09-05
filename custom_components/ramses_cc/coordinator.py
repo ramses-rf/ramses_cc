@@ -766,7 +766,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         schema_device_ids = self._extract_schema_device_ids(schema)
         foreign_device_ids = self._extract_foreign_device_ids(schema)
         self.discovery_manager.sync_with_schema(
-            schema_device_ids, foreign_device_ids
+            schema_device_ids, foreign_device_ids, schema
         )
 
         # Schedule periodic checkpoint + check for new/lost devices.
@@ -807,7 +807,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         schema_device_ids = self._extract_schema_device_ids(schema)
         foreign_device_ids = self._extract_foreign_device_ids(schema)
         self.discovery_manager.sync_with_schema(
-            schema_device_ids, foreign_device_ids
+            schema_device_ids, foreign_device_ids, schema
         )
         # Check ramses_rf known_list for contradiction-based class changes
         # (e.g. FAN→DIS) before running mismatch checks, so rf-flagged
