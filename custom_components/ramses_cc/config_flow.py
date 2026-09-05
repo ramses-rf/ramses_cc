@@ -2408,6 +2408,16 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     if skip_meta:
                         skip_meta.missing_class = None
                         skip_meta.missing_class_dismissed = True
+                    else:
+                        # Edge case: device has no metadata yet (e.g. it
+                        # was added to the schema externally).  Create
+                        # metadata with the dismissal pre-set so
+                        # check_missing_class won't re-flag it (issue 1136).
+                        from .discovery import DeviceMetadata
+
+                        coordinator.discovery_manager._metadata[device_id] = (
+                            DeviceMetadata(missing_class_dismissed=True)
+                        )
                     changed = True
                     continue
                 if action == SZ_ACCEPT:

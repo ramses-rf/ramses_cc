@@ -51,6 +51,7 @@ from .const import (
     SZ_TR_FAKED,
     SZ_TR_NAME,
     SZ_TR_OWNER,
+    SZ_TR_SKIPPED,
 )
 
 if TYPE_CHECKING:
@@ -277,8 +278,6 @@ class DiscoveryManager:
         # Populated by sync_with_schema().
         self._schema_no_owner_ids: set[str] = set()
         self._foreign_device_ids: set[str] = set()
-        # Devices in schema without _owner — need review (issue 1119).
-        self._schema_no_owner_ids: set[str] = set()
 
         # Track which mismatches we've already warned about (to avoid
         # repeating the WARNING every checkpoint cycle).  Cleared when
@@ -1061,6 +1060,11 @@ class DiscoveryManager:
                 if existing_meta and existing_meta.missing_class:
                     existing_meta.missing_class = None
                     self._metadata[device_id] = existing_meta
+                continue
+
+            # Skip devices the user already deferred via "Skip for now"
+            # (issue 1136: _skipped in schema survives metadata loss)
+            if schema_entry.get(SZ_TR_SKIPPED):
                 continue
 
             scan_type = str(dev.likely_type) if dev.likely_type else ""
