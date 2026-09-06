@@ -3586,6 +3586,77 @@ class TestSyncWithSchemaNoOwner:
         )
         assert manager._schema_no_owner_ids == set()
 
+    def test_sync_with_schema_skipped_ids_populated(self) -> None:
+        """sync_with_schema populates _schema_skipped_ids for _skipped devices."""
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        manager.sync_with_schema(
+            schema_device_ids={"37:001111", "37:002222"},
+            schema={
+                "37:001111": {
+                    "_class": "REM",
+                    "_owner": "me",
+                    "_skipped": True,
+                },
+                "37:002222": {"_class": "REM", "_owner": "me"},
+            },
+        )
+        assert "37:001111" in manager._schema_skipped_ids
+        assert "37:002222" not in manager._schema_skipped_ids
+
+    def test_sync_with_schema_skipped_keeps_new(self) -> None:
+        """sync_with_schema keeps NEW status for _skipped devices."""
+        from custom_components.ramses_cc.discovery import (
+            DeviceMetadata,
+            DiscoveryStatus,
+        )
+
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        # Device with _skipped in schema and NEW status
+        manager._metadata["37:001111"] = DeviceMetadata(
+            status=DiscoveryStatus.NEW
+        )
+        manager.sync_with_schema(
+            schema_device_ids={"37:001111"},
+            schema={
+                "37:001111": {
+                    "_class": "REM",
+                    "_owner": "me",
+                    "_skipped": True,
+                },
+            },
+        )
+        # Should stay NEW, not be auto-accepted
+        assert manager._metadata["37:001111"].status == DiscoveryStatus.NEW
+
+    def test_sync_with_schema_skipped_resets_accepted(self) -> None:
+        """sync_with_schema resets ACCEPTED → NEW for _skipped devices."""
+        from custom_components.ramses_cc.discovery import (
+            DeviceMetadata,
+            DiscoveryStatus,
+        )
+
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        # Device was previously accepted but now has _skipped in schema
+        manager._metadata["37:001111"] = DeviceMetadata(
+            status=DiscoveryStatus.ACCEPTED, enabled=True
+        )
+        manager.sync_with_schema(
+            schema_device_ids={"37:001111"},
+            schema={
+                "37:001111": {
+                    "_class": "REM",
+                    "_owner": "me",
+                    "_skipped": True,
+                },
+            },
+        )
+        # Should be reset to NEW for re-review
+        assert manager._metadata["37:001111"].status == DiscoveryStatus.NEW
+        assert manager._metadata["37:001111"].enabled is False
+
 
 class TestHgiNoOwnerKeepsNew:
     """Test that HGIs without _owner keep NEW status (line 658)."""
