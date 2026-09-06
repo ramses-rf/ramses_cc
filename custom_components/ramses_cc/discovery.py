@@ -278,6 +278,10 @@ class DiscoveryManager:
         # Populated by sync_with_schema().
         self._schema_no_owner_ids: set[str] = set()
         self._foreign_device_ids: set[str] = set()
+        # Devices in schema with _skipped: True — the user deferred them
+        # in a previous review.  They should stay NEW so they reappear
+        # in review_discovered when the user opens it again.
+        self._schema_skipped_ids: set[str] = set()
 
         # Track which mismatches we've already warned about (to avoid
         # repeating the WARNING every checkpoint cycle).  Cleared when
@@ -581,17 +585,25 @@ class DiscoveryManager:
         # candidates that need review (e.g. HGIs discovered via MQTT).
         # check_for_new_devices should NOT suppress them (issue 1119).
         self._schema_no_owner_ids = set()
+        # Devices in the schema with _skipped: True — the user deferred
+        # them in a previous review.  They should stay NEW so they
+        # reappear in review_discovered when the user opens it again.
+        self._schema_skipped_ids = set()
         if schema and isinstance(schema, dict):
             import re
 
             device_id_re = re.compile(r"^[0-9]{2}:[0-9]{6}$")
             for dev_id, entry in schema.items():
-                if (
-                    isinstance(entry, dict)
-                    and SZ_TR_OWNER not in entry
-                    and device_id_re.match(str(dev_id))
+                if not isinstance(entry, dict):
+                    continue
+                if SZ_TR_OWNER not in entry and device_id_re.match(
+                    str(dev_id)
                 ):
                     self._schema_no_owner_ids.add(dev_id)
+                if entry.get(SZ_TR_SKIPPED) and device_id_re.match(
+                    str(dev_id)
+                ):
+                    self._schema_skipped_ids.add(dev_id)
 
         _LOGGER.info(
             "DiscoveryManager: sync_with_schema with schema_device_ids=%s",
@@ -652,6 +664,10 @@ class DiscoveryManager:
                 # candidates — they're in the schema but haven't been
                 # accepted yet.  Keep status NEW so they appear in the
                 # review form for the user to accept (issue 1119).
+                #
+                # Exception: devices with _skipped: True in the schema were
+                # deferred by the user in a previous review.  Keep them NEW
+                # so they reappear in review_discovered when opened again.
                 if (
                     device_id.startswith(HGI_PREFIX)
                     and device_id in self._schema_no_owner_ids
@@ -659,6 +675,12 @@ class DiscoveryManager:
                     _LOGGER.info(
                         "DiscoveryManager: HGI %s is in schema without "
                         "_owner, keeping NEW status for review (issue 1119)",
+                        device_id,
+                    )
+                elif device_id in self._schema_skipped_ids:
+                    _LOGGER.info(
+                        "DiscoveryManager: device %s has _skipped in "
+                        "schema, keeping NEW status for re-review",
                         device_id,
                     )
                 else:
@@ -670,6 +692,23 @@ class DiscoveryManager:
                         "NEW status, marked as ACCEPTED",
                         device_id,
                     )
+            elif (
+                device_id in self._schema_skipped_ids
+                and meta.status == DiscoveryStatus.ACCEPTED
+            ):
+                # Device was previously accepted but now has _skipped in
+                # the schema (e.g. user manually added _skipped, or a
+                # previous review skip wrote it).  Reset to NEW so it
+                # reappears in review_discovered.
+                meta.status = DiscoveryStatus.NEW
+                meta.enabled = False
+                self._metadata[device_id] = meta
+                self._notified.discard(device_id)
+                _LOGGER.info(
+                    "DiscoveryManager: device %s has _skipped in schema, "
+                    "resetting ACCEPTED → NEW for re-review",
+                    device_id,
+                )
             elif (
                 device_id.startswith(HGI_PREFIX)
                 and meta.status == DiscoveryStatus.LOST
