@@ -821,6 +821,29 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         schema = copy.deepcopy(self.entry.options.get(CONF_SCHEMA, {}))
         schema_changed = False
+
+        # Ensure the primary HGI is in the schema with _class: HGI and
+        # _owner: root_owner.  With a clean schema (e.g. after the user
+        # cleared it for testing), the primary HGI won't be in the schema
+        # until sync_learned_topology runs (30-min cycle).  Without this,
+        # enforce_known_list blocks all commands because the known_list
+        # is derived from the schema and the primary HGI is missing.
+        primary_hgi = self._get_primary_hgi_id()
+        if (
+            primary_hgi
+            and primary_hgi.startswith(HGI_PREFIX)
+            and primary_hgi not in schema
+        ):
+            root_owner = schema.get(SZ_OWNER)
+            schema[primary_hgi] = {"_class": "HGI"}
+            if root_owner:
+                schema[primary_hgi][SZ_TR_OWNER] = root_owner
+            schema_changed = True
+            _LOGGER.info(
+                "Registered primary HGI %s in schema (was missing)",
+                primary_hgi,
+            )
+
         for dev_id, entry in schema.items():
             if (
                 dev_id.startswith(HGI_PREFIX)
