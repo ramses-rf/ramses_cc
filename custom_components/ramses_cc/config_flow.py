@@ -484,17 +484,20 @@ class BaseRamsesFlow:
         ports[CONF_MQTT_PATH] = CONF_MQTT_PATH
 
         # If exactly one ramses_esp32c6 Zigbee device is present, show its
-        # friendly name in the selector label. Otherwise show a generic label.
+        # friendly name in the selector label. Otherwise, show a generic label.
         try:
             dev_reg = dr.async_get(self.hass)
             matches = [
-                dev
-                for dev in getattr(dev_reg, "devices", {}).values()
-                if "ramses_esp32c6" in (dev.model or "").lower()
+                dev_entry
+                for dev_entry in dev_reg.async_get_devices(identifiers=DOMAIN)
+                if "ramses_esp32c6"
+                in (dev_reg.async_get(dev_entry).model or "").lower()
             ]
             if len(matches) == 1:
                 raw_name = (
-                    matches[0].name or matches[0].name_by_user or matches[0].id
+                    dev_reg.async_get(matches[0]).name
+                    or dev_reg.async_get(matches[0]).name_by_user
+                    or dev_reg.async_get(matches[0]).id
                 )
                 display_name = (
                     raw_name.split(" ", 1)[1].strip()
@@ -729,9 +732,10 @@ class BaseRamsesFlow:
 
             # No submission yet — find matching devices.
             matches = [
-                dev
-                for dev in getattr(dev_reg, "devices", {}).values()
-                if "ramses_esp32c6" in (dev.model or "").lower()
+                dev_entry
+                for dev_entry in dev_reg.async_get_devices(identifiers=DOMAIN)
+                if "ramses_esp32c6"
+                in (dev_reg.async_get(dev_entry).model or "").lower()
             ]
 
             if len(matches) == 0:
@@ -750,7 +754,7 @@ class BaseRamsesFlow:
 
             if len(matches) == 1:
                 candidate = matches[0]
-                ieee = _extract_ieee_from_device(candidate)
+                ieee = _extract_ieee_from_device(dev_reg.async_get(candidate))
 
                 if not ieee:
                     return self.async_show_form(
@@ -771,7 +775,7 @@ class BaseRamsesFlow:
                 )
                 _LOGGER.info(
                     "Auto-constructed Zigbee URL from device %s: %s",
-                    candidate.id,
+                    dev_reg.async_get(candidate).id,
                     zigbee_url,
                 )
                 self.options[SZ_SERIAL_PORT][SZ_PORT_NAME] = zigbee_url
@@ -780,10 +784,12 @@ class BaseRamsesFlow:
             # Multiple matches: present a selector for the user to choose.
             options = [
                 selector.SelectOptionDict(
-                    value=dev.id,
-                    label=dev.name or dev.name_by_user or dev.id,
+                    value=dev_reg.async_get(dev_entry).id,
+                    label=dev_reg.async_get(dev_entry).name
+                    or dev_reg.async_get(dev_entry).name_by_user
+                    or dev_reg.async_get(dev_entry).id,
                 )
-                for dev in matches
+                for dev_entry in matches
             ]
             return self.async_show_form(
                 step_id="zigbee_device",
