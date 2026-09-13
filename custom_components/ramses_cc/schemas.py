@@ -1782,6 +1782,40 @@ def sync_learned_topology(
                         continue
                     sensor = zone.get(SZ_SENSOR)
                     if sensor:
+                        # Zone already has a sensor — remove any remaining
+                        # sensor-type devices from the actuators list.
+                        # They can't be actuators (ramses_rf rejects THM as
+                        # actuator: "must be ('BdrSwitch', 'TrvActuator',
+                        # 'UfhCircuit')"), and leaving them causes SUPPRESSED
+                        # warnings on every reload (issue 1182).
+                        _sensor_dev_prefixes = ("01:", "22:", "34:")
+                        removed = [
+                            a
+                            for a in actuators
+                            if isinstance(a, str)
+                            and a[:3] in _sensor_dev_prefixes
+                        ]
+                        if removed:
+                            actuators[:] = [
+                                a
+                                for a in actuators
+                                if not (
+                                    isinstance(a, str)
+                                    and a[:3] in _sensor_dev_prefixes
+                                )
+                            ]
+                            changed = True
+                            for a in removed:
+                                _LOGGER.debug(
+                                    "sync_learned_topology: removed %s "
+                                    "from actuators (sensor-type device, "
+                                    "zone already has sensor %s) — "
+                                    "issue 1182",
+                                    a,
+                                    sensor,
+                                )
+                            if not actuators:
+                                zone.pop("actuators", None)
                         continue  # zone already has a sensor
                     # Find first sensor-type device in actuators
                     for act in list(actuators):

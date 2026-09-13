@@ -3213,6 +3213,54 @@ def test_sync_learned_topology_sanitizes_sensor_in_actuators() -> None:
     assert "04:034720" in zone["actuators"]
 
 
+def test_sync_learned_topology_removes_thm_from_actuators_when_zone_has_sensor() -> (
+    None
+):
+    """Sensor-type devices in actuators are removed when zone already has a sensor.
+
+    ramses_rf's 000C binding packets can place THM/RND devices (22:, 34:) in
+    a zone's actuators list.  When the zone already has a sensor, these
+    devices cannot be actuators (ramses_rf rejects THM as actuator: "must
+    be ('BdrSwitch', 'TrvActuator', 'UfhCircuit')"), and leaving them causes
+    SUPPRESSED warnings on every reload (issue 1182).
+    """
+    config: dict[str, Any] = {
+        SZ_MAIN_TCS: "01:068717",
+        "01:068717": {
+            SZ_ZONES: {
+                "00": {
+                    SZ_SENSOR: "22:072483",
+                    "actuators": ["04:034720", "22:072769", "22:072770"],
+                }
+            }
+        },
+    }
+    learned: dict[str, Any] = {
+        SZ_MAIN_TCS: "01:068717",
+        "01:068717": {
+            SZ_ZONES: {
+                "00": {
+                    SZ_SENSOR: "22:072483",
+                    "actuators": ["04:034720", "22:072769", "22:072770"],
+                    SZ_CLASS: "radiator_valve",
+                }
+            }
+        },
+        SZ_ORPHANS_HEAT: [],
+        SZ_ORPHANS_HVAC: [],
+    }
+    result = sync_learned_topology(config, learned)
+    assert result is not None
+    zone = result["01:068717"][SZ_ZONES]["00"]
+    # Sensor stays
+    assert zone[SZ_SENSOR] == "22:072483"
+    # THMs removed from actuators
+    assert "22:072769" not in zone.get("actuators", [])
+    assert "22:072770" not in zone.get("actuators", [])
+    # TRV stays in actuators
+    assert "04:034720" in zone["actuators"]
+
+
 def test_sync_learned_topology_trv_sensor_rnd_actuator_swapped() -> None:
     """TRV as sensor + RND in actuators → TRV moved to actuators, RND to sensor.
 
