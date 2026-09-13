@@ -858,9 +858,19 @@ class DiscoveryManager:
                     scan_type,
                 )
             else:
-                # Mismatch resolved — clear the flag
+                # Mismatch resolved — clear the flag, but ONLY if the
+                # existing mismatch was set by the scan engine (discovery=),
+                # not by _check_rf_contradictions (rf_suggests=).  The rf
+                # contradiction check runs before check_all_mismatches and
+                # may set a mismatch (e.g. rf_suggests=CO2) that the scan
+                # engine doesn't know about — clearing it here would hide
+                # the rf-suggested class from the review UI.
                 existing_meta = self._metadata.get(device_id)
-                if existing_meta and existing_meta.class_mismatch:
+                if (
+                    existing_meta
+                    and existing_meta.class_mismatch
+                    and "rf_suggests=" not in existing_meta.class_mismatch
+                ):
                     existing_meta.class_mismatch = None
                     self._metadata[device_id] = existing_meta
 
