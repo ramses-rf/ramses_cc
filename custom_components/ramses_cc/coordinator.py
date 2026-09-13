@@ -2178,9 +2178,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # Sanitize: ramses_rf's SCH_TRAITS_HEAT does not accept 'bound'
         # (only SCH_TRAITS_HVAC has it).  Remove 'bound' from:
         # - heat-prefix devices without an explicit class (default to heat)
-        # - any device with a heat class (e.g. DIS, CTL, TRV) — even if the
-        #   device ID prefix is non-heat (32: with _class=DIS from R24's
+        # - any device with a heat class (e.g. CTL, TRV, BDR) — even if the
+        #   device ID prefix is non-heat (32: with _class=CTL from R24's
         #   class mismatch test)
+        # Note: DIS, SW2, PIR are HVAC classes (in HVVAC_SLUGS) and DO
+        # accept 'bound'.
         _hvac_slugs = set(str(s) for s in DEV_TYPE_MAP.HVAC_SLUGS)
         _hvac_prefixes = ("32:", "29:", "37:", "63:")
         for _device_id, traits in known_list.items():
@@ -2191,7 +2193,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 # Explicit class: keep bound only for HVAC classes
                 if str(cls) in _hvac_slugs:
                     continue  # HVAC class — bound is valid
-                # Heat class (DIS, CTL, TRV, etc.) → remove bound
+                # Heat class (CTL, TRV, BDR, etc.) → remove bound
                 traits.pop("bound", None)
             else:
                 # No explicit class: ramses_rf defaults based on prefix.

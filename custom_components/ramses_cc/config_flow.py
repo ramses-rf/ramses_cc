@@ -3689,10 +3689,21 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 device_id = entry.device.device_id
                 action = user_input.get(f"mismatch_{device_id}", "skip")
                 if action == "update_class":
-                    # Update _class in schema to match discovery's likely_type
+                    # Update _class in schema to match the suggested class.
+                    # For scan-engine mismatches, likely_type is the
+                    # suggestion.  For ramses_rf contradiction mismatches
+                    # (rf_suggests=), likely_type is still the declared
+                    # class (REM), not the suggestion (CO2) — parse the
+                    # suggestion from the class_mismatch metadata string.
+                    mm = entry.metadata.class_mismatch or ""
+                    suggested_cls = entry.device.likely_type
+                    for key in ("rf_suggests=", "discovery="):
+                        if key in mm:
+                            suggested_cls = mm.split(key)[1].split(",")[0]
+                            break
                     dev_entry = config_schema.get(device_id)
                     if isinstance(dev_entry, dict):
-                        dev_entry[SZ_TR_CLASS] = str(entry.device.likely_type)
+                        dev_entry[SZ_TR_CLASS] = str(suggested_cls)
                         # Apply per-device owner if provided, else root owner
                         per_device_owner = (
                             user_input.get(f"owner_{device_id}", "") or ""
@@ -3706,8 +3717,9 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         class_updates.append(device_id)
                         _LOGGER.info(
                             "review_discovered: updated _class for %s to %s "
-                            "(discovery suggestion accepted)",
+                            "(suggestion accepted, was likely_type=%s)",
                             device_id,
+                            suggested_cls,
                             entry.device.likely_type,
                         )
                     # Clear dismissed flag — mismatch resolved by updating
@@ -3921,15 +3933,27 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             for entry in mismatched_only:
                 d = entry.device
                 # Parse the mismatch desc: "schema=FAN, discovery=DIS"
+                # or "schema=REM, rf_suggests=CO2" (from
+                # _check_rf_contradictions).
                 mm = entry.metadata.class_mismatch or ""
+                _LOGGER.debug(
+                    "review_discovered: mismatch entry device_id=%s "
+                    "class_mismatch=%r likely_type=%s confidence=%s",
+                    d.device_id,
+                    mm,
+                    d.likely_type,
+                    d.confidence,
+                )
                 schema_cls = (
                     mm.split("schema=")[1].split(",")[0]
                     if "schema=" in mm
                     else "?"
                 )
-                disc_cls = (
-                    mm.split("discovery=")[1] if "discovery=" in mm else "?"
-                )
+                disc_cls = "?"
+                for key in ("discovery=", "rf_suggests="):
+                    if key in mm:
+                        disc_cls = mm.split(key)[1].split(",")[0]
+                        break
                 lines.append(
                     f"| `{d.device_id}` | {schema_cls} | {disc_cls} | "
                     f"{d.confidence} |"
@@ -4152,12 +4176,24 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             d = entry.device
             device_id = d.device_id
             mm = entry.metadata.class_mismatch or ""
+            _LOGGER.debug(
+                "review_discovered form: mismatch entry device_id=%s "
+                "class_mismatch=%r likely_type=%s confidence=%s",
+                device_id,
+                mm,
+                d.likely_type,
+                d.confidence,
+            )
             schema_cls = (
                 mm.split("schema=")[1].split(",")[0]
                 if "schema=" in mm
                 else "?"
             )
-            disc_cls = mm.split("discovery=")[1] if "discovery=" in mm else "?"
+            disc_cls = "?"
+            for key in ("discovery=", "rf_suggests="):
+                if key in mm:
+                    disc_cls = mm.split(key)[1].split(",")[0]
+                    break
             field_label = (
                 f"{device_id} | schema _class={schema_cls} → "
                 f"discovery suggests {disc_cls} (conf={d.confidence})"
