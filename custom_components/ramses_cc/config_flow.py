@@ -3921,15 +3921,27 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             for entry in mismatched_only:
                 d = entry.device
                 # Parse the mismatch desc: "schema=FAN, discovery=DIS"
+                # or "schema=REM, rf_suggests=CO2" (from
+                # _check_rf_contradictions).
                 mm = entry.metadata.class_mismatch or ""
+                _LOGGER.debug(
+                    "review_discovered: mismatch entry device_id=%s "
+                    "class_mismatch=%r likely_type=%s confidence=%s",
+                    d.device_id,
+                    mm,
+                    d.likely_type,
+                    d.confidence,
+                )
                 schema_cls = (
                     mm.split("schema=")[1].split(",")[0]
                     if "schema=" in mm
                     else "?"
                 )
-                disc_cls = (
-                    mm.split("discovery=")[1] if "discovery=" in mm else "?"
-                )
+                disc_cls = "?"
+                for key in ("discovery=", "rf_suggests="):
+                    if key in mm:
+                        disc_cls = mm.split(key)[1].split(",")[0]
+                        break
                 lines.append(
                     f"| `{d.device_id}` | {schema_cls} | {disc_cls} | "
                     f"{d.confidence} |"
@@ -4152,12 +4164,24 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             d = entry.device
             device_id = d.device_id
             mm = entry.metadata.class_mismatch or ""
+            _LOGGER.debug(
+                "review_discovered form: mismatch entry device_id=%s "
+                "class_mismatch=%r likely_type=%s confidence=%s",
+                device_id,
+                mm,
+                d.likely_type,
+                d.confidence,
+            )
             schema_cls = (
                 mm.split("schema=")[1].split(",")[0]
                 if "schema=" in mm
                 else "?"
             )
-            disc_cls = mm.split("discovery=")[1] if "discovery=" in mm else "?"
+            disc_cls = "?"
+            for key in ("discovery=", "rf_suggests="):
+                if key in mm:
+                    disc_cls = mm.split(key)[1].split(",")[0]
+                    break
             field_label = (
                 f"{device_id} | schema _class={schema_cls} → "
                 f"discovery suggests {disc_cls} (conf={d.confidence})"
