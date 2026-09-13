@@ -1721,10 +1721,13 @@ class DiscoveryManager:
         # that check_class_mismatches may have missed (scan engine doesn't
         # re-classify known devices, so likely_type may agree with schema
         # even when ramses_rf's known_list suggests a different class).
+        # Note: _warned_mismatches only controls log-spam prevention for
+        # the WARNING log; the persistent notification must be sent
+        # whenever a mismatch exists, even if already warned.
         rf_flagged = [
             d_id
             for d_id, meta in self._metadata.items()
-            if meta.class_mismatch and d_id not in self._warned_mismatches
+            if meta.class_mismatch
         ]
         if rf_flagged:
             counts["class_mismatch"] += len(rf_flagged)
