@@ -2120,46 +2120,182 @@ async def test_set_fan_mode_unknown_custom_mode_raises_validation_error(
 async def test_hvac_set_preset_mode(
     mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
-    """Test RamsesHvac async_set_preset_mode success and error handling."""
+    """Test RamsesHvac async_set_preset_mode validation and sending."""
     mock_device = MagicMock(spec=HvacVentilator)
     mock_device.id = "30:123456"
+    mock_device._scheme = "orcon"
+    mock_device.get_bound_rem = MagicMock(return_value="37:111111")
+    mock_device._gateway = MagicMock()
+    mock_device._gateway.async_send_raw_command = AsyncMock()
+
+    mock_coordinator._remotes = {}
 
     hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
-    hvac.async_write_ha_state = MagicMock()
+    hvac.hass = MagicMock()
+    hvac.hass.config.language = "en"
+    hvac._bound_rem = "37:111111"
 
-    # 1. Validation Error (preset_modes is currently None)
+    # 1. Validation Error — invalid preset mode
     with pytest.raises(ServiceValidationError, match="invalid_preset_mode"):
-        await hvac.async_set_preset_mode("eco")
+        await hvac.async_set_preset_mode("nonexistent")
 
-    # Temporarily override the class attribute to test the execution paths
-    cast(Any, hvac)._attr_preset_modes = ["eco", "away"]
+    # 2. Success — send a strategy builtin boost_timer command
+    assert hvac.preset_modes is not None
+    assert "high_15" in hvac.preset_modes
+    await hvac.async_set_preset_mode("high_15")
+    mock_device._gateway.async_send_raw_command.assert_awaited_once()
 
-    # 2. Validation Error (Invalid Mode requested)
-    with pytest.raises(ServiceValidationError, match="invalid_preset_mode"):
-        await hvac.async_set_preset_mode("invalid_preset")
 
-    # 3. AttributeError (simulating missing set_preset_mode in ramses_rf)
-    mock_device.set_preset_mode = MagicMock(
-        side_effect=AttributeError("Missing method")
-    )
-    with pytest.raises(
-        HomeAssistantError,
-        match="Underlying ramses_rf lacks set_preset_mode",
-    ):
-        await hvac.async_set_preset_mode("eco")
+async def test_hvac_set_preset_mode_resolves_alias(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """async_set_preset_mode resolves Dutch aliases to canonical names."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device._scheme = "orcon"
+    mock_device.get_bound_rem = MagicMock(return_value="37:111111")
+    mock_device._gateway = MagicMock()
+    mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    # 4. Success Path
-    mock_device.set_preset_mode = AsyncMock()
-    await hvac.async_set_preset_mode("away")
-    mock_device.set_preset_mode.assert_awaited_once_with("away")
-    hvac.async_write_ha_state.assert_called_once()
+    mock_coordinator._remotes = {}
 
-    # 5. Generic Error Path
-    mock_device.set_preset_mode = AsyncMock(
-        side_effect=TransportError("Comms down")
-    )
-    with pytest.raises(HomeAssistantError, match="Failed to set preset mode"):
-        await hvac.async_set_preset_mode("eco")
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.hass = MagicMock()
+    hvac.hass.config.language = "nl"
+    hvac._bound_rem = "37:111111"
+
+    # Dutch alias "hoog_15" should resolve to canonical "high_15"
+    assert hvac.preset_modes is not None
+    assert "hoog_15" in hvac.preset_modes
+    await hvac.async_set_preset_mode("hoog_15")
+    mock_device._gateway.async_send_raw_command.assert_awaited_once()
+
+
+async def test_hvac_set_preset_mode_from_user_commands(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """async_set_preset_mode sends user-defined boost_timer commands."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem = MagicMock(return_value="37:111111")
+    mock_device._gateway = MagicMock()
+    mock_device._gateway.async_send_raw_command = AsyncMock()
+
+    # User-defined 22F3 command in REM _commands
+    mock_coordinator._remotes = {
+        "37:111111": {
+            "my_boost": " I --- 29:111111 30:123456 --:------ 22F3 003 00000A"
+        }
+    }
+    mock_coordinator.options = {SZ_KNOWN_LIST: {}}
+
+    # Mock the REM device as faked
+    rem_dev = MagicMock()
+    rem_dev.is_faked = True
+    mock_coordinator._get_device = MagicMock(return_value=rem_dev)
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.hass = MagicMock()
+    hvac.hass.config.language = "en"
+    hvac._bound_rem = "37:111111"
+
+    assert hvac.preset_modes is not None
+    assert "my_boost" in hvac.preset_modes
+    await hvac.async_set_preset_mode("my_boost")
+    mock_device._gateway.async_send_raw_command.assert_awaited_once()
+
+
+async def test_preset_modes_orcon_includes_boost_commands_and_aliases(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """preset_modes surfaces strategy boost_timer commands + Dutch aliases."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "32:123456"
+    mock_device._scheme = "orcon"
+    mock_device.get_bound_rem = MagicMock(return_value=None)
+
+    mock_coordinator._remotes = {}
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.hass = MagicMock()
+    hvac.hass.config.language = "nl"
+
+    modes = hvac.preset_modes
+    assert modes is not None
+    # Canonical boost_timer commands
+    assert "high_15" in modes
+    assert "low_30" in modes
+    assert "medium_60" in modes
+    # Dutch aliases (visible because HA lang is "nl")
+    assert "hoog_15" in modes
+    assert "laag_30" in modes
+    assert "middel_60" in modes
+
+
+async def test_preset_modes_orcon_hides_aliases_when_not_dutch(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """preset_modes hides Dutch aliases when HA language is not Dutch."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "32:123456"
+    mock_device._scheme = "orcon"
+    mock_device.get_bound_rem = MagicMock(return_value=None)
+
+    mock_coordinator._remotes = {}
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.hass = MagicMock()
+    hvac.hass.config.language = "en"
+
+    modes = hvac.preset_modes
+    assert modes is not None
+    # Canonical names present
+    assert "high_15" in modes
+    assert "low_30" in modes
+    # Dutch aliases hidden
+    assert "hoog_15" not in modes
+    assert "laag_30" not in modes
+
+
+async def test_preset_modes_no_scheme_returns_none(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """preset_modes returns None when device has no scheme (no boost commands)."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "32:123456"
+    mock_device.get_bound_rem = MagicMock(return_value=None)
+
+    mock_coordinator._remotes = {}
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.hass = MagicMock()
+    hvac.hass.config.language = "en"
+
+    assert hvac.preset_modes is None
+
+
+async def test_preset_modes_itho_has_simple_boost_commands(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """Itho preset_modes has simple boost commands (no speed selection)."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "32:123456"
+    mock_device._scheme = "itho"
+    mock_device.get_bound_rem = MagicMock(return_value=None)
+
+    mock_coordinator._remotes = {}
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.hass = MagicMock()
+    hvac.hass.config.language = "en"
+
+    modes = hvac.preset_modes
+    assert modes is not None
+    assert "boost_10" in modes
+    assert "boost_20" in modes
+    assert "boost_30" in modes
+    # Itho has no speed-specific boost commands
+    assert "high_15" not in modes
 
 
 async def test_climate_cooling_support(
@@ -2442,24 +2578,6 @@ async def test_hvac_custom_command_parse_failure(
         pytest.raises(HomeAssistantError, match="Failed to parse packet_str"),
     ):
         await hvac.async_set_fan_mode("custom_fan")
-
-
-async def test_hvac_set_preset_mode_missing_method(
-    mock_coordinator: MagicMock, mock_description: MagicMock
-) -> None:
-    # Arrange
-    mock_device = MagicMock(spec=HvacVentilator)
-    mock_device.id = "30:123456"
-    if hasattr(mock_device, "set_preset_mode"):
-        del mock_device.set_preset_mode
-    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
-    hvac._attr_preset_modes = ["eco"]
-
-    # Act & Assert - AttributeError caught and wrapped as HomeAssistantError
-    with pytest.raises(
-        HomeAssistantError, match="lacks set_preset_mode capability"
-    ):
-        await hvac.async_set_preset_mode("eco")
 
 
 # ---------------------------------------------------------------------------
