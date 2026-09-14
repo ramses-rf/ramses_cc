@@ -1564,7 +1564,17 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                         packet_str,
                     )
                 else:
-                    packet_str = None
+                    # Unrecognized command format — raise instead of
+                    # silently falling through to the ramses_rf native
+                    # set_fan_mode, which would reject custom command
+                    # names (e.g. Dutch aliases like 'laag') with a
+                    # confusing 'not valid for scheme' error (issue 985).
+                    raise ValueError(
+                        f"Fan mode '{fan_mode}' has an unrecognized"
+                        " command format in _commands (expected a"
+                        " packet string or a dict with"
+                        f" verb/code/payload keys): {cmd_def!r}"
+                    )
 
                 if packet_str is not None:
                     # parse_packet_string parses both CLI and raw packet

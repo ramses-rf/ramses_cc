@@ -1546,6 +1546,48 @@ async def test_hvac_set_fan_mode_rem_not_found_sends(
     mock_device._gateway.async_send_raw_command.assert_awaited_once()
 
 
+async def test_hvac_set_fan_mode_unrecognized_format_raises(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """async_set_fan_mode raises on unrecognized command format.
+
+    When a fan_mode IS found in the FAN's _commands but its value is
+    neither a dict template ({verb, code, payload}) nor a raw packet
+    string, the code must raise a clear error instead of silently
+    falling through to the ramses_rf native set_fan_mode (which would
+    reject custom names with a confusing 'not valid for scheme'
+    error).  See issue 985.
+    """
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "30:123456"
+    mock_device.get_bound_rem.return_value = "37:111111"
+    mock_device._gateway = MagicMock()
+    mock_device._gateway.async_send_raw_command = AsyncMock()
+    mock_device.set_fan_mode = AsyncMock()
+
+    # FAN has a command with an unrecognized format (dict with a
+    # code key so it classifies as 'mode' and appears in fan_modes,
+    # but missing verb/payload so _is_command_dict returns False)
+    mock_coordinator._remotes = {
+        "30:123456": {"laag": {"code": "22F1"}},
+    }
+    mock_coordinator.options = {SZ_KNOWN_LIST: {}}
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+    hvac.async_write_ha_state = MagicMock()
+    hvac._bound_rem = "37:111111"
+
+    with pytest.raises(
+        HomeAssistantError, match="unrecognized command format"
+    ):
+        await hvac.async_set_fan_mode("laag")
+
+    # Should NOT have sent the command
+    mock_device._gateway.async_send_raw_command.assert_not_awaited()
+    # Should NOT have fallen through to the ramses_rf native method
+    mock_device.set_fan_mode.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Phase 3d.6: _commands override vs native CQRS builder precedence tests
 # ---------------------------------------------------------------------------
