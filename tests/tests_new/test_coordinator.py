@@ -3574,6 +3574,39 @@ class TestDeriveKnownListFromSchema:
         assert result["37:168270"]["bound"] == "32:153289"
         assert result["37:168270"]["class"] == "REM"
 
+    def test_dis_class_keeps_bound(self) -> None:
+        """DIS-classed device keeps bound (DIS is an HVAC class).
+
+        DIS was previously treated as a heat class (not in HVVAC_SLUGS),
+        which caused _derive_known_list_from_schema to strip 'bound' from
+        DIS-classed devices.  Now DIS is in HVVAC_SLUGS and keeps bound.
+        """
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {},
+            "37:168270": {
+                "_bound": "32:153289",
+                "_class": "DIS",
+            },
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        assert result["37:168270"]["bound"] == "32:153289"
+        assert result["37:168270"]["class"] == "DIS"
+
+    def test_sw2_class_keeps_bound(self) -> None:
+        """SW2-classed device keeps bound (SW2 is an HVAC class)."""
+        schema = {
+            "main_tcs": "01:145038",
+            "01:145038": {},
+            "37:168270": {
+                "_bound": "32:153289",
+                "_class": "SW2",
+            },
+        }
+        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        assert result["37:168270"]["bound"] == "32:153289"
+        assert result["37:168270"]["class"] == "SW2"
+
     def test_scheme_trait_extracted(self) -> None:
         """_scheme on a FAN is extracted into known_list as scheme=<name>."""
         schema = {
