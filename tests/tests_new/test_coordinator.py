@@ -7565,6 +7565,154 @@ def test_create_client_socket_primary_no_additional_no_pool(
         assert "transport_constructor" not in kwargs
 
 
+def test_create_client_mqtt_ha_primary_with_zigbee_additional_uses_hybrid(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test mqtt_ha primary + zigbee:// additional uses the hybrid pool.
+
+    Phase 3: when the primary is HA-native MQTT and a zigbee:// additional
+    port is present, the pool is hybrid — MQTT callback-driven children
+    plus a transport-driven Zigbee child.  The primary goes into
+    ``mqtt_hgi_ids`` (callback-driven), the zigbee URL into
+    ``serial_additional`` (transport-driven), and ``primary_is_mqtt``
+    is set so the Zigbee child gets serial-free overrides
+    (SignaturePolicy.SKIP — no ``!I`` probing).
+    """
+    zigbee_url = (
+        "zigbee://10:bd:a3:ff:fe:a7:e0:dc/0xfc00/0x0000/10/0xfc01/0x0000/10"
+    )
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt_ha"},
+        CONF_MQTT_USE_HA: True,
+        CONF_MQTT_HGI_ID: "18:001111",
+        CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
+        CONF_ADDITIONAL_PORTS: [zigbee_url],
+        CONF_SCHEMA: {SZ_OWNER: "me"},
+        CONF_RAMSES_RF: {},
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+
+    with (
+        patch("custom_components.ramses_cc.coordinator.Gateway") as mock_gwy,
+        patch.object(
+            mock_coordinator,
+            "_create_hybrid_pool_transport_constructor",
+        ) as mock_hybrid_ctor,
+        patch(
+            "custom_components.ramses_cc.coordinator.RamsesMqttPoolBridge"
+        ) as mock_bridge_cls,
+        patch.object(
+            mock_coordinator.hass.config_entries,
+            "async_entries",
+            return_value=["mqtt"],
+        ),
+    ):
+        mock_coordinator._create_client({})
+
+        # Hybrid pool constructor IS called for the zigbee additional port.
+        mock_hybrid_ctor.assert_called_once()
+        kwargs = cast(Any, mock_hybrid_ctor).call_args.kwargs
+        assert kwargs["primary_is_mqtt"] is True
+        assert kwargs["serial_additional"] == [zigbee_url]
+        assert "18:001111" in kwargs["mqtt_hgi_ids"]
+        # The MQTT bridge is created inside the hybrid constructor, not
+        # here — double-creation would subscribe twice.
+        mock_bridge_cls.assert_not_called()
+        # Gateway receives the hybrid transport_constructor.
+        gwy_kwargs = cast(Any, mock_gwy).call_args.kwargs
+        assert "transport_constructor" in gwy_kwargs
+
+
+def test_create_client_mqtt_ha_primary_no_zigbee_uses_bridge(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test mqtt_ha primary without zigbee ports uses the plain bridge.
+
+    The Phase 3 hybrid path must only trigger when a zigbee:// additional
+    port is present — a plain MQTT pool still goes through the
+    RamsesMqttPoolBridge directly.
+    """
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt_ha"},
+        CONF_MQTT_USE_HA: True,
+        CONF_MQTT_HGI_ID: "18:001111",
+        CONF_MQTT_TOPIC: "RAMSES/GATEWAY",
+        CONF_ADDITIONAL_PORTS: [],
+        CONF_SCHEMA: {SZ_OWNER: "me"},
+        CONF_RAMSES_RF: {},
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+
+    with (
+        patch("custom_components.ramses_cc.coordinator.Gateway"),
+        patch.object(
+            mock_coordinator,
+            "_create_hybrid_pool_transport_constructor",
+        ) as mock_hybrid_ctor,
+        patch(
+            "custom_components.ramses_cc.coordinator.RamsesMqttPoolBridge"
+        ) as mock_bridge_cls,
+        patch(
+            "custom_components.ramses_cc.coordinator._MqttHgiDiscoveryCallback"
+        ),
+        patch.object(
+            mock_coordinator.hass.config_entries,
+            "async_entries",
+            return_value=["mqtt"],
+        ),
+    ):
+        mock_bridge = mock_bridge_cls.return_value
+        mock_bridge.async_transport_factory = MagicMock()
+
+        mock_coordinator._create_client({})
+
+        # No zigbee ports → hybrid constructor NOT used; plain bridge is.
+        mock_hybrid_ctor.assert_not_called()
+        mock_bridge_cls.assert_called_once()
+
+
+def test_extract_pool_hgis_excludes_zigbee_members(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Test zigbee-pool HGIs are excluded from the MQTT bridge HGI list.
+
+    Phase 3: a Zigbee-mode member has no MQTT capability — adding its
+    HGI to the MQTT bridge would create a phantom duplicate child.
+    Exclusion works via ``_preferred_type: zigbee`` or via the HGI ID
+    derived from a zigbee:// additional port's IEEE address.
+    """
+    zigbee_url = (
+        "zigbee://10:bd:a3:ff:fe:a7:e0:dc/0xfc00/0x0000/10/0xfc01/0x0000/10"
+    )
+    mock_coordinator.options = {
+        SZ_SERIAL_PORT: {
+            SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
+        },
+        CONF_MQTT_HGI_ID: "18:001111",
+        CONF_ADDITIONAL_PORTS: [zigbee_url],
+        CONF_SCHEMA: {
+            SZ_OWNER: "me",
+            "18:001111": {"_class": "HGI", SZ_TR_OWNER: "me"},
+            "18:002222": {"_class": "HGI", SZ_TR_OWNER: "me"},
+            # HGI derived from the zigbee URL's IEEE (real C6 vector).
+            "18:254172": {"_class": "HGI", SZ_TR_OWNER: "me"},
+            # Explicit zigbee-preferred member, no matching URL needed.
+            "18:003333": {
+                "_class": "HGI",
+                SZ_TR_OWNER: "me",
+                "_preferred_type": "zigbee",
+            },
+        },
+    }
+    mock_coordinator.entry.options = mock_coordinator.options
+
+    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    assert "18:001111" in pool_hgis
+    assert "18:002222" in pool_hgis
+    assert "18:254172" not in pool_hgis
+    assert "18:003333" not in pool_hgis
+
+
 def test_create_client_mqtt_primary_with_schema_pool_hgis(
     mock_coordinator: RamsesCoordinator,
 ) -> None:

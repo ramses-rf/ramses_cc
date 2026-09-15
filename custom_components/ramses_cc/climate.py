@@ -223,6 +223,15 @@ def _is_fan_mode_command(cmd_value: Any) -> bool:
     return _command_type(cmd_value) == _CMD_TYPE_MODE
 
 
+def _is_boost_timer_command(cmd_value: Any) -> bool:
+    """Check if a _commands entry is a boost timer command.
+
+    :param cmd_value: The command value (dict template or packet string).
+    :return: True if the command is classified as ``boost_timer``.
+    """
+    return _command_type(cmd_value) == _CMD_TYPE_BOOST_TIMER
+
+
 def _normalise_fan_info_for_selector(
     fan_info: str | None, strategy: HvacStrategyBase | None
 ) -> str | None:
@@ -1271,7 +1280,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
     _attr_precision: float = PRECISION_TENTHS
     _attr_preset_modes: list[str] | None = None
     _attr_supported_features: ClimateEntityFeature = (
-        ClimateEntityFeature.FAN_MODE
+        ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.PRESET_MODE
     )
     _attr_temperature_unit: str = UnitOfTemperature.CELSIUS
 
@@ -1461,6 +1470,73 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         return base_modes
 
     @property
+    def preset_modes(self) -> list[str] | None:
+        """Return the list of available preset modes (boost timers).
+
+        Surfaces 22F3 timed boost commands from:
+
+        1. Strategy-provided ``builtin_commands`` of type
+           ``boost_timer`` (e.g. ``high_15``, ``low_30`` for Orcon)
+        2. Strategy-provided boost aliases (e.g. Dutch ``hoog_15``,
+           ``laag_30``) when HA's language matches the alias locale
+        3. Custom boost_timer commands from the FAN's own schema
+           ``_commands``
+        4. Custom boost_timer commands from the bound REM's
+           ``_commands``
+
+        Returns ``None`` when no boost commands are available, which
+        tells HA to hide the preset selector.
+        """
+        modes: list[str] = []
+
+        strategy = _get_device_strategy(self._device)
+        if strategy is not None:
+            # Strategy-provided builtin boost_timer commands
+            builtin = getattr(strategy, "builtin_commands", None)
+            if builtin:
+                for cmd_name, cmd_template in builtin.items():
+                    if (
+                        _is_boost_timer_command(cmd_template)
+                        and cmd_name not in modes
+                    ):
+                        modes.append(cmd_name)
+                # Boost aliases (shown only when language matches)
+                if _is_alias_language_active(self.hass, strategy):
+                    boost_aliases = getattr(strategy, "_boost_aliases", {})
+                    for alias, canonical in boost_aliases.items():
+                        if canonical in builtin and alias not in modes:
+                            modes.append(alias)
+
+        remotes = getattr(self.coordinator, "_remotes", {}) or {}
+
+        # FAN's own _commands (boost_timer type)
+        fan_commands = remotes.get(self._device.id, {})
+        if isinstance(fan_commands, dict):
+            cmds, _ = _split_commands(fan_commands)
+            for cmd_name, cmd_value in cmds.items():
+                if cmd_name not in modes and _is_boost_timer_command(
+                    cmd_value
+                ):
+                    modes.append(cmd_name)
+
+        # Bound REM's _commands (boost_timer type)
+        bound_rem = self._bound_rem or self._device.get_bound_rem()
+        if bound_rem:
+            rem_dev = self.coordinator._get_device(str(bound_rem))
+            if rem_dev is not None and not rem_dev.is_faked:
+                return modes or None
+            rem_commands = remotes.get(str(bound_rem), {})
+            if isinstance(rem_commands, dict):
+                cmds, _ = _split_commands(rem_commands)
+                for cmd_name, cmd_value in cmds.items():
+                    if cmd_name not in modes and _is_boost_timer_command(
+                        cmd_value
+                    ):
+                        modes.append(cmd_name)
+
+        return modes or None
+
+    @property
     def hvac_action(self) -> HVACAction | None:
         """Return the current running hvac operation if supported.
 
@@ -1636,9 +1712,18 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
             raise HomeAssistantError(f"Failed to set fan mode: {err}") from err
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        """Set new target preset mode for the HVAC device.
+        """Set new target preset mode (boost timer) for the HVAC device.
 
-        :param preset_mode: The preset mode (e.g., 'away', 'eco').
+        Sends a 22F3 timed boost command.  Like ``async_set_fan_mode``,
+        this checks (in priority order):
+
+        1. Strategy ``builtin_commands`` (dict templates)
+        2. FAN's schema ``_commands`` (dict templates or packet strings)
+        3. Bound REM's schema ``_commands`` (packet strings)
+
+        Aliases are resolved to canonical names before lookup.
+
+        :param preset_mode: The preset mode (e.g., 'high_15', 'low_30').
         :raises ServiceValidationError: If requested mode is invalid.
         :raises HomeAssistantError: If the transmission fails.
         """
@@ -1650,23 +1735,115 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
             )
 
         try:
-            # Delegate to the underlying ramses_rf device.
-            # This method will be implemented in ramses_rf in the future.
-            set_preset_mode = getattr(self._device, "set_preset_mode", None)
-            if set_preset_mode is None:
-                raise AttributeError("Device does not support set_preset_mode")
-            await set_preset_mode(preset_mode)
-            self.async_write_ha_state()
+            # Resolve alias to canonical name
+            strategy = _get_device_strategy(self._device)
+            canonical = preset_mode
+            if strategy is not None:
+                boost_aliases = getattr(strategy, "_boost_aliases", {})
+                canonical = boost_aliases.get(preset_mode, preset_mode)
 
-        except AttributeError as err:
-            _LOGGER.error(
-                "The ramses_rf HvacVentilator class is missing the "
-                "set_preset_mode method.",
-                exc_info=True,
-            )
+            # 1. Strategy builtin_commands (dict templates)
+            if strategy is not None:
+                builtin = getattr(strategy, "builtin_commands", None)
+                if builtin and canonical in builtin:
+                    cmd_def = builtin[canonical]
+                    if _is_command_dict(cmd_def):
+                        packet_str = _build_packet_from_template(
+                            cmd_def, self._device, self.coordinator
+                        )
+                        _LOGGER.info(
+                            "Intercepted preset_mode '%s'; building from"
+                            " strategy builtin: %s",
+                            preset_mode,
+                            packet_str,
+                        )
+                        cmd = parse_packet_string(packet_str)
+                        if cmd is None:
+                            raise ValueError(
+                                f"Failed to parse packet_str: {packet_str}"
+                            )
+                        await self._device._gateway.async_send_raw_command(
+                            cmd, num_repeats=2, priority=Priority.HIGH
+                        )
+                        return
+
+            # 2. User-defined custom commands (FAN then REM)
+            remotes = getattr(self.coordinator, "_remotes", {}) or {}
+            if not isinstance(remotes, dict):
+                remotes = {}
+
+            fan_commands = remotes.get(self._device.id, {})
+            if isinstance(fan_commands, dict):
+                fan_commands, _ = _split_commands(fan_commands)
+
+            bound_rem = self._bound_rem or self._device.get_bound_rem()
+            rem_commands: dict[str, Any] = {}
+            if bound_rem:
+                rem_commands = remotes.get(str(bound_rem), {})
+                if isinstance(rem_commands, dict):
+                    rem_commands, _ = _split_commands(rem_commands)
+
+            # Check FAN commands first
+            if canonical in fan_commands:
+                cmd_def = fan_commands[canonical]
+                if _is_command_dict(cmd_def):
+                    packet_str = _build_packet_from_template(
+                        cmd_def, self._device, self.coordinator
+                    )
+                elif isinstance(cmd_def, str):
+                    packet_str = cmd_def
+                else:
+                    raise ValueError(
+                        f"Preset mode '{preset_mode}' has an unrecognized"
+                        " command format in _commands (expected a"
+                        " packet string or a dict with"
+                        f" verb/code/payload keys): {cmd_def!r}"
+                    )
+                _LOGGER.info(
+                    "Intercepted preset_mode '%s'; sending from FAN"
+                    " _commands: %s",
+                    preset_mode,
+                    packet_str,
+                )
+                cmd = parse_packet_string(packet_str)
+                if cmd is None:
+                    raise ValueError(
+                        f"Failed to parse packet_str: {packet_str}"
+                    )
+                await self._device._gateway.async_send_raw_command(
+                    cmd, num_repeats=2, priority=Priority.HIGH
+                )
+                return
+
+            # Check REM packet strings
+            if canonical in rem_commands:
+                if bound_rem:
+                    rem_dev = self.coordinator._get_device(str(bound_rem))
+                    if rem_dev is not None and not rem_dev.is_faked:
+                        raise HomeAssistantError(
+                            f"Bound REM {bound_rem} is not configured for "
+                            f"faking — cannot send custom command"
+                        )
+                cmd_str = rem_commands[canonical]
+                _LOGGER.info(
+                    "Intercepted preset_mode '%s'; sending from REM"
+                    " _commands: %s",
+                    preset_mode,
+                    cmd_str,
+                )
+                cmd = parse_packet_string(str(cmd_str))
+                if cmd is None:
+                    raise ValueError(f"Failed to parse cmd_str: {cmd_str}")
+                await self._device._gateway.async_send_raw_command(
+                    cmd, num_repeats=2, priority=Priority.HIGH
+                )
+                return
+
             raise HomeAssistantError(
-                "Underlying ramses_rf lacks set_preset_mode capability."
-            ) from err
+                f"Preset mode '{preset_mode}' was not found in strategy"
+                " builtin_commands or user _commands"
+            )
+
         except Exception as err:
             raise HomeAssistantError(
                 f"Failed to set preset mode: {err}"

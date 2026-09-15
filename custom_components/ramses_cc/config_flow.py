@@ -1941,12 +1941,13 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 CONF_MQTT_HA_ID = "__mqtt_ha_id__"
                 CONF_MQTT_FULL_URL = "__mqtt_full_url__"
                 CONF_SERIAL_PORT = "__serial_port__"
+                CONF_ZIGBEE_DEVICE_ADD = "__zigbee_device_add__"
 
                 # Phase 2: serial pool children are now supported.
                 # MQTT pool children are callback-driven via the
                 # HA-native RamsesMqttPoolBridge (no paho inside HA,
                 # issue 1119).  Both serial and MQTT can be mixed.
-                # Zigbee remains gated until Phase 3.
+                # Phase 3: Zigbee pool children are supported via ZHA/zigpy.
 
                 if add_choice == CONF_MQTT_HA_ID:
                     # HA MQTT device ID — just enter 18:NNNNNN
@@ -1974,6 +1975,14 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                             wait_timeout
                         )
                     return await self.async_step_manage_pool_serial()
+                elif add_choice == CONF_ZIGBEE_DEVICE_ADD:
+                    # Zigbee device — select from ZHA-paired ramses_esp32c6
+                    self.options[CONF_ADDITIONAL_PORTS] = additional
+                    if wait_timeout is not None:
+                        self.options[CONF_WAIT_ONLINE_TIMEOUT] = float(
+                            wait_timeout
+                        )
+                    return await self.async_step_manage_pool_zigbee()
                 elif add_choice and add_choice.startswith("__readd__"):
                     # Re-add a previously removed HGI
                     readd_id = add_choice[len("__readd__") :]
@@ -2612,11 +2621,12 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         # Serial children are transport-driven (serialx); MQTT children
         # are callback-driven via the HA-native RamsesMqttPoolBridge
         # (no paho inside HA — issue 1119).
-        # Zigbee remains gated until Phase 3 (PR 6).
-        # TODO: re-enable zigbee when Phase 3 (PR 6) lands.
+        # Phase 3: Zigbee HGIs are supported as transport-driven children
+        # via ZHA/zigpy.
         CONF_MQTT_HA_ID = "__mqtt_ha_id__"
         CONF_MQTT_FULL_URL = "__mqtt_full_url__"
         CONF_SERIAL_PORT = "__serial_port__"
+        CONF_ZIGBEE_DEVICE_ADD = "__zigbee_device_add__"
         add_options: list[selector.SelectOptionDict] = [
             selector.SelectOptionDict(value=NO_ADD, label="(nothing to add)"),
             selector.SelectOptionDict(
@@ -2628,6 +2638,9 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             ),
             selector.SelectOptionDict(
                 value=CONF_SERIAL_PORT, label="Serial/USB port..."
+            ),
+            selector.SelectOptionDict(
+                value=CONF_ZIGBEE_DEVICE_ADD, label="Zigbee device..."
             ),
         ]
         # List removed HGIs so the user can re-add them directly.
@@ -2775,9 +2788,9 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 pref_options.append(
                     selector.SelectOptionDict(value="usb", label=usb_label)
                 )
-                zb_label = "Zigbee (not yet supported)"
+                zb_label = "Zigbee"
                 if "zigbee" in detected_types:
-                    zb_label = "Zigbee (detected, not yet supported)"
+                    zb_label = "Zigbee (detected)"
                 pref_options.append(
                     selector.SelectOptionDict(value="zigbee", label=zb_label)
                 )
@@ -3326,6 +3339,48 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                             if zigbee_url not in additional:
                                 additional = additional + [zigbee_url]
                             self.options[CONF_ADDITIONAL_PORTS] = additional
+
+                            # Register the derived HGI ID in the schema
+                            # so the pool accepts the Zigbee child as a
+                            # send-capable member (not receive-only).
+                            # ramses_esp derives its gateway ID from the
+                            # base MAC: (mac[3]<<16|mac[4]<<8|mac[5])
+                            # & 0x3FFFF.  The IEEE is the base MAC with
+                            # ff:fe inserted, so mac[3:6] == ieee[5:8].
+                            try:
+                                from ramses_tx.transport.zigbee.transport import (
+                                    _hgi_id_from_ieee,
+                                )
+
+                                zigbee_hgi = _hgi_id_from_ieee(ieee)
+                            except ImportError:
+                                zigbee_hgi = None
+                            if zigbee_hgi:
+                                schema_dict = deepcopy(
+                                    self.options.get(CONF_SCHEMA, {})
+                                )
+                                root_owner = schema_dict.get(SZ_OWNER) or "me"
+                                schema_dict[SZ_OWNER] = root_owner
+                                if not isinstance(
+                                    schema_dict.get(zigbee_hgi), dict
+                                ):
+                                    schema_dict[zigbee_hgi] = {}
+                                schema_dict[zigbee_hgi]["_class"] = "HGI"
+                                schema_dict[zigbee_hgi][SZ_TR_OWNER] = (
+                                    root_owner
+                                )
+                                schema_dict[zigbee_hgi]["_preferred_type"] = (
+                                    "zigbee"
+                                )
+                                schema_dict[zigbee_hgi].pop(
+                                    "_removed_from_pool", None
+                                )
+                                self.options[CONF_SCHEMA] = schema_dict
+                                _LOGGER.info(
+                                    "Registered Zigbee HGI %s in schema",
+                                    zigbee_hgi,
+                                )
+
                             _LOGGER.info(
                                 "Added Zigbee additional port: %s",
                                 zigbee_url,
@@ -3340,7 +3395,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             data_schema = {
                 prob.Required("device"): selector.DeviceSelector(
                     selector.DeviceSelectorConfig(
-                        model="ramses_esp32c6",
+                        model="Ramses_esp32c6",
                     )
                 ),
             }
@@ -4104,9 +4159,9 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 pref_opts.append(
                     selector.SelectOptionDict(value="usb", label=usb_lbl)
                 )
-                zb_lbl = "Zigbee (not yet supported)"
+                zb_lbl = "Zigbee"
                 if "zigbee" in detected_types:
-                    zb_lbl = "Zigbee (detected, not yet supported)"
+                    zb_lbl = "Zigbee (detected)"
                 pref_opts.append(
                     selector.SelectOptionDict(value="zigbee", label=zb_lbl)
                 )
