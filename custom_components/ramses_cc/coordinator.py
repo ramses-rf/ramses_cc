@@ -1768,7 +1768,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 _hgi_id_from_ieee,
             )
 
-            for p in self.options.get(CONF_ADDITIONAL_PORTS, []):
+            for p in self.entry.options.get(CONF_ADDITIONAL_PORTS, []):
                 if isinstance(p, str) and p.startswith("zigbee://"):
                     ieee = urlparse(p).netloc
                     hgi = _hgi_id_from_ieee(ieee)
