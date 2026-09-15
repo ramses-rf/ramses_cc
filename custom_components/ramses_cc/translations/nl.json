@@ -142,8 +142,6 @@
             "invalid_schema": "Ongeldig schema: {error_detail}",
             "invalid_traits": "Ongeldige device-kenmerken: {error_detail}",
             "pool_duplicate_primary": "De primaire poort kan geen extra poort zijn.",
-            "pool_serial_not_supported": "Seriële/USB-poolleden worden nog niet ondersteund (gepland voor Fase 2).",
-            "pool_zigbee_not_supported": "Zigbee-poolleden worden nog niet ondersteund (gepland voor Fase 3).",
             "pool_mqtt_requires_mqtt_primary": "MQTT-poolleden vereisen een MQTT-primaire transport. Schakel de primaire poort eerst naar MQTT.",
             "pool_confirm_clear_last": "U verwijdert de laatste HGI. Vink 'Bevestig: alle HGI's wissen' hieronder aan en dien opnieuw in om door te gaan.",
             "mqtt_hgi_id_required": "Voer een HGI-apparaat-ID in.",
