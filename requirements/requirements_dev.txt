@@ -22,7 +22,7 @@
 # used for development (typing)
     mypy >= 2.3.1
     types-PyYAML >= 6.0.12.20260906
-    probatio >= 0.11.4
+    probatio >= 0.12.2
 
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest
