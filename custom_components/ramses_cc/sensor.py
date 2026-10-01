@@ -37,6 +37,7 @@ from homeassistant.helpers.typing import StateType
 from ramses_rf.const import (
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
+    SZ_BOILER_EXHAUST_TEMP,
     SZ_BOILER_OUTPUT_TEMP,
     SZ_BOILER_RETURN_TEMP,
     SZ_BOILER_SETPOINT,
@@ -65,6 +66,7 @@ from ramses_rf.const import (
     SZ_INDOOR_TEMP,
     SZ_MAX_REL_MODULATION,
     SZ_OEM_CODE,
+    SZ_OEM_FAULT_CODE,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
     SZ_OUTSIDE_TEMP,
@@ -707,6 +709,15 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
     ),
     RamsesSensorEntityDescription(
+        key=SZ_BOILER_EXHAUST_TEMP,
+        ramses_rf_class=OtbGateway,
+        ramses_rf_attr=SZ_BOILER_EXHAUST_TEMP,
+        name="Boiler exhaust temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        suggested_unit_of_measurement=UnitOfTemperature.CELSIUS,
+    ),
+    RamsesSensorEntityDescription(
         key=SZ_BOILER_OUTPUT_TEMP,
         ramses_rf_class=OtbGateway,
         ramses_rf_attr=SZ_BOILER_OUTPUT_TEMP,
@@ -1024,6 +1035,15 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
         ramses_rf_attr=SZ_OEM_CODE,
         name="OEM code",
         state_class=None,
+        entity_registry_enabled_default=False,
+    ),
+    RamsesSensorEntityDescription(
+        key=SZ_OEM_FAULT_CODE,
+        ramses_rf_class=OtbGateway,
+        ramses_rf_attr=SZ_OEM_FAULT_CODE,
+        name="OEM fault code",
+        state_class=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
     RamsesSensorEntityDescription(
