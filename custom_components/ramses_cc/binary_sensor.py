@@ -26,6 +26,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from ramses_rf.const import (
+    SZ_AIR_PRESSURE_FAULT,
     SZ_BATTERY_LEVEL,
     SZ_BATTERY_LOW,
     SZ_BATTERY_STATE,
@@ -41,9 +42,14 @@ from ramses_rf.const import (
     SZ_FILTER_DIRTY,
     SZ_FLAME_ACTIVE,
     SZ_FROST_CYCLE,
+    SZ_GAS_FLAME_FAULT,
     SZ_HAS_FAULT,
+    SZ_LOCKOUT_RESET,
+    SZ_LOW_WATER_PRESSURE,
     SZ_OTC_ACTIVE,
+    SZ_SERVICE_REQUEST,
     SZ_SUMMER_MODE,
+    SZ_WATER_OVER_TEMPERATURE,
 )
 from ramses_rf.devices import (
     BdrSwitch,
@@ -682,12 +688,10 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RamsesBinarySensorEntityDescription, ...] = (
         icon="mdi:alert",
         name="Fault present",
     ),
-    # OpenTherm application-specific fault flags (msg_id 0x05); literal
-    # attrs so import works on ramses_rf versions without the SZ_ consts —
-    # entities are simply not created when OtbGateway lacks the attr
+    # OpenTherm application-specific fault flags (msg_id 0x05)
     RamsesBinarySensorEntityDescription(
-        key="service_request",
-        ramses_rf_attr="service_request",
+        key=SZ_SERVICE_REQUEST,
+        ramses_rf_attr=SZ_SERVICE_REQUEST,
         ramses_rf_class=OtbGateway,
         name="Service request",
         device_class=BinarySensorDeviceClass.PROBLEM,
@@ -695,16 +699,16 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RamsesBinarySensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
     ),
     RamsesBinarySensorEntityDescription(
-        key="lockout_reset",
-        ramses_rf_attr="lockout_reset",
+        key=SZ_LOCKOUT_RESET,
+        ramses_rf_attr=SZ_LOCKOUT_RESET,
         ramses_rf_class=OtbGateway,
         name="Lockout reset enabled",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
     RamsesBinarySensorEntityDescription(
-        key="low_water_pressure",
-        ramses_rf_attr="low_water_pressure",
+        key=SZ_LOW_WATER_PRESSURE,
+        ramses_rf_attr=SZ_LOW_WATER_PRESSURE,
         ramses_rf_class=OtbGateway,
         name="Low water pressure",
         device_class=BinarySensorDeviceClass.PROBLEM,
@@ -712,8 +716,8 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RamsesBinarySensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
     ),
     RamsesBinarySensorEntityDescription(
-        key="gas_flame_fault",
-        ramses_rf_attr="gas_flame_fault",
+        key=SZ_GAS_FLAME_FAULT,
+        ramses_rf_attr=SZ_GAS_FLAME_FAULT,
         ramses_rf_class=OtbGateway,
         name="Gas/flame fault",
         device_class=BinarySensorDeviceClass.PROBLEM,
@@ -721,8 +725,8 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RamsesBinarySensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
     ),
     RamsesBinarySensorEntityDescription(
-        key="air_pressure_fault",
-        ramses_rf_attr="air_pressure_fault",
+        key=SZ_AIR_PRESSURE_FAULT,
+        ramses_rf_attr=SZ_AIR_PRESSURE_FAULT,
         ramses_rf_class=OtbGateway,
         name="Air pressure fault",
         device_class=BinarySensorDeviceClass.PROBLEM,
@@ -730,8 +734,8 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[RamsesBinarySensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
     ),
     RamsesBinarySensorEntityDescription(
-        key="water_over_temperature",
-        ramses_rf_attr="water_over_temperature",
+        key=SZ_WATER_OVER_TEMPERATURE,
+        ramses_rf_attr=SZ_WATER_OVER_TEMPERATURE,
         ramses_rf_class=OtbGateway,
         name="Water over-temperature",
         device_class=BinarySensorDeviceClass.PROBLEM,
