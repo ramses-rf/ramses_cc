@@ -41,10 +41,11 @@ from homeassistant.components.persistent_notification import (
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from ramses_tx.address import is_hgi_id
+
 from .const import (
     DEFAULT_HGI_ID,
     DOMAIN,
-    HGI_PREFIX,
     SZ_DEVICE_COMMENTS,
     SZ_TR_BOUND,
     SZ_TR_CLASS,
@@ -322,7 +323,7 @@ class DiscoveryManager:
     @staticmethod
     def _is_hgi(device_id: str) -> bool:
         """Return True if ``device_id`` is an HGI gateway (18: prefix)."""
-        return device_id.startswith(HGI_PREFIX)
+        return is_hgi_id(device_id)
 
     @staticmethod
     def _hgi_likely_type(device_id: str, likely_type: str | None) -> str:
@@ -332,7 +333,7 @@ class DiscoveryManager:
         ``likely_type`` may be ``"unknown"`` or ``None``.  The 18:
         prefix is authoritative — always use ``"HGI"``.
         """
-        if device_id.startswith(HGI_PREFIX) and (
+        if is_hgi_id(device_id) and (
             not likely_type or likely_type.lower() == "unknown"
         ):
             return "HGI"
@@ -612,8 +613,7 @@ class DiscoveryManager:
                     # explicitly removed by the user and should not
                     # reappear as discovery candidates (issue 1171).
                     if not (
-                        dev_id.startswith(HGI_PREFIX)
-                        and entry.get("_removed_from_pool")
+                        is_hgi_id(dev_id) and entry.get("_removed_from_pool")
                     ):
                         self._schema_no_owner_ids.add(dev_id)
                 if entry.get(SZ_TR_SKIPPED):
@@ -683,7 +683,7 @@ class DiscoveryManager:
                 # by the user.  Keep status NEW so they don't get
                 # permanently accepted (issue 1136).
                 if (
-                    device_id.startswith(HGI_PREFIX)
+                    is_hgi_id(device_id)
                     and device_id in self._schema_no_owner_ids
                 ):
                     _LOGGER.info(
@@ -722,10 +722,7 @@ class DiscoveryManager:
                     "reset ACCEPTED -> NEW (issue 1136)",
                     device_id,
                 )
-            elif (
-                device_id.startswith(HGI_PREFIX)
-                and meta.status == DiscoveryStatus.LOST
-            ):
+            elif is_hgi_id(device_id) and meta.status == DiscoveryStatus.LOST:
                 # HGI gateways are never "lost" — they are the receiver,
                 # not remote devices.  Clear any stale LOST status that
                 # may have been set before the HGI-skip was added to

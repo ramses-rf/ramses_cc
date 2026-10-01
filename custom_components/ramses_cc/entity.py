@@ -16,8 +16,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from ramses_rf.devices import Fakeable
 from ramses_rf.entity import Entity as RamsesRFEntity
+from ramses_tx.address import is_hgi_id
 
-from .const import DOMAIN, HGI_PREFIX, SIGNAL_UPDATE
+from .const import DOMAIN, SIGNAL_UPDATE
 from .helpers import (
     reset_async_attr_cooldown,
     resolve_async_attr,
@@ -109,7 +110,7 @@ class RamsesEntity(CoordinatorEntity):
         :rtype: bool
         """
         # Explicit exemption for the HGI gateway (always available)
-        if self._device.id.startswith(HGI_PREFIX):
+        if is_hgi_id(self._device.id):
             return True
 
         # Resilient faked check for cache restoration
