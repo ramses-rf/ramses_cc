@@ -35,6 +35,7 @@ from ramses_rf.schemas import (
     SCH_GLOBAL_SCHEMAS,
     SZ_RESTORE_CACHE,
 )
+from ramses_tx.address import is_hgi_id
 from ramses_tx.const import DEVICE_ID_REGEX, HGI_ID_PATTERN, Code
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
@@ -81,7 +82,6 @@ from .const import (
     DEFAULT_WAIT_ONLINE_TIMEOUT,
     DOMAIN,
     HGI_COMMENT_WARNING,
-    HGI_PREFIX,
     STORAGE_KEY,
     STORAGE_VERSION,
     SZ_CLIENT_STATE,
@@ -289,7 +289,7 @@ class BaseRamsesFlow:
             try:
                 parts = msg.topic.split("/")
                 for part in parts:
-                    if part.startswith(HGI_PREFIX):
+                    if is_hgi_id(part):
                         _LOGGER.debug("Discovery found device: %s", part)
                         found_device.set_result(part)
                         return
@@ -1198,7 +1198,7 @@ class BaseRamsesFlow:
                             # flow, otherwise they'd be silently
                             # promoted to accepted pool members.
                             if (
-                                k.startswith(HGI_PREFIX)
+                                is_hgi_id(k)
                                 and v.get("_class", "").upper() == "HGI"
                             ):
                                 continue
@@ -1865,7 +1865,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     remaining_hgis: list[str] = []
                     for dev_id, entry in schema_dict.items():
                         if (
-                            dev_id.startswith(HGI_PREFIX)
+                            is_hgi_id(dev_id)
                             and isinstance(entry, dict)
                             and entry.get("_class", "").upper() == "HGI"
                             and entry.get(SZ_TR_OWNER) == root_owner
@@ -2014,7 +2014,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         schema_dict[readd_id].pop("_removed_from_pool", None)
                         self.options[CONF_SCHEMA] = schema_dict
                     # If no primary is set, this HGI becomes the primary
-                    if not primary and readd_id.startswith(HGI_PREFIX):
+                    if not primary and is_hgi_id(readd_id):
                         self.options[CONF_MQTT_HGI_ID] = readd_id
                         self.options.setdefault(CONF_MQTT_USE_HA, True)
                         self.options[SZ_SERIAL_PORT] = {
@@ -2162,7 +2162,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         root_owner = schema_dict.get(SZ_OWNER, "me")
                         for dev_id, entry in schema_dict.items():
                             if (
-                                dev_id.startswith(HGI_PREFIX)
+                                is_hgi_id(dev_id)
                                 and dev_id != DEFAULT_HGI_ID
                                 and isinstance(entry, dict)
                                 and entry.get("_class", "").upper() == "HGI"
@@ -2364,7 +2364,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         discovery_candidates: list[str] = []
         for dev_id, entry in schema.items():
             if (
-                dev_id.startswith(HGI_PREFIX)
+                is_hgi_id(dev_id)
                 and dev_id != DEFAULT_HGI_ID
                 and isinstance(entry, dict)
                 and entry.get("_class", "").upper() == "HGI"
@@ -2413,7 +2413,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             if not primary_hgi_id:
                 for dev_id, entry in schema.items():
                     if (
-                        dev_id.startswith(HGI_PREFIX)
+                        is_hgi_id(dev_id)
                         and dev_id != DEFAULT_HGI_ID
                         and isinstance(entry, dict)
                         and entry.get("_class", "").upper() == "HGI"
@@ -2428,7 +2428,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             if not primary_hgi_id:
                 for dev_id, entry in schema.items():
                     if (
-                        dev_id.startswith(HGI_PREFIX)
+                        is_hgi_id(dev_id)
                         and dev_id != DEFAULT_HGI_ID
                         and isinstance(entry, dict)
                         and entry.get("_class", "").upper() == "HGI"
@@ -2478,7 +2478,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             discovery_candidates = []
             for dev_id, entry in schema.items():
                 if (
-                    dev_id.startswith(HGI_PREFIX)
+                    is_hgi_id(dev_id)
                     and dev_id != DEFAULT_HGI_ID
                     and isinstance(entry, dict)
                     and entry.get("_class", "").upper() == "HGI"
@@ -2680,7 +2680,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         if isinstance(schema, dict):
             for dev_id, entry in schema.items():
                 if (
-                    dev_id.startswith(HGI_PREFIX)
+                    is_hgi_id(dev_id)
                     and dev_id != DEFAULT_HGI_ID
                     and isinstance(entry, dict)
                     and entry.get("_class", "").upper() == "HGI"
@@ -2696,7 +2696,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 # user can accept them directly from the pool menu
                 # without going through the discovery flow.
                 if (
-                    dev_id.startswith(HGI_PREFIX)
+                    is_hgi_id(dev_id)
                     and dev_id != DEFAULT_HGI_ID
                     and isinstance(entry, dict)
                     and entry.get("_class", "").upper() == "HGI"
@@ -3733,7 +3733,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                             )
                             # Phase 2: save _preferred_type for HGI
                             # devices and update _comment.
-                            if device_id.startswith(HGI_PREFIX):
+                            if is_hgi_id(device_id):
                                 pref_val = user_input.get(
                                     f"preferred_type_{device_id}", "mqtt"
                                 )
@@ -4228,7 +4228,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
             # Phase 2: for HGI devices, add a _preferred_type selector
             # so the user can set the transport preference when accepting.
-            if device_id.startswith(HGI_PREFIX):
+            if is_hgi_id(device_id):
                 # Parse existing _comment for detected transports.
                 dev_entry = config_schema.get(device_id, {})
                 detected_types: list[str] = []
@@ -4985,7 +4985,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                             dev_id
                             for dev_id, entry in old_schema.items()
                             if (
-                                dev_id.startswith(HGI_PREFIX)
+                                is_hgi_id(dev_id)
                                 and isinstance(entry, dict)
                                 and entry.get("_class", "").upper() == "HGI"
                             )
