@@ -14,20 +14,24 @@ from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers import config_validation as cv
 
 from ramses_rf.config import (
+    SZ_BOUND_TO,
+    SZ_CLASS,
     sch_global_traits_dict_factory,
     strip_traits as _strip_traits_rf,
+)
+from ramses_rf.const import (
+    SZ_ACTUATORS,
+    SZ_CIRCUITS,
+    SZ_CONFIG,
+    SZ_SENSOR,
+    SZ_ZONES,
 )
 from ramses_rf.helpers import deep_merge, is_subset, shrink
 from ramses_rf.schemas import (
     SCH_GATEWAY_CONFIG,
     SCH_GLOBAL_SCHEMAS_DICT,
     SCH_RESTORE_CACHE_DICT,
-    SZ_ACTUATORS,
     SZ_APPLIANCE_CONTROL,
-    SZ_BOUND_TO,
-    SZ_CIRCUITS,
-    SZ_CLASS,
-    SZ_CONFIG,
     SZ_DHW_SYSTEM,
     SZ_MAIN_TCS,
     SZ_ORPHANS,
@@ -35,11 +39,9 @@ from ramses_rf.schemas import (
     SZ_ORPHANS_HVAC,
     SZ_REMOTES,
     SZ_RESTORE_CACHE,
-    SZ_SENSOR,
     SZ_SENSORS,
     SZ_SYSTEM,
     SZ_UFH_SYSTEM,
-    SZ_ZONES,
 )
 from ramses_tx.const import (
     COMMAND_REGEX,
@@ -89,6 +91,7 @@ from .const import (
     CONF_AUTO_NOTIFY,
     CONF_COMMANDS,
     CONF_DEV_MODE,
+    CONF_LAST_MSG_SENSORS,
     CONF_LOST_THRESHOLD,
     CONF_MESSAGE_EVENTS,
     CONF_PASSIVE_SCAN,
@@ -100,6 +103,7 @@ from .const import (
     HGI_PREFIX,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
+    SZ_TR_BOUND,
     SZ_TR_CLASS,
     SZ_TR_COMMANDS,
     SZ_TR_DISABLED,
@@ -171,6 +175,7 @@ SCH_ADVANCED_FEATURES = vol.Schema(
         vol.Optional(CONF_LOST_THRESHOLD, default=7): vol.All(
             cv.positive_int, vol.Range(min=1, max=90)
         ),
+        vol.Optional(CONF_LAST_MSG_SENSORS, default=False): cv.boolean,
     }
 )
 
@@ -1033,6 +1038,154 @@ def remove_device_from_schema(schema: _SchemaT, device_id: str) -> _SchemaT:
             del new_schema[SZ_DEVICE_COMMENTS]
 
     return new_schema
+
+
+# Prefixes of schema parents that children claim via _bound/bound traits
+# (REM → FAN, actuator/REM → CTL).  Children never claim other children.
+_PARENT_PREFIXES: Final[frozenset[str]] = frozenset(
+    ("01:", "02:", "23:", "32:")
+)
+
+
+def eligible_devices(schema: _SchemaT) -> set[str]:
+    """Return the device ids that may have entities created (issue 1257, 2.3).
+
+    A device is eligible when the user accepted it — its schema entry's
+    ``_owner`` equals the root ``_owner`` — or it is part of an accepted
+    system: a member of an eligible parent's member lists (zone
+    sensor/actuators, DHW sensor/valves, ``appliance_control``,
+    ``underfloor_heating`` controllers, TCS-level ``orphans``, HVAC
+    ``remotes``/``sensors``/``actuators``, ``_bound``/``bound`` links) or a
+    child naming an eligible parent via ``_bound``/``bound``.  Acceptance
+    propagates parent → child only; an accepted child never pulls in its
+    parent.
+
+    HGIs present in the schema are infrastructure and always eligible;
+    ids in the user-authored top-level orphan lists are eligible too
+    (discovery candidates get their own dict entries without ``_owner``,
+    they are never added to these lists).  ``_disabled`` devices and
+    foreign devices (``_owner`` ≠ root) are never eligible, and disabled
+    parents do not propagate eligibility to children.
+
+    :param schema: The config-entry schema (with ``_``-traits intact).
+    :return: The set of device ids eligible for entity creation.
+    """
+    root_owner = schema.get(SZ_OWNER, "me")
+
+    def _blocked(device_id: str) -> bool:
+        entry = schema.get(device_id)
+        if not isinstance(entry, dict):
+            return False
+        owner = entry.get(SZ_TR_OWNER)
+        return bool(entry.get(SZ_TR_DISABLED)) or (
+            isinstance(owner, str) and owner != root_owner
+        )
+
+    def _member_ids(entry: dict[str, Any]) -> set[str]:
+        """Child ids named inside a parent entry."""
+        ids: set[str] = set()
+        system = entry.get(SZ_SYSTEM)
+        if isinstance(system, dict):
+            for key in _SCALAR_KEYS:
+                value = system.get(key)
+                if isinstance(value, str):
+                    ids.add(value)
+        dhw = entry.get(SZ_DHW_SYSTEM)
+        if isinstance(dhw, dict):
+            for key in _SCALAR_KEYS:
+                value = dhw.get(key)
+                if isinstance(value, str):
+                    ids.add(value)
+        zones = entry.get(SZ_ZONES)
+        if isinstance(zones, dict):
+            for zone in zones.values():
+                if not isinstance(zone, dict):
+                    continue
+                sensor = zone.get(SZ_SENSOR)
+                if isinstance(sensor, str):
+                    ids.add(sensor)
+                ids.update(
+                    a
+                    for a in zone.get("actuators") or []
+                    if isinstance(a, str)
+                )
+        ufh = entry.get(SZ_UFH_SYSTEM)
+        if isinstance(ufh, dict):
+            ids.update(k for k in ufh if _DEVICE_ID_RE.match(str(k)))
+        for key in (*_ZONE_LIST_KEYS, SZ_ORPHANS):
+            ids.update(i for i in entry.get(key) or [] if isinstance(i, str))
+        for key in (SZ_TR_BOUND, SZ_BOUND_TO):
+            bound = entry.get(key)
+            for value in bound if isinstance(bound, list) else [bound]:
+                if (
+                    isinstance(value, str)
+                    and value[:3] not in _PARENT_PREFIXES
+                ):
+                    # Only child-typed values count as members; a
+                    # parent-typed value is a child→parent claim and is
+                    # handled by _claims_parent below.
+                    ids.add(value)
+        return ids
+
+    def _claims_parent(entry: dict[str, Any]) -> bool:
+        """Whether the entry names an eligible parent via a bound trait."""
+        for key in (SZ_TR_BOUND, SZ_BOUND_TO):
+            bound = entry.get(key)
+            values = bound if isinstance(bound, list) else [bound]
+            for value in values:
+                if (
+                    isinstance(value, str)
+                    and value[:3] in _PARENT_PREFIXES
+                    and value in eligible
+                ):
+                    return True
+        return False
+
+    eligible: set[str] = set()
+    for dev_id, entry in schema.items():
+        if not (
+            isinstance(dev_id, str)
+            and _DEVICE_ID_RE.match(dev_id)
+            and isinstance(entry, dict)
+        ):
+            continue
+        if _blocked(dev_id):
+            continue
+        if entry.get(SZ_TR_OWNER) == root_owner or dev_id.startswith(
+            HGI_PREFIX
+        ):
+            eligible.add(dev_id)
+
+    # User-authored top-level orphan lists — accepted by definition.
+    for list_key in _LIST_KEYS:
+        for dev_id in schema.get(list_key) or []:
+            if isinstance(dev_id, str) and not _blocked(dev_id):
+                eligible.add(dev_id)
+
+    # Expand parent → child until fixpoint (covers chained links).
+    changed = True
+    while changed:
+        changed = False
+        for dev_id in list(eligible):
+            entry = schema.get(dev_id)
+            if not isinstance(entry, dict):
+                continue
+            for child_id in _member_ids(entry):
+                if child_id not in eligible and not _blocked(child_id):
+                    eligible.add(child_id)
+                    changed = True
+        for dev_id, entry in schema.items():
+            if (
+                dev_id in eligible
+                or not isinstance(entry, dict)
+                or _blocked(dev_id)
+            ):
+                continue
+            if _claims_parent(entry):
+                eligible.add(dev_id)
+                changed = True
+
+    return eligible
 
 
 def _parse_zone_from_comment(comment: str) -> str | None:

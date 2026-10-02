@@ -9,8 +9,9 @@ def test_deep_merge() -> None:
     XXX: dict[str, int | dict[str, int]] = {"a": 10, "b": 20}
     YYY: dict[str, int | dict[str, int]] = {"a": 11, "c": 31}
 
-    assert deep_merge(XXX, YYY) == YYY | XXX  # TODO: == x | y
-    assert deep_merge(YYY, XXX) == XXX | YYY  # TODO: == y | x
+    # flat dicts: equivalent to the | operator (second arg loses ties)
+    assert deep_merge(XXX, YYY) == YYY | XXX
+    assert deep_merge(YYY, XXX) == XXX | YYY
 
     XXX = {"a": 10, "b": 20, "x": {"a": 70, "b": 80}}
     YYY = {"a": 11, "c": 31, "x": {"a": 71, "c": 91}}

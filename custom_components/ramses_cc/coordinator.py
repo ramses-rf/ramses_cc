@@ -41,7 +41,7 @@ from homeassistant.util import dt as dt_util
 from serialx import SerialException
 
 from ramses_rf.config import strip_and_map_traits as _strip_and_map_traits
-from ramses_rf.const import SZ_NAME, DevType
+from ramses_rf.const import SZ_ACTUATORS, SZ_NAME, SZ_SENSOR, SZ_ZONES, DevType
 from ramses_rf.devices import (
     _CLASS_BY_SLUG,
     DEV_TYPE_MAP,
@@ -56,7 +56,6 @@ from ramses_rf.devices import (
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.schemas import (
-    SZ_ACTUATORS,
     SZ_APPLIANCE_CONTROL,
     SZ_DHW_SYSTEM,
     SZ_DHW_VALVE,
@@ -66,11 +65,9 @@ from ramses_rf.schemas import (
     SZ_ORPHANS_HEAT,
     SZ_ORPHANS_HVAC,
     SZ_REMOTES,
-    SZ_SENSOR,
     SZ_SENSORS,
     SZ_SYSTEM,
     SZ_UFH_SYSTEM,
-    SZ_ZONES,
 )
 from ramses_rf.systems import Evohome, System, Zone
 from ramses_rf.topology import Child
@@ -158,6 +155,8 @@ from .store import RamsesStore
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import ChildDeviceInfo
 
+    from ramses_rf.discovery_scan import DiscoveredDevice
+
     from .entity import RamsesEntity
     from .number import RamsesNumberParam
 
@@ -181,6 +180,10 @@ SAVE_STATE_INTERVAL: Final[td] = td(minutes=30)
 # discovery scan processing several 1FC9 packets, short enough that a
 # user-initiated binding is reflected in the config entry near-real-time.
 _SCHEMA_UPDATED_DEBOUNCE: Final[td] = td(seconds=2)
+# Trailing-debounce window for the DiscoveryScan new-device callback.
+# Coalesces a burst of first-seen devices (e.g. cached packets replayed
+# at startup) into a single discovery checkpoint.
+_NEW_DEVICE_DEBOUNCE: Final[td] = td(seconds=2)
 _DEVICE_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"^[0-9A-F]{2}:[0-9A-F]{6}$", re.I
 )
@@ -407,6 +410,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # scan processing many 1FC9 packets) into a single save cycle.
         # Cancelled on unload and rescheduled on each new event.
         self._schema_updated_debounce_task: asyncio.Task[None] | None = None
+        # Trailing-debounce task for the DiscoveryScan new-device
+        # callback (real-time discovery notification, issue 1257/2.1).
+        self._new_device_debounce_task: asyncio.Task[None] | None = None
         # Device IDs explicitly removed by the user via remove_device.
         # sync_learned_topology must NOT re-add these (ramses_rf has no
         # remove_device API, so the learned schema still references them).
@@ -1462,9 +1468,27 @@ class RamsesCoordinator(DataUpdateCoordinator):
             schema_device_ids, foreign_device_ids, schema
         )
 
-        # Schedule periodic checkpoint + check for new/lost devices.
-        # Use 5 min interval for now — TODO: replace with a real-time
-        # callback from ramses_rf's DiscoveryScan (see notepad.txt).
+        # Real-time notification: ramses_rf fires the callback the
+        # moment an unknown device enters the scan, so new devices are
+        # flagged within seconds instead of waiting for the periodic
+        # checkpoint (issue 1257, item 2.1).  Requires ramses_rf
+        # >= 0.60.10 — on older versions the getattr returns None and
+        # the 10-second one-shot below covers the startup burst.
+        set_cb = getattr(scan, "set_new_device_callback", None)
+        if set_cb is not None:
+            set_cb(self._on_scan_new_device)
+            self.entry.async_on_unload(lambda: set_cb(None))
+        else:
+            # Run an immediate check after 10 seconds so new devices
+            # from cached packets are detected quickly (fallback for
+            # ramses_rf versions without set_new_device_callback).
+            unsub = async_call_later(
+                self.hass, 10, self._async_discovery_checkpoint
+            )
+            self.entry.async_on_unload(unsub)
+
+        # Periodic checkpoint remains the safety net for new/lost
+        # devices, class mismatches and discovery-state persistence.
         self.entry.async_on_unload(
             async_track_time_interval(
                 self.hass,
@@ -1472,14 +1496,44 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 td(minutes=5),
             )
         )
-        # Run an immediate check after 10 seconds so new devices from
-        # cached packets are detected quickly.
-        unsub = async_call_later(
-            self.hass, 10, self._async_discovery_checkpoint
-        )
-        self.entry.async_on_unload(unsub)
         self.entry.async_on_unload(self._async_stop_discovery_scan)
         _LOGGER.info("Passive device scan started")
+
+    def _on_scan_new_device(self, device: DiscoveredDevice) -> None:
+        """Handle a new-device notification from ramses_rf's scan.
+
+        Called synchronously on the event loop each time DiscoveryScan
+        first tracks an unknown device.  Schedules a trailing-debounced
+        discovery checkpoint so a burst of new devices (e.g. packet-log
+        replay at startup) results in a single check + notification.
+        """
+        del device  # the checkpoint diffs the full scan, not just this
+        if self._new_device_debounce_task is not None:
+            self._new_device_debounce_task.cancel()
+        # async_create_background_task (not async_create_task) so the
+        # debounce sleep does not block hass.async_block_till_done()
+        # in tests (same rationale as _on_rf_schema_updated, issue 930).
+        self._new_device_debounce_task = (
+            self.hass.async_create_background_task(
+                self._debounced_new_device_check(),
+                "ramses_cc:new_device_check",
+            )
+        )
+
+    async def _debounced_new_device_check(self) -> None:
+        """Trailing-debounce worker for ``_on_scan_new_device``."""
+        try:
+            await asyncio.sleep(_NEW_DEVICE_DEBOUNCE.total_seconds())
+        except asyncio.CancelledError:
+            # Superseded by a newer device (or cancelled on unload).
+            return
+        self._new_device_debounce_task = None
+        if self.discovery_manager is None:
+            return
+        _LOGGER.debug(
+            "New device(s) seen by scan — running discovery checkpoint"
+        )
+        await self._async_discovery_checkpoint()
 
     async def _async_discovery_checkpoint(self, _: dt | None = None) -> None:
         """Periodic checkpoint: check for new/lost devices and save state."""
@@ -4029,6 +4083,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if self._schema_updated_debounce_task is not None:
             self._schema_updated_debounce_task.cancel()
             self._schema_updated_debounce_task = None
+        # Same for an in-flight debounced new-device check.
+        if self._new_device_debounce_task is not None:
+            self._new_device_debounce_task.cancel()
+            self._new_device_debounce_task = None
 
         # Compute the set of device IDs still in the schema.
         # Use entry.options (live) not self.options (stale copy).

@@ -29,6 +29,8 @@ from pytest_homeassistant_custom_component.common import (  # type: ignore[impor
 )
 
 from custom_components.ramses_cc.config_flow import (
+    CONF_HA_MQTT_MISSING,
+    CONF_HA_MQTT_NOT_READY,
     CONF_HA_MQTT_PATH,
     CONF_MANUAL_PATH,
     CONF_MQTT_PATH,
@@ -60,13 +62,13 @@ from custom_components.ramses_cc.const import (
     SZ_TR_NAME,
     SZ_TR_OWNER,
 )
-from ramses_rf.schemas import SZ_SCHEMA
 from ramses_tx.schemas import (
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST,
     SZ_LOG_ALL_MQTT,
     SZ_PACKET_LOG,
     SZ_PORT_NAME,
+    SZ_SCHEMA,
     SZ_SERIAL_PORT,
 )
 
@@ -817,7 +819,7 @@ async def test_options_flow_manage_pool_add_port(hass: HomeAssistant) -> None:
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_ha_id__",
+                "add_new_port": "mqtt_ha_id",
             },
         )
 
@@ -851,7 +853,7 @@ async def test_options_flow_manage_pool_add_zigbee(
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
                 CONF_WAIT_ONLINE_TIMEOUT: 45.0,
-                "add_new_port": "__zigbee_device_add__",
+                "add_new_port": "zigbee_device",
             },
         )
 
@@ -2403,7 +2405,11 @@ async def test_ha_mqtt_config_sentinel_not_injected(
 
 
 async def test_ha_mqtt_missing_integration(hass: HomeAssistant) -> None:
-    """Test selecting HA MQTT when MQTT integration is not set up."""
+    """Test selecting HA MQTT when MQTT integration is not set up.
+
+    The picker offers the ``ha_mqtt_missing`` option in that state; both
+    unavailable variants resolve to the ``mqtt_missing`` error.
+    """
     with patch(
         "custom_components.ramses_cc.config_flow.async_get_usb_ports",
         return_value={},
@@ -2414,7 +2420,7 @@ async def test_ha_mqtt_missing_integration(hass: HomeAssistant) -> None:
 
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            user_input={SZ_PORT_NAME: CONF_HA_MQTT_PATH},
+            user_input={SZ_PORT_NAME: CONF_HA_MQTT_MISSING},
         )
 
     assert result.get("type") == FlowResultType.FORM
@@ -2507,7 +2513,7 @@ async def test_ha_mqtt_not_loaded_error(hass: HomeAssistant) -> None:
 
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            user_input={SZ_PORT_NAME: CONF_HA_MQTT_PATH},
+            user_input={SZ_PORT_NAME: CONF_HA_MQTT_NOT_READY},
         )
 
     assert result.get("type") == FlowResultType.FORM
@@ -5629,7 +5635,7 @@ async def test_options_flow_manage_pool_mqtt_add_port(
             user_input={
                 CONF_ADDITIONAL_PORTS: ["socket://keep"],
                 CONF_WAIT_ONLINE_TIMEOUT: 45.0,
-                "add_new_port": "__mqtt_ha_id__",
+                "add_new_port": "mqtt_ha_id",
             },
         )
         assert result.get("type") == FlowResultType.FORM
@@ -5683,7 +5689,7 @@ async def test_options_flow_manage_pool_mqtt_missing_hgi_id(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_ha_id__",
+                "add_new_port": "mqtt_ha_id",
             },
         )
         # Submit with empty hgi_id
@@ -5723,7 +5729,7 @@ async def test_options_flow_manage_pool_mqtt_invalid_hgi_id(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_ha_id__",
+                "add_new_port": "mqtt_ha_id",
             },
         )
         # Submit with a non-HGI device ID (32: is not an HGI)
@@ -5771,7 +5777,7 @@ async def test_options_flow_manage_pool_mqtt_serial_primary_allowed(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_ha_id__",
+                "add_new_port": "mqtt_ha_id",
             },
         )
 
@@ -5816,7 +5822,7 @@ async def test_options_flow_manage_pool_mqtt_add_when_no_primary(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_ha_id__",
+                "add_new_port": "mqtt_ha_id",
             },
         )
 
@@ -5856,7 +5862,7 @@ async def test_options_flow_manage_pool_mqtt_url_add(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_full_url__",
+                "add_new_port": "mqtt_full_url",
             },
         )
         assert result.get("type") == FlowResultType.FORM
@@ -5954,7 +5960,7 @@ async def test_options_flow_manage_pool_mqtt_url_errors(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_full_url__",
+                "add_new_port": "mqtt_full_url",
             },
         )
         assert result.get("step_id") == "manage_pool_mqtt_url"
@@ -6004,7 +6010,7 @@ async def test_options_flow_manage_pool_mqtt_full_url_serial_allowed(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_full_url__",
+                "add_new_port": "mqtt_full_url",
             },
         )
 
@@ -6043,7 +6049,7 @@ async def test_options_flow_manage_pool_mqtt_form_display(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_ha_id__",
+                "add_new_port": "mqtt_ha_id",
             },
         )
 
@@ -6174,7 +6180,7 @@ async def test_options_flow_manage_pool_remove_schema_member(
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
                 "schema_pool_members": ["18:001111"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
             },
         )
 
@@ -6231,7 +6237,7 @@ async def test_options_flow_manage_pool_remove_last_hgi(
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
                 "schema_pool_members": [],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "confirm_clear_last": False,
             },
         )
@@ -6244,7 +6250,7 @@ async def test_options_flow_manage_pool_remove_last_hgi(
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
                 "schema_pool_members": [],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "confirm_clear_last": True,
             },
         )
@@ -6303,7 +6309,7 @@ async def test_options_flow_manage_pool_remove_last_hgi_mqtt_ha(
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
                 "schema_pool_members": [],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "confirm_clear_last": False,
             },
         )
@@ -6316,7 +6322,7 @@ async def test_options_flow_manage_pool_remove_last_hgi_mqtt_ha(
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
                 "schema_pool_members": [],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "confirm_clear_last": True,
             },
         )
@@ -6539,7 +6545,7 @@ async def test_options_flow_manage_pool_mqtt_creates_schema_entry(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__mqtt_ha_id__",
+                "add_new_port": "mqtt_ha_id",
             },
         )
         result = await hass.config_entries.options.async_configure(
@@ -6583,7 +6589,7 @@ async def test_options_flow_manage_pool_wait_online_timeout(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 CONF_WAIT_ONLINE_TIMEOUT: 60,
             },
         )
@@ -6695,7 +6701,7 @@ async def test_options_flow_manage_pool_no_add_save(
             result["flow_id"],
             user_input={
                 CONF_ADDITIONAL_PORTS: [],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
             },
         )
 
@@ -6966,7 +6972,7 @@ async def test_regression_serial_primary_save_preserves_pool_members(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488", "18:130236"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
             },
         )
 
@@ -7023,7 +7029,7 @@ async def test_regression_serial_primary_demote_only_unchecked(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
             },
         )
 
@@ -7131,7 +7137,7 @@ async def test_regression_serial_port_dropdown_uses_by_id_paths(
         # Select "Serial/USB port..." to enter manage_pool_serial
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
-            user_input={"add_new_port": "__serial_port__"},
+            user_input={"add_new_port": "serial_port"},
         )
 
     assert result.get("type") == FlowResultType.FORM
@@ -7190,7 +7196,7 @@ async def test_regression_serial_port_dropdown_friendly_names(
         )
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
-            user_input={"add_new_port": "__serial_port__"},
+            user_input={"add_new_port": "serial_port"},
         )
 
     assert result.get("type") == FlowResultType.FORM
@@ -7240,7 +7246,7 @@ async def test_regression_empty_serial_port_list(
         # Select "Serial/USB port..." to enter manage_pool_serial
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
-            user_input={"add_new_port": "__serial_port__"},
+            user_input={"add_new_port": "serial_port"},
         )
 
     assert result.get("step_id") == "manage_pool_serial"
@@ -7302,7 +7308,7 @@ async def test_regression_serial_then_mqtt_full_flow(
                 values = [opt.get("value", "") for opt in options]
                 labels = [opt.get("label", "") for opt in options]
                 # The MQTT add option should be available
-                assert "__mqtt_full_url__" in values, (
+                assert "mqtt_full_url" in values, (
                     f"MQTT add option should be available for serial "
                     f"primary, got values: {values}"
                 )
@@ -7310,7 +7316,7 @@ async def test_regression_serial_then_mqtt_full_flow(
                     (
                         label
                         for val, label in zip(values, labels, strict=True)
-                        if val == "__mqtt_full_url__"
+                        if val == "mqtt_full_url"
                     ),
                     "",
                 )
@@ -7423,7 +7429,7 @@ async def test_pool_switch_usb_to_mqtt_redirects_to_mqtt_url(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:149488": "mqtt",
             },
         )
@@ -7489,7 +7495,7 @@ async def test_pool_switch_usb_to_mqtt_completes(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:149488": "mqtt",
             },
         )
@@ -7553,7 +7559,7 @@ async def test_pool_switch_mqtt_to_usb_redirects_to_serial(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:149488": "usb",
             },
         )
@@ -7604,7 +7610,7 @@ async def test_pool_switch_mqtt_to_usb_completes(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:149488": "usb",
             },
         )
@@ -7666,7 +7672,7 @@ async def test_pool_no_switch_when_preferred_type_unchanged(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:149488": "usb",
             },
         )
@@ -7723,7 +7729,7 @@ async def test_pool_no_switch_when_preferred_type_empty_to_mqtt(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:149488": "mqtt",
             },
         )
@@ -8036,7 +8042,7 @@ async def test_pool_serial_step_rejects_none_port(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:149488": "usb",
             },
         )
@@ -8045,7 +8051,7 @@ async def test_pool_serial_step_rejects_none_port(
         # Submit __none__ (no available ports) — should show error
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
-            user_input={"serial_port": "__none__"},
+            user_input={"serial_port": "none"},
         )
 
     # Should show form again with error, not save
@@ -8094,7 +8100,7 @@ async def test_pool_serial_step_adds_additional_port(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__serial_port__",
+                "add_new_port": "serial_port",
             },
         )
         assert result.get("step_id") == "manage_pool_serial"
@@ -8254,7 +8260,7 @@ async def test_pool_mqtt_ha_primary_hgi_id_detection(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:149488"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:149488": "usb",
             },
         )
@@ -8489,7 +8495,7 @@ async def test_pool_non_primary_usb_to_mqtt_switch(
             result["flow_id"],
             user_input={
                 "schema_pool_members": ["18:001234", "18:005678"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:001234": "usb",
                 "_preferred_type_18:005678": "mqtt",
             },
@@ -8656,7 +8662,7 @@ async def test_pool_accept_discovery_candidates_field(
             user_input={
                 "schema_pool_members": ["18:001234"],
                 "accept_discovery_candidates": ["18:009999"],
-                "add_new_port": "__none__",
+                "add_new_port": "none",
                 "_preferred_type_18:001234": "usb",
             },
         )

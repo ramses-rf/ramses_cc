@@ -753,16 +753,18 @@ def _schema_with_nested_devices() -> dict[str, Any]:
     - UFH controller (inside underfloor_heating)
     - BDR as orphan (top-level orphans_heat)
     """
-    from ramses_rf.schemas import (
+    from ramses_rf.const import (
         SZ_ACTUATORS,
+        SZ_SENSOR,
+        SZ_ZONES,
+    )
+    from ramses_rf.schemas import (
         SZ_APPLIANCE_CONTROL,
         SZ_DHW_SYSTEM,
         SZ_DHW_VALVE,
         SZ_ORPHANS_HEAT,
-        SZ_SENSOR,
         SZ_SYSTEM,
         SZ_UFH_SYSTEM,
-        SZ_ZONES,
     )
 
     return {
@@ -1033,7 +1035,10 @@ class TestResolveSingleSlotConflicts:
         from custom_components.ramses_cc.services import (
             _resolve_single_slot_conflicts,
         )
-        from ramses_rf.schemas import SZ_APPLIANCE_CONTROL, SZ_SYSTEM
+        from ramses_rf.schemas import (
+            SZ_APPLIANCE_CONTROL,
+            SZ_SYSTEM,
+        )
 
         fragment = {
             CTL_ID: {SZ_SYSTEM: {SZ_APPLIANCE_CONTROL: OTB_ID}},

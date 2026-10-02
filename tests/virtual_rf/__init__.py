@@ -5,8 +5,9 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from ramses_rf import Gateway
+from ramses_rf.config import SZ_CLASS
 from ramses_rf.const import DEV_TYPE_MAP, DevType
-from ramses_rf.schemas import SZ_CLASS, SZ_KNOWN_LIST
+from ramses_tx.schemas import SZ_KNOWN_LIST
 
 from .const import MAX_NUM_PORTS, HgiFwTypes
 from .virtual_rf import VirtualRf

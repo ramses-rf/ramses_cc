@@ -919,7 +919,8 @@ class TestVolSchemaIssue1093:
             probatio.Optional("value"): int,
         }
         with (
-            patch.object(cv, "vol", _REAL_VOL),
+            # create=True: cv.vol was removed in HA 2026.10
+            patch.object(cv, "vol", _REAL_VOL, create=True),
             patch(
                 "homeassistant.helpers.config_validation.make_entity_service_schema",
                 return_value="mock_schema",

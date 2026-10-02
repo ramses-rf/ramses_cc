@@ -12,6 +12,7 @@ ramses_cc:
 
   advanced_features:
     send_packet: false
+    last_msg_sensors: true
 
   ramses_rf:
     enforce_known_list: true

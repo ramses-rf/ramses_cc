@@ -211,6 +211,23 @@ async def test_remote_send_command_exceptions(
     assert "Use ramses_cc" in caplog.text
     assert "instead of this HA command" in caplog.text
 
+    # out-of-range repeat counts and negative delays get a clean error
+    # before reaching ramses_rf's downstream assert
+    with pytest.raises(
+        HomeAssistantError, match="num_repeats must be an integer"
+    ):
+        await remote_entity.async_send_command("boost", num_repeats=0)
+
+    with pytest.raises(
+        HomeAssistantError, match="num_repeats must be an integer"
+    ):
+        await remote_entity.async_send_command("boost", num_repeats=6)
+
+    with pytest.raises(
+        HomeAssistantError, match="delay_secs must not be negative"
+    ):
+        await remote_entity.async_send_command("boost", delay_secs=-1)
+
 
 async def test_remote_add_command(remote_entity: RamsesRemote) -> None:
     """Test async_add_command logic."""

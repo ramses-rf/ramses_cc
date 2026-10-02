@@ -290,8 +290,10 @@ def make_entity_service_schema(
     # schemas.py uses `import probatio as vol`, so markers are probatio.
     # If cv.vol is also probatio (HA 2026.9+), markers are compatible.
     # If cv.vol is real voluptuous (pre-2026.9), convert probatio markers.
-    if cv.vol is not _REAL_VOL:
-        # cv.vol is probatio — no conversion needed
+    # HA 2026.10 removed cv.vol entirely — voluptuous is probatio
+    # natively, so absence means no conversion needed.
+    if getattr(cv, "vol", None) is not _REAL_VOL:
+        # cv.vol is probatio or absent — no conversion needed
         return cv.make_entity_service_schema(schema, extra=extra)
 
     # cv.vol is real voluptuous — convert probatio markers

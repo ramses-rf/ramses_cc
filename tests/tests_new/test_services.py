@@ -37,13 +37,17 @@ from custom_components.ramses_cc.helpers import (
 )
 from custom_components.ramses_cc.schemas import SCH_REMOVE_DEVICE
 from custom_components.ramses_cc.services import RamsesServiceHandler
-from ramses_rf.const import DevType
+from ramses_rf.const import (
+    SZ_ACTUATORS,
+    SZ_CIRCUITS,
+    SZ_SENSOR,
+    SZ_ZONES,
+    DevType,
+)
 from ramses_rf.devices import Device, HvacRemoteBase, HvacVentilator
 from ramses_rf.exceptions import BindingFlowFailed, DeviceNotFoundError
 from ramses_rf.schemas import (
-    SZ_ACTUATORS,
     SZ_APPLIANCE_CONTROL,
-    SZ_CIRCUITS,
     SZ_DHW_SYSTEM,
     SZ_DHW_VALVE,
     SZ_HTG_VALVE,
@@ -52,11 +56,9 @@ from ramses_rf.schemas import (
     SZ_ORPHANS_HEAT,
     SZ_ORPHANS_HVAC,
     SZ_REMOTES,
-    SZ_SENSOR,
     SZ_SENSORS,
     SZ_SYSTEM,
     SZ_UFH_SYSTEM,
-    SZ_ZONES,
 )
 from ramses_rf.systems import System, Zone
 from ramses_rf.topology import Child
@@ -137,7 +139,7 @@ async def test_bind_device_raises_ha_error(
     """Test that async_bind_device raises HomeAssistantError on binding failure."""
     mock_device = MagicMock()
     mock_device.id = "01:123456"
-    mock_device._initiate_binding_process = AsyncMock(
+    mock_device.initiate_binding_process_with = AsyncMock(
         side_effect=BindingFlowFailed("Timeout waiting for confirm")
     )
     mock_client = cast(Any, mock_coordinator.client)
@@ -449,7 +451,7 @@ async def test_bind_device_success(
     """Test the happy path for async_bind_device."""
     mock_device = MagicMock()
     mock_device.id = "01:123456"
-    mock_device._initiate_binding_process = AsyncMock(
+    mock_device.initiate_binding_process_with = AsyncMock(
         return_value=None
     )  # Success
     mock_client = cast(Any, mock_coordinator.client)
@@ -476,7 +478,7 @@ async def test_bind_device_success(
         await mock_coordinator.hass.async_block_till_done()
 
     # Verify exact binding arguments
-    mock_device._initiate_binding_process.assert_awaited_once_with(
+    mock_device.initiate_binding_process_with.assert_awaited_once_with(
         [], confirm_code=None, ratify_command=None
     )
 
@@ -485,7 +487,7 @@ async def test_bind_device_preserves_indexed_duplicate_offers(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     mock_device = MagicMock(id="29:150156")
-    mock_device._initiate_binding_process = AsyncMock(return_value=None)
+    mock_device.initiate_binding_process_with = AsyncMock(return_value=None)
     mock_client = cast(Any, mock_coordinator.client)
     mock_client.device_registry.fake_device = AsyncMock(
         return_value=mock_device
@@ -509,7 +511,7 @@ async def test_bind_device_preserves_indexed_duplicate_offers(
         )
         await mock_coordinator.hass.async_block_till_done()
 
-    mock_device._initiate_binding_process.assert_awaited_once_with(
+    mock_device.initiate_binding_process_with.assert_awaited_once_with(
         [("00", "31E0"), ("01", "31E0"), ("00", "1298")],
         confirm_code=None,
         ratify_command=None,
@@ -1578,14 +1580,14 @@ async def test_bind_device_generic_exception(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test async_bind_device handles generic exceptions."""
-    # We must mock _initiate_binding_process on the device object itself,
+    # We must mock initiate_binding_process_with on the device object itself,
     # NOT on the client.fake_device method (which only raises LookupError).
     mock_device = MagicMock()
     mock_client = cast(Any, mock_coordinator.client)
     mock_client.device_registry.fake_device = AsyncMock(
         return_value=mock_device
     )
-    mock_device._initiate_binding_process = AsyncMock(
+    mock_device.initiate_binding_process_with = AsyncMock(
         side_effect=Exception("Surprise!")
     )
 
@@ -2987,7 +2989,7 @@ async def test_async_bind_device_routes_to_registry(
 
     # 3. Assert: Verify the registry was called, bypassing the Gateway
     mock_registry.fake_device.assert_called_once_with("01:123456")
-    mock_device._initiate_binding_process.assert_called_once()
+    mock_device.initiate_binding_process_with.assert_called_once()
 
 
 # ───────────────────────────────────────────────────────────────────────

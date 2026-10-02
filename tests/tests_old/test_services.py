@@ -116,29 +116,16 @@ NUM_ENTS_AFTER_ALT = (
 _ASS_UNTIL = (dt_util.now().replace(microsecond=0) + td(hours=1)).replace(
     tzinfo=None
 )
-_ASS_UNTIL_3DAYS = (
-    dt_util.now().replace(minute=0, second=0, microsecond=0) + td(days=3)
-).replace(tzinfo=None)
-_ASS_UNTIL_MIDNIGHT = (
-    dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    + td(days=1)
-).replace(tzinfo=None)
-_ASS_UNTIL_10D = (
-    dt_util.now().replace(minute=0, second=0, microsecond=0)
-    + td(days=10, hours=4)
-).replace(tzinfo=None)  # min. 1, max. 24
 
 # same item in service call entry format, calculated from their assert expected form above:
 _UNTIL = _ASS_UNTIL.strftime(
     "%Y-%m-%d %H:%M:%S"  # until an hour from now, formatted "2024-03-16 14:00:00", no msec
 )
-# _UNTIL_MIDNIGHT = _ASS_UNTIL_MIDNIGHT.strftime("%Y-%m-%d %H:%M:%S")
-# _UNTIL10D = _ASS_UNTIL_10D.strftime("%Y-%m-%d %H:%M:%S")
 
 TEST_CONFIG: Final = {
     "serial_port": {"port_name": None},
     "ramses_rf": {"disable_discovery": True},
-    "advanced_features": {"send_packet": True},
+    "advanced_features": {"send_packet": True, "last_msg_sensors": True},
     # Phase 4: enforce_known_list is always-on, so all devices from the
     # packet log must be in known_list.  The v2→v3 migration will merge
     # these into the schema.
@@ -487,7 +474,6 @@ async def test_delete_command(hass: HomeAssistant, entry: ConfigEntry) -> None:
     )
 
 
-# TODO: extended test of underlying method
 async def test_learn_command(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Test the ramses_cc.learn_command service call."""
 
@@ -510,7 +496,6 @@ TESTS_SEND_COMMAND = {
 }
 
 
-# TODO: extended test of underlying method
 @pytest.mark.parametrize("index", TESTS_SEND_COMMAND)
 async def test_send_command(
     hass: HomeAssistant, entry: ConfigEntry, index: str
@@ -802,7 +787,7 @@ TESTS_SET_DHW_MODE_FAIL2: dict[str, dict[str, Any]] = {
 }
 
 
-# TODO: extended test of underlying method (duration/until)
+# extended coverage of duration/until lives in tests_new/test_water_heater.py
 @pytest.mark.parametrize("index", TESTS_SET_DHW_MODE_GOOD)
 async def test_set_dhw_mode_good(
     hass: HomeAssistant, entry: ConfigEntry, index: str
@@ -918,26 +903,14 @@ TESTS_SET_SYSTEM_MODE_GOOD: dict[str, dict[str, Any]] = {
     # Note for all 4 tests: the mock method does not report receiving 'mode'
     "00": {"mode": "auto"},
     "01": {"mode": "eco_boost"},
-    # TODO small timing offset makes the next test often fail locally and on GitHub, round times in Command?
-    # "02": {"mode": "day_off", "period": {"days": 3}},
-    # "03": {"mode": "eco_boost", "duration": {"hours": 3}},
+    # period/duration cases covered in tests_new/test_climate.py with
+    # frozen time (relative-time cases flake on wall-clock drift here)
 }  # requires custom asserts, returned from mock method success
 # with mock method ramses_rf.systems.tcs.Evohome.set_mode
 TESTS_SET_SYSTEM_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
     # mode not received by mock method, but on the way validation filter is applied without errors
     "00": {"until": None},  # "mode": "auto" not passed to mock
     "01": {"until": None},  # "mode": "eco_boost" not passed to mock
-    "02": {
-        # "mode": "day_off",
-        "until": _ASS_UNTIL_3DAYS,
-    },  # must adjust for pytest run time
-    "03": {
-        # "mode": "eco_boost",
-        "until": (
-            dt_util.now().replace(minute=0, second=0, microsecond=0)
-            + td(minutes=180)
-        ).replace(tzinfo=None),
-    },
 }
 
 TESTS_SET_SYSTEM_MODE_FAIL: dict[str, dict[str, Any]] = {
@@ -953,7 +926,6 @@ TESTS_SET_SYSTEM_MODE_FAIL2: dict[str, dict[str, Any]] = {
 }  # no asserts required, caught in checked_entry validation
 
 
-# TODO: extended test of underlying method (duration/period)
 @pytest.mark.parametrize("index", TESTS_SET_SYSTEM_MODE_GOOD)
 async def test_set_system_mode_good(
     hass: HomeAssistant, entry: ConfigEntry, index: str
@@ -1063,9 +1035,8 @@ TESTS_SET_ZONE_MODE_GOOD: dict[str, dict[str, Any]] = {
         "mode": "advanced_override",
         "setpoint": 13.1,
     },
-    # TODO small timing offset makes the next 2 test often fail locally and on GitHub
-    # "41": {"mode": "temporary_override", "setpoint": 14.1},  # default duration 1 hour will be added
-    # "52": {"mode": "temporary_override", "setpoint": 15.1, "duration": {"hours": 3}},
+    # temporary_override with relative duration covered in
+    # tests_new/test_climate.py with frozen time (flakes here)
     "62": {
         "mode": "temporary_override",
         "setpoint": 16.1,
@@ -1080,19 +1051,6 @@ TESTS_SET_ZONE_MODE_GOOD_ASSERTS: dict[str, dict[str, Any]] = {
     "11": {"mode": "follow_schedule", "setpoint": None, "until": None},
     "21": {"mode": "permanent_override", "setpoint": 12.1, "until": None},
     "31": {"mode": "advanced_override", "setpoint": 13.1, "until": None},
-    "41": {
-        "mode": "temporary_override",
-        "setpoint": 14.1,
-        "until": _ASS_UNTIL,
-    },
-    "52": {
-        "mode": "temporary_override",
-        "setpoint": 15.1,
-        "until": (
-            dt_util.now().replace(minute=0, second=0, microsecond=0)
-            + td(hours=3)
-        ).replace(tzinfo=None),
-    },
     "62": {
         "mode": "temporary_override",
         "setpoint": 16.1,
@@ -1301,28 +1259,8 @@ async def test_svc_send_packet_with_impersonation(
     await _test_service_call(hass, SVC_SEND_PACKET, data, schemas=schemas)
 
 
-# TODO add tests for core climate services that ramses_cc intercepts/handles
-
-# async def test_set_temperature(hass: HomeAssistant, entry: ConfigEntry) -> None:
-#     """
-#     Test standard HA action, picked up by ramses_cc and sent to set_zone_mode().
-#     No schema (entry handled by HA).
-#     See issue #276
-#
-#     :param hass: the HA instance
-#     :param entry: the climate entity object to configure
-#     """
-#     data = {
-#         "entity_id": "climate.01_145038_02",
-#         "temperature": 25,
-#     }
-#
-#     # how to address the hass core CLIMATE domain, not ramses_cc
-#     hass.async_create_task(
-#         hass.services.async_call(
-#             'climate', 'async_set_temperature', {"temperature": 25}
-#         )
-#     )
+# Core climate service interception (climate.set_temperature -> zone
+# set_mode etc.) is covered in tests_new/test_climate.py.
 
 
 ########################################################################################

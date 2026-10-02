@@ -75,6 +75,7 @@ TEST_CONFIG = {
     # hass.async_block_till_done() below from ever settling (see #774).
     CONF_RAMSES_RF: {"disable_discovery": True, "disable_qos": True},
     SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyACM0"},
+    "advanced_features": {"last_msg_sensors": True},
     # TCS structure at top level (YAML format)
     "01:145038": {
         "system": {"appliance_control": "13:120241"},
@@ -108,6 +109,7 @@ TEST_CONFIG = {
 TEST_CONFIG_ENTRY = {
     CONF_RAMSES_RF: {"disable_discovery": True, "disable_qos": True},
     SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyACM0"},
+    "advanced_features": {"last_msg_sensors": True},
     "schema": {
         "01:145038": {
             "system": {"appliance_control": "13:120241"},

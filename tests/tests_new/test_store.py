@@ -444,7 +444,8 @@ async def test_save_client_state_filters_removed_children_from_cache(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Removed zone and DHW children must not survive in cached schema."""
-    from ramses_rf.schemas import SZ_DHW_SYSTEM, SZ_ZONES
+    from ramses_rf.const import SZ_ZONES
+    from ramses_rf.schemas import SZ_DHW_SYSTEM
 
     assert mock_coordinator.client is not None
     config_schema = {

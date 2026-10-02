@@ -15,7 +15,9 @@ from custom_components.ramses_cc.const import (
     CONF_SCHEMA,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
+    SZ_TR_BOUND,
     SZ_TR_COMMANDS,
+    SZ_TR_DISABLED,
     SZ_TR_NAME,
     SZ_TR_OWNER,
 )
@@ -24,6 +26,7 @@ from custom_components.ramses_cc.schemas import (
     _is_device_placed_elsewhere_in_learned,
     _strip_and_orchestrate,
     device_in_schema,
+    eligible_devices,
     merge_schemas,
     normalise_config,
     order_schema,
@@ -31,22 +34,24 @@ from custom_components.ramses_cc.schemas import (
     strip_traits_for_validation,
     sync_learned_topology,
 )
-from ramses_rf.const import SZ_ACTUATORS
+from ramses_rf.config import SZ_CLASS
+from ramses_rf.const import (
+    SZ_ACTUATORS,
+    SZ_CIRCUITS,
+    SZ_SENSOR,
+    SZ_ZONES,
+)
 from ramses_rf.schemas import (
     SZ_APPLIANCE_CONTROL,
-    SZ_CIRCUITS,
-    SZ_CLASS,
     SZ_DHW_SYSTEM,
     SZ_MAIN_TCS,
     SZ_ORPHANS,
     SZ_ORPHANS_HEAT,
     SZ_ORPHANS_HVAC,
     SZ_REMOTES,
-    SZ_SENSOR,
     SZ_SENSORS,
     SZ_SYSTEM,
     SZ_UFH_SYSTEM,
-    SZ_ZONES,
 )
 from ramses_tx.schemas import SZ_PORT_NAME, SZ_SERIAL_PORT
 
@@ -4509,3 +4514,133 @@ def test_sync_learned_topology_removed_dhw_sensor_not_placed() -> None:
         config, learned, removed_devices={"01:123456_HW"}
     )
     assert SZ_DHW_SYSTEM not in (result or config)["01:123456"]
+
+
+# ── Tests for eligible_devices ────────────────────────────────────────
+
+
+def test_eligible_devices_owner_only() -> None:
+    """Only devices with _owner == root are eligible (issue 1257, 2.3)."""
+    schema: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "01:000001": {SZ_TR_OWNER: "me"},
+        "04:000002": {SZ_TR_OWNER: "someone_else"},
+        "63:000003": {},  # discovery candidate — no _owner
+    }
+    assert eligible_devices(schema) == {"01:000001"}
+
+
+def test_eligible_devices_hgi_infrastructure() -> None:
+    """HGIs in the schema are always eligible; foreign HGIs are not."""
+    schema: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "18:001234": {"_class": "HGI"},  # ownerless candidate — in
+        "18:009999": {"_class": "HGI", SZ_TR_OWNER: "other"},  # foreign — out
+    }
+    assert eligible_devices(schema) == {"18:001234"}
+
+
+def test_eligible_devices_tcs_children() -> None:
+    """Members of an accepted TCS inherit eligibility."""
+    schema: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "01:000001": {
+            SZ_TR_OWNER: "me",
+            SZ_SYSTEM: {SZ_APPLIANCE_CONTROL: "10:000010"},
+            SZ_DHW_SYSTEM: {
+                SZ_SENSOR: "07:000007",
+                "hotwater_valve": "13:000013",
+                "heating_valve": "13:000113",
+            },
+            SZ_ZONES: {
+                "01": {SZ_SENSOR: "22:000022", "actuators": ["04:000004"]},
+                "02": {SZ_SENSOR: "22:000122"},
+            },
+            SZ_UFH_SYSTEM: {"02:000002": {SZ_CIRCUITS: {"00": {}}}},
+            SZ_ORPHANS: ["13:000999"],
+        },
+    }
+    assert eligible_devices(schema) == {
+        "01:000001",
+        "10:000010",
+        "07:000007",
+        "13:000013",
+        "13:000113",
+        "22:000022",
+        "04:000004",
+        "22:000122",
+        "02:000002",
+        "13:000999",
+    }
+
+
+def test_eligible_devices_fan_remotes() -> None:
+    """REM/DIS listed under an accepted FAN, and _bound links, inherit."""
+    schema: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "32:000032": {
+            SZ_TR_OWNER: "me",
+            SZ_REMOTES: ["37:000037"],
+            SZ_SENSORS: ["22:000132"],
+            SZ_TR_BOUND: "37:000038",
+        },
+    }
+    assert eligible_devices(schema) == {
+        "32:000032",
+        "37:000037",
+        "37:000038",
+        "22:000132",
+    }
+
+
+def test_eligible_devices_child_claims_parent() -> None:
+    """A child naming an eligible parent via _bound inherits; an accepted
+    child never pulls its parent in (maintainer feedback, issue 1257)."""
+    schema: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "32:000032": {SZ_TR_OWNER: "me"},
+        "37:000039": {SZ_TR_BOUND: "32:000032"},  # claims FAN -> eligible
+        "37:000040": {SZ_TR_OWNER: "me", SZ_TR_BOUND: "32:000033"},
+        "32:000033": {},  # unaccepted FAN — must NOT be pulled in
+    }
+    assert eligible_devices(schema) == {
+        "32:000032",
+        "37:000039",
+        "37:000040",
+    }
+
+
+def test_eligible_devices_disabled_and_foreign_blocked() -> None:
+    """_disabled and foreign devices are never eligible — not even as
+    members of an eligible parent or the top-level orphan lists."""
+    schema: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "32:000032": {SZ_TR_OWNER: "me", SZ_REMOTES: ["37:000037"]},
+        "37:000037": {SZ_TR_DISABLED: True},  # disabled child -> out
+        "04:000099": {SZ_TR_OWNER: "other"},
+        SZ_ORPHANS_HVAC: ["29:000029", "04:000099"],
+    }
+    assert eligible_devices(schema) == {"32:000032", "29:000029"}
+
+
+def test_eligible_devices_orphan_lists_user_authored() -> None:
+    """Top-level orphan list members are user-authored — eligible even
+    without a schema entry."""
+    schema: dict[str, Any] = {
+        SZ_OWNER: "me",
+        SZ_ORPHANS_HEAT: ["04:000111"],
+        SZ_ORPHANS_HVAC: ["29:000029"],
+    }
+    assert eligible_devices(schema) == {"04:000111", "29:000029"}
+
+
+def test_eligible_devices_chained_expansion() -> None:
+    """Expansion iterates to fixpoint: a parent accepted via one link
+    propagates to members named on its own entry."""
+    schema: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "32:000032": {SZ_TR_OWNER: "me", SZ_REMOTES: ["37:000037"]},
+        "37:000037": {},  # becomes eligible via FAN's remotes list
+        "37:000041": {SZ_TR_BOUND: "32:000032"},
+    }
+    assert eligible_devices(schema) == {"32:000032", "37:000037", "37:000041"}

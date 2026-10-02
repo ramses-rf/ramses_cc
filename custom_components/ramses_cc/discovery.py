@@ -2166,8 +2166,8 @@ class DiscoveryManager:
         :param domain_id: Optional domain ID (FC=appliance_control).
         :return: A dict that can be deep-merged into the global schema.
         """
+        from ramses_rf.const import SZ_ACTUATORS, SZ_SENSOR, SZ_ZONES
         from ramses_rf.schemas import (
-            SZ_ACTUATORS,
             SZ_APPLIANCE_CONTROL,
             SZ_DHW_SYSTEM,
             SZ_DHW_VALVE,
@@ -2175,9 +2175,7 @@ class DiscoveryManager:
             SZ_ORPHANS_HEAT,
             SZ_ORPHANS_HVAC,
             SZ_REMOTES,
-            SZ_SENSOR,
             SZ_SYSTEM,
-            SZ_ZONES,
         )
 
         likely_type_normalized = likely_type.upper()
@@ -2398,12 +2396,13 @@ class DiscoveryManager:
 
             # Build a descriptive comment from scan engine data so the user
             # can see what the scan engine found and any ambiguity.
-            # TODO(Phase 2/4): The scan engine is a passive observer that
-            # guesses types from packet codes — e.g. 31DA can come from both
-            # FANs and DIS devices, leading to misclassification.  The proper
-            # fix is for ramses_rf's HvacVentilator.schema() to expose
-            # remotes/sensors, and for _class to become a schema trait
-            # (Phase 3).  Until then, the _comment trait documents the scan
+            # The scan engine is a passive observer that guesses types from
+            # packet codes — e.g. 31DA can come from both FANs and DIS
+            # devices, leading to misclassification.  HvacVentilator.schema()
+            # now exposes remotes/sensors, but the FAN-vs-DIS type ambiguity
+            # remains until ramses_rf's scan engine can distinguish them
+            # (ramses-rf/ramses_rf discovery_scan.py, tracked in issue 1257
+            # item 4.1).  Until then, the _comment trait documents the scan
             # engine's guess and the user can manually fix the schema entry.
             comment = self._build_comment(
                 dev, likely_type, bound_to, zone_index

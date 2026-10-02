@@ -17,14 +17,24 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
+    MockConfigEntry,
+)
 
-from custom_components.ramses_cc.const import SZ_LAST_MSG
+from custom_components.ramses_cc.const import (
+    CONF_ADVANCED_FEATURES,
+    CONF_LAST_MSG_SENSORS,
+    DOMAIN,
+    SZ_LAST_MSG,
+)
 from custom_components.ramses_cc.sensor import (
     SENSOR_DESCRIPTIONS,
     RamsesLastMessageSensor,
     RamsesSensor,
     RamsesSensorEntityDescription,
     VentilationDemandCapable,
+    _sync_last_msg_registry_entries,
     async_setup_entry,
 )
 from ramses_rf.const import (
@@ -906,7 +916,7 @@ def test_last_msg_sensor_values(mock_coordinator: MagicMock) -> None:
     msg.code = "22F3"
     msg.dst.id = "32:999888"
     msg.payload = {"fan_mode": "boost"}
-    device.last_msg = msg
+    device.last_command = msg
 
     sensor = RamsesLastMessageSensor(mock_coordinator, device, desc)
 
@@ -927,7 +937,7 @@ def test_last_msg_sensor_no_message(
     desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == SZ_LAST_MSG)
     device = MagicMock(spec=RamsesRFEntity)
     device.id = "04:123456"
-    device.last_msg = None
+    device.last_command = None
 
     sensor = RamsesLastMessageSensor(mock_coordinator, device, desc)
 
@@ -948,7 +958,7 @@ def test_last_msg_sensor_naive_dtm(mock_coordinator: MagicMock) -> None:
     msg = MagicMock()
     msg.dtm = naive
     msg.payload = {"fan_mode": "low"}
-    device.last_msg = msg
+    device.last_command = msg
 
     sensor = RamsesLastMessageSensor(mock_coordinator, device, desc)
     attrs = sensor.extra_state_attributes
@@ -967,7 +977,7 @@ def test_last_msg_sensor_none_payload(mock_coordinator: MagicMock) -> None:
     msg.code = "10D0"
     msg.dst.id = "32:153289"
     msg.payload = None
-    device.last_msg = msg
+    device.last_command = msg
 
     sensor = RamsesLastMessageSensor(mock_coordinator, device, desc)
     assert sensor.native_value == "RQ/10D0 32:153289"
@@ -985,7 +995,7 @@ def test_last_msg_sensor_truncates_long_payload(
     msg = MagicMock()
     msg.dtm = dt(2024, 5, 6, 7, 8, 9, tzinfo=UTC)
     msg.payload = {"data": "x" * 300}
-    device.last_msg = msg
+    device.last_command = msg
 
     sensor = RamsesLastMessageSensor(mock_coordinator, device, desc)
     assert len(sensor.native_value) == 255
@@ -1007,3 +1017,131 @@ def test_last_msg_sensor_hgi_disabled_by_default(
     rem.id = "29:123456"
     sensor = RamsesLastMessageSensor(mock_coordinator, rem, desc)
     assert sensor.entity_registry_enabled_default is True
+
+
+async def test_last_msg_sensor_gated_by_option(
+    hass: HomeAssistant, mock_coordinator: MagicMock
+) -> None:
+    """The last_msg sensor is only created when the option is enabled."""
+    desc = next(d for d in SENSOR_DESCRIPTIONS if d.key == SZ_LAST_MSG)
+
+    device = MagicMock(spec=HvacRemote)
+    device.id = "29:111111"
+    device.last_msg = MagicMock()
+
+    for options, expected in (
+        ({}, 0),
+        ({CONF_ADVANCED_FEATURES: {}}, 0),
+        ({CONF_ADVANCED_FEATURES: {CONF_LAST_MSG_SENSORS: False}}, 0),
+        ({CONF_ADVANCED_FEATURES: {CONF_LAST_MSG_SENSORS: True}}, 1),
+    ):
+        entry = MagicMock()
+        entry.entry_id = "test_entry_gated"
+        entry.runtime_data = mock_coordinator
+        entry.options = options
+        async_add_entities = MagicMock()
+        mock_coordinator.async_register_platform.reset_mock()
+
+        with (
+            patch(
+                "custom_components.ramses_cc.sensor.async_get_current_platform"
+            ),
+            patch(
+                "custom_components.ramses_cc.sensor.SENSOR_DESCRIPTIONS",
+                (desc,),
+            ),
+        ):
+            await async_setup_entry(hass, entry, async_add_entities)
+            callback_func = mock_coordinator.async_register_platform.call_args[
+                0
+            ][1]
+            callback_func([device])
+
+        assert len(async_add_entities.call_args[0][0]) == expected
+
+
+async def test_last_msg_registry_disabled_when_option_off(
+    hass: HomeAssistant,
+) -> None:
+    """Enabled last_msg entries are disabled when the option is off.
+
+    Entries already disabled by the user are left alone.
+    """
+    registry = er.async_get(hass)
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={CONF_ADVANCED_FEATURES: {CONF_LAST_MSG_SENSORS: False}},
+    )
+    config_entry.add_to_hass(hass)
+
+    enabled = registry.async_get_or_create(
+        "sensor", DOMAIN, "01:123456-last_msg", config_entry=config_entry
+    )
+    user_disabled = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "01:123457-last_msg",
+        config_entry=config_entry,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+
+    _sync_last_msg_registry_entries(hass, config_entry)
+
+    assert (
+        registry.async_get(enabled.entity_id).disabled_by
+        == er.RegistryEntryDisabler.INTEGRATION
+    )
+    assert (
+        registry.async_get(user_disabled.entity_id).disabled_by
+        == er.RegistryEntryDisabler.USER
+    )
+
+
+async def test_last_msg_registry_reenabled_when_option_on(
+    hass: HomeAssistant,
+) -> None:
+    """Integration-disabled last_msg entries re-enable when option is on.
+
+    HGI (18:) entries stay disabled (default-off for HGIs) and
+    user-disabled entries are left alone.
+    """
+    registry = er.async_get(hass)
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={CONF_ADVANCED_FEATURES: {CONF_LAST_MSG_SENSORS: True}},
+    )
+    config_entry.add_to_hass(hass)
+
+    int_disabled = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "32:157747-last_msg",
+        config_entry=config_entry,
+        disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+    )
+    hgi_disabled = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "18:006402-last_msg",
+        config_entry=config_entry,
+        disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+    )
+    user_disabled = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "29:179540-last_msg",
+        config_entry=config_entry,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+
+    _sync_last_msg_registry_entries(hass, config_entry)
+
+    assert registry.async_get(int_disabled.entity_id).disabled_by is None
+    assert (
+        registry.async_get(hgi_disabled.entity_id).disabled_by
+        == er.RegistryEntryDisabler.INTEGRATION
+    )
+    assert (
+        registry.async_get(user_disabled.entity_id).disabled_by
+        == er.RegistryEntryDisabler.USER
+    )
