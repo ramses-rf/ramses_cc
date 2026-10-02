@@ -5164,6 +5164,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         await async_add_entities(Platform.CLIMATE, new_zones)
         await async_add_entities(Platform.WATER_HEATER, new_dhws)
         await async_add_entities(Platform.NUMBER, new_entities)
+        await async_add_entities(Platform.BUTTON, new_entities)
 
         # Trigger a save if we found something new
         await self.async_save_client_state()

@@ -897,6 +897,54 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Force Update',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:refresh',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_force_update',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Sync Topology',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:lan-connect',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_sync_topology',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Discover Known Devices',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:magnify',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_discover_known_devices',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
         'data': dict({
           'type': <RamsesEventType.LEARN: 'ramses_cc_learn'>,
         }),
@@ -1147,6 +1195,54 @@
       'last_reported': <ANY>,
       'last_updated': <ANY>,
       'state': 'heat',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Force Update',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:refresh',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_force_update',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Sync Topology',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:lan-connect',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_sync_topology',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Discover Known Devices',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:magnify',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_discover_known_devices',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
@@ -1910,6 +2006,54 @@
       'last_reported': <ANY>,
       'last_updated': <ANY>,
       'state': 'on',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Force Update',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:refresh',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_force_update',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Sync Topology',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:lan-connect',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_sync_topology',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'effective_polling_interval': dict({
+        }),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'HGI 18:006402 Discover Known Devices',
+        <EntityStateAttribute.ICON: 'icon'>: 'mdi:magnify',
+        'id': '18:006402',
+        'target': None,
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.hgi_18_006402_discover_known_devices',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({

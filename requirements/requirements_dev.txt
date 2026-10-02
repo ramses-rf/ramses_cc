@@ -1,5 +1,5 @@
 # Requirements to dev the source code
-# - runs on HA 2026.8.3 and 2026.9.2)
+# - runs on HA 2026.8.3 and 2026.9.3)
 
 # requirements (dependencies) are in manifest.json
 # - pip list | grep -E 'ramses|serial'
@@ -27,4 +27,4 @@
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest
   # coverage >= ... included in next item
-  pytest_homeassistant_custom_component >= 0.13.366
+  pytest_homeassistant_custom_component == 0.13.366  # pin here as GH workflows may use betas, stay < 1 week

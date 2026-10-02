@@ -1271,7 +1271,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         super().__init__(coordinator, device, entity_description)
 
         self._device = device
-        self._bound_rem = None
+        self._bound_rem: str | None = None
         self._last_known_curr_temp: float | None = None
         self._last_known_curr_hum: int | None = None
         self._last_known_fan_info: str | None = None
@@ -1687,7 +1687,7 @@ class RamsesClimateEntityDescription(
     RamsesEntityDescription,
     ClimateEntityDescription,
 ):
-    """Class describing Ramses binary sensor entities."""
+    """Class describing Ramses Climate entities."""
 
     # integration-specific attributes
     ramses_cc_class: (

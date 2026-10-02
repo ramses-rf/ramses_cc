@@ -6,12 +6,6 @@
 
 .. rubric:: Module Functions
 
-.. py:function:: normalize_device_id(device_id: str) -> str
-    :module: number
-
-    Normalize a device ID for use in entity IDs by replacing colons
-    with underscores and converting to lowercase.
-
 .. py:function:: async_setup_entry(...)
     :module: number
 
@@ -84,26 +78,12 @@ from ramses_rf.protocol.ramses import (
 from .const import DOMAIN
 from .coordinator import RamsesCoordinator
 from .entity import RamsesEntity, RamsesEntityDescription
-from .helpers import device_slug
+from .helpers import device_slug, normalize_device_id
 from .typing import RamsesConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES: Final = 0
-
-
-def normalize_device_id(device_id: str) -> str:
-    """Normalize a device ID for use in entity IDs.
-
-    Replaces colons with underscores and converts to lowercase to
-    ensure consistency.
-
-    :param device_id: The device ID to normalize
-    :type device_id: str
-    :return: The normalized device ID
-    :rtype: str
-    """
-    return str(device_id).replace(":", "_").lower()
 
 
 def _has_existing_param_entities(entity_registry: Any, device_id: str) -> bool:

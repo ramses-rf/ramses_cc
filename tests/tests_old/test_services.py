@@ -102,10 +102,10 @@ NUM_SVCS_AFTER = (
 # Passive scan services (registered when advanced_features.passive_scan
 # is enabled, e.g. after v2→v3 migration).  7 services.
 _NUM_PASSIVE_SCAN_SVCS = 7
-NUM_ENTS_AFTER = 108  # proxy for success (issue 1210 + 4 model sensors, issue 1216: -1 REM fan_rate, +15 last_message_sent)
+NUM_ENTS_AFTER = 120  # proxy for success (issue 1210 + 4 model sensors, issue 1216: -1 REM fan_rate, +15 last_message_sent)
 NUM_ENTS_AFTER_ALT = (
     NUM_ENTS_AFTER - 9
-)  # adjust number to subtract when adding sensors in sensors.py
+)  # adjust number to subtract when adding sensors in sensor.py etc.
 
 # format for datetime asserts, returns as: {'until': datetime.datetime(2025, 8, 11, 22, 11, 14, 774707)}
 # we must round down to prev full hour to allow pytest server run time
