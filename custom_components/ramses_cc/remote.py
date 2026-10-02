@@ -25,7 +25,13 @@ from homeassistant.helpers.event import async_track_state_change_event
 from ramses_rf.devices import HvacRemote, HvacVentilator
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.typing import DeviceIdT
-from ramses_tx.const import DEFAULT_GAP_DURATION, Code, Priority, Verb
+from ramses_tx.const import (
+    DEFAULT_GAP_DURATION,
+    MAX_NUM_REPEATS,
+    Code,
+    Priority,
+    Verb,
+)
 from ramses_tx.exceptions import (
     ProtocolError,
     ProtocolSendFailed,
@@ -697,7 +703,18 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
                 "command to assure valid entry.%s",
                 _extra,
             )
-        # TODO validate/normalise other entry values?
+
+        # HA's remote.send_command accepts any values; bound them to what
+        # ramses_rf asserts downstream so users get a clean error
+        if (
+            not isinstance(num_repeats, int)
+            or not 1 <= num_repeats <= MAX_NUM_REPEATS
+        ):
+            raise HomeAssistantError(
+                f"num_repeats must be an integer between 1 and {MAX_NUM_REPEATS}"
+            )
+        if delay_secs < 0:
+            raise HomeAssistantError("delay_secs must not be negative")
 
         # HACK to make ramses_cc call work as per HA service call
         command = [command] if isinstance(command, str) else list(command)

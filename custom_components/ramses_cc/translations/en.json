@@ -88,14 +88,16 @@
                     "passive_scan": "Enable passive device scan to discover unknown RF devices",
                     "auto_notify": "Send persistent notifications when new devices are found",
                     "lost_threshold_days": "Days without traffic before marking a device as lost",
-                    "gateway_offline_notify": "Notify when gateway is offline"
+                    "gateway_offline_notify": "Notify when gateway is offline",
+                    "last_msg_sensors": "Activate 'Last message sent' sensors"
                 },
                 "data_description": {
                     "message_events": "Enter a regular expression against which to match messages. For example `RP.* 10:` will emit an event for every RP message sent by an OTB.",
                     "passive_scan": "Listens to RF traffic and identifies unknown devices. Discovered devices can be reviewed and added to the schema via service calls.",
                     "auto_notify": "When enabled, a persistent notification appears when new unknown devices are discovered.",
                     "lost_threshold_days": "Number of days an accepted device can go without being seen before it is marked as lost.",
-                    "gateway_offline_notify": "When enabled, a persistent notification appears when the gateway has not received RF packets for the timeout period. Disable for very quiet networks (e.g. a single PIV fan)."
+                    "gateway_offline_notify": "When enabled, a persistent notification appears when the gateway has not received RF packets for the timeout period. Disable for very quiet networks (e.g. a single PIV fan).",
+                    "last_msg_sensors": "Adds a diagnostic sensor to each device showing the last message it sent. Off by default: the sensor updates on every transmitted message, which doubles recorder writes and floods the device activity pane."
                 }
             },
             "packet_log": {
@@ -219,14 +221,16 @@
                     "passive_scan": "Enable passive device scan to discover unknown RF devices",
                     "auto_notify": "Send persistent notifications when new devices are found",
                     "lost_threshold_days": "Days without traffic before marking a device as lost",
-                    "gateway_offline_notify": "Notify when gateway is offline"
+                    "gateway_offline_notify": "Notify when gateway is offline",
+                    "last_msg_sensors": "Activate 'Last message sent' sensors"
                 },
                 "data_description": {
                     "message_events": "Emit a ramses_cc event for each message matching the filter. For example `RP.* 10:` will emit an event for each message sent by an OTB. Leave empty to deactivate.",
                     "passive_scan": "Listens to RF traffic and identifies unknown devices. Discovered devices can be reviewed and added to the schema via service calls.",
                     "auto_notify": "When enabled, a persistent notification appears when new unknown devices are discovered.",
                     "lost_threshold_days": "Number of days an accepted device can go without being seen before it is marked as lost.",
-                    "gateway_offline_notify": "When enabled, a persistent notification appears when the gateway has not received RF packets for the timeout period. Disable for very quiet networks (e.g. a single PIV fan)."
+                    "gateway_offline_notify": "When enabled, a persistent notification appears when the gateway has not received RF packets for the timeout period. Disable for very quiet networks (e.g. a single PIV fan).",
+                    "last_msg_sensors": "Adds a diagnostic sensor to each device showing the last message it sent. Off by default: the sensor updates on every transmitted message, which doubles recorder writes and floods the device activity pane."
                 }
             },
             "packet_log": {

@@ -34,7 +34,6 @@ from ramses_rf.schemas import (
     SCH_GATEWAY_DICT,
     SCH_GLOBAL_SCHEMAS,
     SZ_RESTORE_CACHE,
-    SZ_SCHEMA,
 )
 from ramses_tx.address import is_hgi_id
 from ramses_tx.const import DEVICE_ID_REGEX, HGI_ID_PATTERN, Code
@@ -50,6 +49,7 @@ from ramses_tx.schemas import (
     SZ_PACKET_LOG_RETENTION_DAYS,
     SZ_PORT_NAME,
     SZ_ROTATE_BYTES,
+    SZ_SCHEMA,
     SZ_SERIAL_PORT,
     # deprecated 0.56.0 but allowed as extras:
     # SZ_FILE_NAME, SZ_ROTATE_BACKUPS, SZ_SQLITE_INDEX
@@ -63,6 +63,7 @@ from .const import (
     CONF_FRESH_START,
     CONF_GATEWAY_OFFLINE_NOTIFY,
     CONF_GATEWAY_TIMEOUT,
+    CONF_LAST_MSG_SENSORS,
     CONF_LOST_THRESHOLD,
     CONF_MESSAGE_EVENTS,
     CONF_MQTT_HGI_ID,
@@ -1408,6 +1409,15 @@ class BaseRamsesFlow:
                     )
                 },
             ): selector.TextSelector(),
+            prob.Optional(
+                CONF_LAST_MSG_SENSORS,
+                default=False,
+                description={
+                    "suggested_value": suggested_values.get(
+                        CONF_LAST_MSG_SENSORS
+                    )
+                },
+            ): selector.BooleanSelector(),
             prob.Optional(
                 CONF_PASSIVE_SCAN,
                 default=True,

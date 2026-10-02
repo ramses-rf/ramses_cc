@@ -62,13 +62,13 @@ from custom_components.ramses_cc.const import (
     SZ_TR_NAME,
     SZ_TR_OWNER,
 )
-from ramses_rf.schemas import SZ_SCHEMA
 from ramses_tx.schemas import (
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST,
     SZ_LOG_ALL_MQTT,
     SZ_PACKET_LOG,
     SZ_PORT_NAME,
+    SZ_SCHEMA,
     SZ_SERIAL_PORT,
 )
 

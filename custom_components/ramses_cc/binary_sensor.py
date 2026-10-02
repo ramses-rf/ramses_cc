@@ -32,6 +32,7 @@ from ramses_rf.const import (
     SZ_BYPASS_POSITION,
     SZ_CH_ACTIVE,
     SZ_CH_ENABLED,
+    SZ_CONFIG,
     SZ_COOLING_ACTIVE,
     SZ_COOLING_ENABLED,
     SZ_DHW_ACTIVE,
@@ -55,10 +56,9 @@ from ramses_rf.devices import (
 from ramses_rf.devices.dev_base import DeviceBase
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.gateway import Gateway
-from ramses_rf.schemas import SZ_CONFIG, SZ_SCHEMA
 from ramses_rf.systems.tcs import Logbook, System
 from ramses_tx.const import SZ_IS_EVOFW3
-from ramses_tx.schemas import SZ_KNOWN_LIST
+from ramses_tx.schemas import SZ_KNOWN_LIST, SZ_SCHEMA
 
 from .const import (
     ATTR_ACTIVE_FAULTS,
@@ -468,9 +468,7 @@ class RamsesDeviceStatusBinarySensor(RamsesBinarySensor, RestoreEntity):
         :rtype: dict[str, Any]
         """
         dev = self._device
-        last_seen = getattr(
-            dev, "last_seen", getattr(dev, "_last_msg_dtm", None)
-        )
+        last_seen = getattr(dev, "last_seen", None)
         staleness: float | None = None
         if isinstance(last_seen, dt):
             if last_seen.tzinfo is not None:

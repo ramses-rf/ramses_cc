@@ -273,9 +273,11 @@ async def test_namespace(hass: HomeAssistant) -> None:
 
         attrs = binary.extra_state_attributes
         assert attrs is not None
-        battery_level = attrs["battery_level"]
-        if battery_level != "N/A":  # Display for None
-            assert 0.0 <= battery_level <= 1.0  # TODO: check values, not types
+        # values per system_1.log 1060 packets; "N/A" is the None display
+        if dev_id == "04:056053":
+            assert attrs["battery_level"] == 0.5
+        else:
+            assert attrs["battery_level"] == "N/A"
 
     #
     # evo_control uses: binary_sensor.${cid}_${haZid}_window_open
@@ -325,7 +327,9 @@ async def test_namespace(hass: HomeAssistant) -> None:
 
     climate: ClimateEntity = [e for e in climates if e.unique_id == uid][0]
     assert climate.unique_id == uid
-    # assert climate.name == f"Controller {CTL_ID}"  # TODO
+    # name resolves via the device registry (has_entity_name); these
+    # unregistered entities return None, so assert the contract instead
+    assert climate.has_entity_name
 
     assert climate.state == HVACMode.HEAT
     assert climate.preset_mode == PRESET_ECO
@@ -343,8 +347,7 @@ async def test_namespace(hass: HomeAssistant) -> None:
 
         climate = [e for e in climates if e.unique_id == uid][0]
         assert climate.unique_id == uid
-        # assert climate.name == SCHEMA["zones"][zon_index]["_name"]
-        # TODO
+        assert climate.has_entity_name
 
         attrs = climate.extra_state_attributes
         assert attrs is not None
@@ -373,7 +376,7 @@ async def test_namespace(hass: HomeAssistant) -> None:
         e for e in water_heaters if e.unique_id == uid
     ][0]
     assert heater.unique_id == uid
-    # assert heater.name == f"{CTL_ID} XXX"  # TODO set name
+    assert heater.has_entity_name
 
     attrs = heater.extra_state_attributes
     assert attrs is not None

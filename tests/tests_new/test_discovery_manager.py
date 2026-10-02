@@ -605,7 +605,10 @@ class TestGenerateSchemaEntry:
         result = DiscoveryManager.generate_schema_entry(
             "04:056053", "TRV", ctl_id="01:145038", zone_index="02"
         )
-        from ramses_rf.schemas import SZ_SENSOR, SZ_ZONES
+        from ramses_rf.const import (
+            SZ_SENSOR,
+            SZ_ZONES,
+        )
 
         assert result["01:145038"][SZ_ZONES]["02"][SZ_SENSOR] == "04:056053"
 
@@ -619,7 +622,10 @@ class TestGenerateSchemaEntry:
         result = DiscoveryManager.generate_schema_entry(
             "13:123456", "BDR", ctl_id="01:145038", zone_index="01"
         )
-        from ramses_rf.schemas import SZ_ACTUATORS, SZ_ZONES
+        from ramses_rf.const import (
+            SZ_ACTUATORS,
+            SZ_ZONES,
+        )
 
         assert "13:123456" in result["01:145038"][SZ_ZONES]["01"][SZ_ACTUATORS]
 
@@ -627,7 +633,8 @@ class TestGenerateSchemaEntry:
         result = DiscoveryManager.generate_schema_entry(
             "07:123456", "DHW", ctl_id="01:145038"
         )
-        from ramses_rf.schemas import SZ_DHW_SYSTEM, SZ_SENSOR
+        from ramses_rf.const import SZ_SENSOR
+        from ramses_rf.schemas import SZ_DHW_SYSTEM
 
         assert result["01:145038"][SZ_DHW_SYSTEM][SZ_SENSOR] == "07:123456"
 
@@ -635,7 +642,10 @@ class TestGenerateSchemaEntry:
         result = DiscoveryManager.generate_schema_entry(
             "10:064873", "OTB", ctl_id="01:145038"
         )
-        from ramses_rf.schemas import SZ_APPLIANCE_CONTROL, SZ_SYSTEM
+        from ramses_rf.schemas import (
+            SZ_APPLIANCE_CONTROL,
+            SZ_SYSTEM,
+        )
 
         assert (
             result["01:145038"][SZ_SYSTEM][SZ_APPLIANCE_CONTROL] == "10:064873"
@@ -673,7 +683,10 @@ class TestGenerateSchemaEntry:
     def test_co2_without_parent_goes_to_hvac_orphans(self) -> None:
         """CO2 sensor without a parent FAN goes to orphans_hvac, not orphans_heat."""
         result = DiscoveryManager.generate_schema_entry("37:123456", "CO2")
-        from ramses_rf.schemas import SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC
+        from ramses_rf.schemas import (
+            SZ_ORPHANS_HEAT,
+            SZ_ORPHANS_HVAC,
+        )
 
         assert "37:123456" in result[SZ_ORPHANS_HVAC]
         assert SZ_ORPHANS_HEAT not in result or "37:123456" not in result.get(
@@ -688,7 +701,10 @@ class TestGenerateSchemaEntry:
         FAN parent (bound_to) is unknown, the device is orphaned to
         orphans_hvac rather than incorrectly nested under the CTL.
         """
-        from ramses_rf.schemas import SZ_ORPHANS_HVAC, SZ_REMOTES
+        from ramses_rf.schemas import (
+            SZ_ORPHANS_HVAC,
+            SZ_REMOTES,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "37:123456", "CO2", ctl_id="01:216136"
@@ -706,7 +722,10 @@ class TestGenerateSchemaEntry:
         (the TCS) must not be placed under the CTL's remotes[], because
         SCH_TCS rejects 'remotes' and breaks setup.  It goes to orphans_hvac.
         """
-        from ramses_rf.schemas import SZ_ORPHANS_HVAC, SZ_REMOTES
+        from ramses_rf.schemas import (
+            SZ_ORPHANS_HVAC,
+            SZ_REMOTES,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "29:091138", "REM", ctl_id="01:088175"
@@ -718,7 +737,10 @@ class TestGenerateSchemaEntry:
 
     def test_rem_with_non_fan_bound_to_goes_to_hvac_orphans(self) -> None:
         """REM whose bound_to is not a 32: FAN is orphaned (no remotes under CTL)."""
-        from ramses_rf.schemas import SZ_ORPHANS_HVAC, SZ_REMOTES
+        from ramses_rf.schemas import (
+            SZ_ORPHANS_HVAC,
+            SZ_REMOTES,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "37:123456", "REM", bound_to="01:088175"
@@ -904,7 +926,10 @@ class TestGenerateSchemaEntryEdgeCases:
 
     def test_otb_with_ctl(self) -> None:
         """OTB with ctl_id sets appliance_control."""
-        from ramses_rf.schemas import SZ_APPLIANCE_CONTROL, SZ_SYSTEM
+        from ramses_rf.schemas import (
+            SZ_APPLIANCE_CONTROL,
+            SZ_SYSTEM,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "01:222222", "OTB", ctl_id="01:111111"
@@ -922,7 +947,10 @@ class TestGenerateSchemaEntryEdgeCases:
 
     def test_bdr_with_ctl_and_zone(self) -> None:
         """BDR with ctl_id and zone_index becomes a zone actuator."""
-        from ramses_rf.schemas import SZ_ACTUATORS, SZ_ZONES
+        from ramses_rf.const import (
+            SZ_ACTUATORS,
+            SZ_ZONES,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "08:333333", "BDR", ctl_id="01:111111", zone_index="01"
@@ -931,7 +959,10 @@ class TestGenerateSchemaEntryEdgeCases:
 
     def test_bdr_with_ctl_no_zone(self) -> None:
         """BDR with ctl_id but no zone goes to DHW as dhw_valve."""
-        from ramses_rf.schemas import SZ_DHW_SYSTEM, SZ_DHW_VALVE
+        from ramses_rf.schemas import (
+            SZ_DHW_SYSTEM,
+            SZ_DHW_VALVE,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "08:333333", "BDR", ctl_id="01:111111"
@@ -945,7 +976,10 @@ class TestGenerateSchemaEntryEdgeCases:
         DHW valve.  The scan engine sets domain_id=FC; generate_schema_entry
         must place it under system.appliance_control, not stored_hotwater.
         """
-        from ramses_rf.schemas import SZ_APPLIANCE_CONTROL, SZ_SYSTEM
+        from ramses_rf.schemas import (
+            SZ_APPLIANCE_CONTROL,
+            SZ_SYSTEM,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "13:121025", "BDR", ctl_id="01:046100", domain_id="FC"
@@ -970,7 +1004,10 @@ class TestGenerateSchemaEntryEdgeCases:
         domain (TPI loop).  A BDR could theoretically be both, but zone
         binding wins.
         """
-        from ramses_rf.schemas import SZ_ACTUATORS, SZ_ZONES
+        from ramses_rf.const import (
+            SZ_ACTUATORS,
+            SZ_ZONES,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "13:121025",
@@ -990,7 +1027,8 @@ class TestGenerateSchemaEntryEdgeCases:
 
     def test_dhw_with_ctl(self) -> None:
         """DHW with ctl_id goes to dhw_system as sensor."""
-        from ramses_rf.schemas import SZ_DHW_SYSTEM, SZ_SENSOR
+        from ramses_rf.const import SZ_SENSOR
+        from ramses_rf.schemas import SZ_DHW_SYSTEM
 
         result = DiscoveryManager.generate_schema_entry(
             "07:444444", "DHW", ctl_id="01:111111"
@@ -1006,7 +1044,10 @@ class TestGenerateSchemaEntryEdgeCases:
 
     def test_trv_with_ctl_and_zone(self) -> None:
         """TRV with ctl_id and zone_index becomes a zone sensor."""
-        from ramses_rf.schemas import SZ_SENSOR, SZ_ZONES
+        from ramses_rf.const import (
+            SZ_SENSOR,
+            SZ_ZONES,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "04:555555", "TRV", ctl_id="01:111111", zone_index="02"
@@ -1020,7 +1061,10 @@ class TestGenerateSchemaEntryEdgeCases:
         UfhController in a TCS ``orphans`` list, so a TrvActuator placed
         there raises SchemaInconsistentError at setup time (issue 813).
         """
-        from ramses_rf.schemas import SZ_ORPHANS, SZ_ORPHANS_HEAT
+        from ramses_rf.schemas import (
+            SZ_ORPHANS,
+            SZ_ORPHANS_HEAT,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "04:555555", "TRV", ctl_id="01:111111"
@@ -1031,7 +1075,10 @@ class TestGenerateSchemaEntryEdgeCases:
 
     def test_thm_with_ctl_no_zone(self) -> None:
         """THM (room thermostat) with ctl_id but no zone goes to orphans_heat."""
-        from ramses_rf.schemas import SZ_ORPHANS, SZ_ORPHANS_HEAT
+        from ramses_rf.schemas import (
+            SZ_ORPHANS,
+            SZ_ORPHANS_HEAT,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "22:012299", "THM", ctl_id="01:216136"
@@ -1041,7 +1088,10 @@ class TestGenerateSchemaEntryEdgeCases:
 
     def test_rnd_with_ctl_no_zone(self) -> None:
         """RND (round thermostat) with ctl_id but no zone goes to orphans_heat."""
-        from ramses_rf.schemas import SZ_ORPHANS, SZ_ORPHANS_HEAT
+        from ramses_rf.schemas import (
+            SZ_ORPHANS,
+            SZ_ORPHANS_HEAT,
+        )
 
         result = DiscoveryManager.generate_schema_entry(
             "34:058721", "RND", ctl_id="01:216136"

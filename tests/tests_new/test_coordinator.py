@@ -4203,8 +4203,12 @@ class TestDeriveKnownListFromSchemaExtended:
 
     def test_full_schema_with_all_structures(self) -> None:
         """A full schema with TCS, DHW, UFH, zones, HVAC, orphans."""
-        from ramses_rf.schemas import (
+        from ramses_rf.const import (
             SZ_ACTUATORS,
+            SZ_SENSOR,
+            SZ_ZONES,
+        )
+        from ramses_rf.schemas import (
             SZ_APPLIANCE_CONTROL,
             SZ_DHW_SYSTEM,
             SZ_DHW_VALVE,
@@ -4214,11 +4218,9 @@ class TestDeriveKnownListFromSchemaExtended:
             SZ_ORPHANS_HEAT,
             SZ_ORPHANS_HVAC,
             SZ_REMOTES,
-            SZ_SENSOR,
             SZ_SENSORS,
             SZ_SYSTEM,
             SZ_UFH_SYSTEM,
-            SZ_ZONES,
         )
 
         schema = {
@@ -5186,9 +5188,15 @@ async def test_async_start_discovery_scan_with_restore(
         # Verify state was restored
         mock_dm.restore_state.assert_called_once()
 
-        # Verify timers were scheduled
+        # Periodic timer scheduled; the MagicMock scan exposes
+        # set_new_device_callback, so the real-time path is used and
+        # the 10-second fallback one-shot is not.
         mock_track.assert_called_once()
-        mock_call_later.assert_called_once()
+        mock_call_later.assert_not_called()
+        scan_inst = fake_scan_module.DiscoveryScan.return_value
+        scan_inst.set_new_device_callback.assert_called_once_with(
+            coordinator._on_scan_new_device
+        )
 
 
 async def test_async_start_discovery_scan_no_stored_state(
@@ -5240,6 +5248,125 @@ async def test_async_start_discovery_scan_no_stored_state(
 
         # No stored state — restore_state should not be called
         mock_dm.restore_state.assert_not_called()
+
+
+async def test_async_start_discovery_scan_callback_fallback(
+    hass: HomeAssistant,
+) -> None:
+    """Test the 10-second one-shot fallback when ramses_rf lacks
+    set_new_device_callback (< 0.60.10)."""
+    from custom_components.ramses_cc.const import (
+        CONF_ADVANCED_FEATURES,
+        CONF_PASSIVE_SCAN,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        entry_id="test_start_fallback",
+        options={
+            "ramses_rf": {},
+            "serial_port": {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            SZ_KNOWN_LIST: {},
+            CONF_ADVANCED_FEATURES: {CONF_PASSIVE_SCAN: True},
+        },
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = RamsesCoordinator(hass, entry)
+    coordinator.client = MagicMock()
+
+    coordinator.store = MagicMock()
+    coordinator.store.async_load = AsyncMock(return_value={})
+
+    # A scan instance without set_new_device_callback (old ramses_rf)
+    scan_inst = MagicMock()
+    del scan_inst.set_new_device_callback
+
+    fake_scan_module = MagicMock()
+    fake_scan_module.DiscoveryScan = MagicMock(return_value=scan_inst)
+    with (
+        patch.dict(
+            sys.modules, {"ramses_rf.discovery_scan": fake_scan_module}
+        ),
+        patch("custom_components.ramses_cc.coordinator.DiscoveryManager"),
+        patch(
+            "custom_components.ramses_cc.coordinator.async_track_time_interval"
+        ),
+        patch(
+            "custom_components.ramses_cc.coordinator.async_call_later"
+        ) as mock_call_later,
+    ):
+        await coordinator._async_start_discovery_scan()
+
+        # Fallback: one-shot delayed checkpoint is scheduled
+        mock_call_later.assert_called_once()
+
+
+async def test_on_scan_new_device_debounces(hass: HomeAssistant) -> None:
+    """_on_scan_new_device coalesces a burst into one checkpoint."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        entry_id="test_new_dev_debounce",
+        options={
+            "ramses_rf": {},
+            "serial_port": {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            SZ_KNOWN_LIST: {},
+        },
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = RamsesCoordinator(hass, entry)
+    coordinator.discovery_manager = MagicMock()
+
+    with (
+        patch(
+            "custom_components.ramses_cc.coordinator._NEW_DEVICE_DEBOUNCE",
+            td(seconds=0),
+        ),
+        patch.object(
+            coordinator,
+            "_async_discovery_checkpoint",
+            new_callable=AsyncMock,
+        ) as mock_cp,
+    ):
+        coordinator._on_scan_new_device(MagicMock())
+        first = coordinator._new_device_debounce_task
+        assert first is not None
+        # A second device before the window ends cancels the first task
+        coordinator._on_scan_new_device(MagicMock())
+        second = coordinator._new_device_debounce_task
+        assert second is not None
+        assert first is not second
+        await second
+        mock_cp.assert_awaited_once()
+        await hass.async_block_till_done()
+
+
+async def test_on_scan_new_device_no_manager(hass: HomeAssistant) -> None:
+    """Debounced worker exits cleanly without a discovery_manager."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        entry_id="test_new_dev_no_dm",
+        options={
+            "ramses_rf": {},
+            "serial_port": {SZ_PORT_NAME: "/dev/ttyUSB0"},
+            SZ_KNOWN_LIST: {},
+        },
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = RamsesCoordinator(hass, entry)
+    coordinator.discovery_manager = None
+
+    with patch(
+        "custom_components.ramses_cc.coordinator._NEW_DEVICE_DEBOUNCE",
+        td(seconds=0),
+    ):
+        coordinator._on_scan_new_device(MagicMock())
+        task = coordinator._new_device_debounce_task
+        assert task is not None
+        await task
+        await hass.async_block_till_done()
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -5610,7 +5737,7 @@ def test_extract_schema_device_ids_non_dict_value_skipped() -> None:
 
 def test_extract_schema_device_ids_zone_non_dict_skipped() -> None:
     """Test that non-dict zone data is skipped."""
-    from ramses_rf.schemas import SZ_ZONES
+    from ramses_rf.const import SZ_ZONES
 
     schema: dict[str, Any] = {
         "01:123456": {
@@ -10716,8 +10843,12 @@ def test_serial_port_hgi_map_exception_is_swallowed(
 
 def test_extract_device_ids_from_stripped_full_schema() -> None:
     """Test _extract_device_ids_from_stripped covers all nested branches."""
-    from ramses_rf.schemas import (
+    from ramses_rf.const import (
         SZ_ACTUATORS as _SZ_ACTUATORS,
+        SZ_SENSOR as _SZ_SENSOR,
+        SZ_ZONES as _SZ_ZONES,
+    )
+    from ramses_rf.schemas import (
         SZ_APPLIANCE_CONTROL as _SZ_APPLIANCE_CONTROL,
         SZ_DHW_SYSTEM as _SZ_DHW_SYSTEM,
         SZ_DHW_VALVE as _SZ_DHW_VALVE,
@@ -10727,11 +10858,9 @@ def test_extract_device_ids_from_stripped_full_schema() -> None:
         SZ_ORPHANS_HEAT as _SZ_ORPHANS_HEAT,
         SZ_ORPHANS_HVAC as _SZ_ORPHANS_HVAC,
         SZ_REMOTES as _SZ_REMOTES,
-        SZ_SENSOR as _SZ_SENSOR,
         SZ_SENSORS as _SZ_SENSORS,
         SZ_SYSTEM as _SZ_SYSTEM,
         SZ_UFH_SYSTEM as _SZ_UFH_SYSTEM,
-        SZ_ZONES as _SZ_ZONES,
     )
 
     schema: dict[str, Any] = {

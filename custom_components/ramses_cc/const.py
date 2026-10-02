@@ -7,12 +7,9 @@ from typing import Final
 
 from homeassistant.const import CONF_SCAN_INTERVAL as CONF_SCAN_INTERVAL
 
+from ramses_rf.config import SZ_BOUND_TO as SZ_BOUND_TO
 from ramses_rf.protocol.ramses import (
     _2411_PARAMS_SCHEMA as _2411_PARAMS_SCHEMA,
-)
-from ramses_rf.schemas import (
-    SZ_BOUND_TO as SZ_BOUND_TO,
-    SZ_SCHEMA as SZ_SCHEMA,
 )
 from ramses_tx.address import HGI_DEVICE_ID as HGI_DEVICE_ID
 from ramses_tx.const import (
@@ -29,6 +26,7 @@ from ramses_tx.schemas import (
     SZ_PACKET_LOG_PREFIX as SZ_PACKET_LOG_PREFIX,
     SZ_PACKET_LOG_RETENTION_DAYS as SZ_PACKET_LOG_RETENTION_DAYS,
     SZ_PORT_NAME as SZ_PORT_NAME,
+    SZ_SCHEMA as SZ_SCHEMA,
     SZ_SERIAL_PORT as SZ_SERIAL_PORT,
 )
 
@@ -49,6 +47,7 @@ CONF_FRESH_START: Final = "fresh_start"
 CONF_SSOT_MIGRATED: Final = "ssot_migration_done"
 CONF_GATEWAY_TIMEOUT: Final = "gateway_timeout"
 CONF_GATEWAY_OFFLINE_NOTIFY: Final = "gateway_offline_notify"
+CONF_LAST_MSG_SENSORS: Final = "last_msg_sensors"
 CONF_MESSAGE_EVENTS: Final = "message_events"
 CONF_MQTT_USE_HA: Final = "mqtt_use_ha"
 CONF_MQTT_HGI_ID: Final = "mqtt_hgi_id"

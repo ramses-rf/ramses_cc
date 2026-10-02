@@ -3,6 +3,9 @@ ramses_cc:
     enforce_known_list: true
   serial_port: /dev/null
 
+  advanced_features:
+    last_msg_sensors: true
+
   orphans_hvac: ["29:179540", "32:157747"]
 
   known_list:
