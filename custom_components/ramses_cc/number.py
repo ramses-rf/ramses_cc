@@ -288,10 +288,13 @@ async def async_setup_entry(
     coordinator.async_register_platform(platform, add_devices)
 
     # Load any existing devices that were discovered before platform
-    # registration
-    coord_devices = getattr(coordinator, "devices", [])
+    # registration.  Collected entities are routed through add_devices,
+    # which owns the pending/loaded bookkeeping — do not pre-mark
+    # unique_ids as pending here or the entity branch will skip them.
+    coord_devices = coordinator.devices
     if coord_devices:
         _LOGGER.debug("Processing %d existing devices", len(coord_devices))
+        pending_entities = coordinator._parameter_entities_pending
         fan_devices = [
             d
             for d in coord_devices
@@ -304,8 +307,6 @@ async def async_setup_entry(
         if fan_devices:
             _LOGGER.debug("Found %d FAN devices to process", len(fan_devices))
             # Load entities from registry for existing devices
-            pending_entities = coordinator._parameter_entities_pending
-
             for device in fan_devices:
                 _LOGGER.debug(
                     "Loading parameter entities from registry for %s",
@@ -338,7 +339,6 @@ async def async_setup_entry(
                             )
                             continue
 
-                        pending_entities.add(unique_id)
                         entities.append(entity)
 
         # Diagnostic polling interval entities for mains-powered devices
@@ -355,7 +355,6 @@ async def async_setup_entry(
                     poll_entity.unique_id
                     and poll_entity.unique_id not in pending_entities
                 ):
-                    pending_entities.add(poll_entity.unique_id)
                     entities.append(poll_entity)
 
     # Add all collected entities to the platform
@@ -1309,18 +1308,19 @@ class RamsesPollingInterval(RamsesNumberBase):
         self, coordinator: RamsesCoordinator, device: RamsesRFEntity
     ) -> None:
         """Initialize the polling interval entity."""
-        description = RamsesEntityDescription(
+        description = RamsesNumberEntityDescription(
             key="polling_interval",
             translation_key="polling_interval",
+            mode="box",
+            native_unit_of_measurement="s",
+            native_min_value=1.0,
+            native_max_value=86400.0,
+            native_step=1.0,
         )
         super().__init__(coordinator, device, description)
         self._attr_translation_key = "polling_interval"
         self._attr_unique_id = f"{device.id}_polling_interval"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._attr_native_min_value = 1.0
-        self._attr_native_max_value = 86400.0
-        self._attr_native_step = 1.0
-        self._attr_native_unit_of_measurement = "s"
 
     @property
     def native_value(self) -> float | None:

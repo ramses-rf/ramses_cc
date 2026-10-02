@@ -877,6 +877,11 @@
             "reset_filter_counter": {
                 "name": "Reset Filter-teller"
             }
+        },
+        "number": {
+            "polling_interval": {
+                "name": "Poll-interval"
+            }
         }
     },
     "selector": {

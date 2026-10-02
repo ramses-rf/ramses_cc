@@ -879,6 +879,11 @@
             "reset_filter_counter": {
                 "name": "Reset Filter Counter"
             }
+        },
+        "number": {
+            "polling_interval": {
+                "name": "Polling interval"
+            }
         }
     },
     "selector": {
