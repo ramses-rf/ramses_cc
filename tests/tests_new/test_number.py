@@ -1090,3 +1090,38 @@ async def test_number_param_async_added_to_hass(
     # Assert
     assert entity.async_on_remove.called
     assert entity._request_parameter_value.called
+
+
+@pytest.mark.asyncio
+async def test_setup_entry_mains_device_no_fan(
+    hass: HomeAssistant, mock_coordinator: MagicMock
+) -> None:
+    """Mains-powered device without FANs must not raise (issue 1301)."""
+    ctl = MagicMock(spec=MockDevice)
+    ctl.id = "01:123456"
+    ctl.slug = "CTL"
+    ctl._SLUG = "CTL"
+    ctl.type = "01"
+    ctl.is_battery = False
+    mock_coordinator.devices = [ctl]
+    mock_coordinator._parameter_entities_pending = set()
+    mock_coordinator._parameter_entities_loaded = set()
+    mock_coordinator._parameter_entities_created = set()
+
+    entry = MagicMock(entry_id="test_entry", runtime_data=mock_coordinator)
+    async_add_entities = MagicMock()
+
+    with patch(
+        "custom_components.ramses_cc.number.async_get_current_platform",
+        return_value=MagicMock(entities={}),
+    ):
+        await async_setup_entry(hass, entry, async_add_entities)
+
+    # a polling-interval entity is created for the mains-powered device
+    assert async_add_entities.called
+    added = [
+        e.unique_id
+        for call in async_add_entities.call_args_list
+        for e in call.args[0]
+    ]
+    assert "01:123456_polling_interval" in added
