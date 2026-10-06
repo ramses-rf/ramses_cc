@@ -67,7 +67,7 @@ class RamsesButtonEntityDescription(
     service: str | None = None  # ramses_cc service to call when pressed
     service_data: dict[str, str] | None = None
     target: dict[str, Any] | None = None
-    entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
+    entity_category: EntityCategory | None = None
 
 
 # Gateway-level service buttons created for each HGI.
@@ -249,7 +249,6 @@ class _ButtonFactory:
                 icon="mdi:restart-alert",
                 service=SVC_RESET_FILTER,
                 target={"entity_id": [remote_entity.entity_id]},
-                entity_category=None,
             ),
             normalize_device_id(fan.id),
         )
