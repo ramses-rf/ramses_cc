@@ -4532,7 +4532,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         await self.store.async_save(schema, packets, remotes, discovery_state)
 
-    def _get_device(self, device_id: str) -> Device | None:
+    def get_device(self, device_id: str) -> Device | None:
         """Get a device by ID."""
         if device := next(
             (d for d in self._devices if d.id == device_id), None
@@ -4543,6 +4543,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 DeviceIdT(device_id)
             )
         return None
+
+    # Backward-compat alias: ramses_extras still calls _get_device()
+    _get_device = get_device
 
     def async_register_platform(
         self,

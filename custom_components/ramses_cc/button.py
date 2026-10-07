@@ -214,7 +214,7 @@ class _ButtonFactory:
 
         # Only faked REMs can transmit (real REMs can't be impersonated),
         # so a FAN bound to a real REM gets no button.
-        rem_dev = self._coordinator._get_device(rem_id)
+        rem_dev = self._coordinator.get_device(rem_id)
         if rem_dev is not None and not rem_dev.is_faked:
             _LOGGER.debug(
                 "Bound REM %s is not faked; no reset button for FAN %s",

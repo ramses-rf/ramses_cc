@@ -212,7 +212,7 @@ async def test_set_fan_param_hgi_fallback(
     mock_device = MagicMock()
     mock_device.id = FAN_ID
     mock_device.get_bound_rem = MagicMock(return_value=None)
-    mock_coordinator._get_device = MagicMock(return_value=mock_device)
+    mock_coordinator.get_device = MagicMock(return_value=mock_device)
 
     with patch.object(
         mock_coordinator.service_handler,
@@ -235,7 +235,7 @@ async def test_fan_param_rejects_non_fan_target(
     remote.id = REM_ID
     remote._SLUG = "REM"
     remote.slug = remote._SLUG
-    mock_coordinator._get_device = MagicMock(return_value=remote)
+    mock_coordinator.get_device = MagicMock(return_value=remote)
 
     with pytest.raises(ServiceValidationError) as err:
         await mock_coordinator.async_get_fan_param(
@@ -700,7 +700,7 @@ async def test_async_set_fan_param_success_clear_pending(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test full success path of set_fan_param including pending state."""
-    mock_coordinator._get_device = MagicMock(return_value=MagicMock(id=FAN_ID))
+    mock_coordinator.get_device = MagicMock(return_value=MagicMock(id=FAN_ID))
     mock_entity = MagicMock()
     mock_entity.set_pending = MagicMock()
     mock_entity._clear_pending_after_timeout = AsyncMock()
@@ -771,7 +771,7 @@ async def test_get_device_and_from_id_bound_logic(
     mock_dev.id = "30:111111"
 
     # Mock the device lookup
-    mock_coordinator._get_device = MagicMock(return_value=mock_dev)
+    mock_coordinator.get_device = MagicMock(return_value=mock_dev)
 
     call = {"device_id": "30:111111"}
 
@@ -1279,7 +1279,7 @@ async def test_resolve_device_id_list_warning(
 async def test_get_device_client_fallback(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_device falls back to client.device_registry.device_by_id."""
+    """Test get_device falls back to client.device_registry.device_by_id."""
     # Ensure internal devices list is empty to trigger fallback logic
     mock_coordinator._devices = []
     mock_dev = MagicMock()
@@ -1289,7 +1289,7 @@ async def test_get_device_client_fallback(
     mock_client = cast(Any, mock_coordinator.client)
     mock_client.device_registry.device_by_id = {"30:999999": mock_dev}
 
-    dev = mock_coordinator._get_device("30:999999")
+    dev = mock_coordinator.get_device("30:999999")
     assert dev == mock_dev
 
 
@@ -1525,10 +1525,10 @@ async def test_fan_bound_device_list(
         "30:111111": {SZ_TR_BOUND: ["32:153001", "32:153002"]}
     }
 
-    # Mock _get_device to return mock REM devices (HvacRemoteBase)
+    # Mock get_device to return mock REM devices (HvacRemoteBase)
     mock_rem1 = MagicMock(spec=HvacRemoteBase)
     mock_rem2 = MagicMock(spec=HvacRemoteBase)
-    mock_coordinator._get_device = MagicMock(
+    mock_coordinator.get_device = MagicMock(
         side_effect=lambda dev_id: {
             "32:153001": mock_rem1,
             "32:153002": mock_rem2,
@@ -1565,7 +1565,7 @@ async def test_fan_bound_device_single_string_still_works(
     }
 
     mock_rem = MagicMock(spec=HvacRemoteBase)
-    mock_coordinator._get_device = MagicMock(return_value=mock_rem)
+    mock_coordinator.get_device = MagicMock(return_value=mock_rem)
 
     await mock_coordinator.fan_handler.setup_fan_bound_devices(mock_fan)
 
@@ -1721,7 +1721,7 @@ async def test_setup_schema_merge_failure(hass: HomeAssistant) -> None:
 
 
 def test_get_device_returns_none(hass: HomeAssistant) -> None:
-    """Test _get_device returns None when device not found and client not ready."""
+    """Test get_device returns None when device not found and client not ready."""
     entry = MockConfigEntry(domain=DOMAIN, options={CONF_SCAN_INTERVAL: 60})
     coordinator = RamsesCoordinator(hass, entry)
 
@@ -1730,7 +1730,7 @@ def test_get_device_returns_none(hass: HomeAssistant) -> None:
     coordinator._devices = []
 
     # Test fallback logic returns None
-    assert coordinator._get_device("01:123456") is None
+    assert coordinator.get_device("01:123456") is None
 
 
 async def test_update_device_relationships(hass: HomeAssistant) -> None:
@@ -1901,7 +1901,7 @@ async def test_get_fan_param_no_source(
     device = MagicMock()
     device.id = "32:123456"
     device.get_bound_rem.return_value = None
-    coordinator._get_device = MagicMock(return_value=device)
+    coordinator.get_device = MagicMock(return_value=device)
 
     # Call without explicit from_id
     call = {"device_id": "32:123456", "param_id": "01"}
@@ -1986,7 +1986,7 @@ async def test_set_fan_param_errors(hass: HomeAssistant) -> None:
     device = MagicMock()
     device.id = "32:123456"
     device.get_bound_rem.return_value = None
-    coordinator._get_device = MagicMock(return_value=device)
+    coordinator.get_device = MagicMock(return_value=device)
 
     call = {"device_id": "32:123456", "param_id": "01", "value": 1}
 
@@ -2452,7 +2452,7 @@ async def test_coordinator_get_fan_param(
     From test_coordinator_fan.py.
     """
     # Mock device lookup using the boundary interface
-    mock_coordinator._get_device = MagicMock(return_value=mock_fan_device)
+    mock_coordinator.get_device = MagicMock(return_value=mock_fan_device)
 
     # 1. Test with explicit from_id
     call_data = {
@@ -2486,7 +2486,7 @@ async def test_coordinator_set_fan_param(
     From test_coordinator_fan.py.
     """
     # Mock device lookup using the boundary interface
-    mock_coordinator._get_device = MagicMock(return_value=mock_fan_device)
+    mock_coordinator.get_device = MagicMock(return_value=mock_fan_device)
 
     # 1. Test with automatic bound device lookup (no from_id)
     call_data = {"device_id": FAN_ID, "param_id": PARAM_ID_HEX, "value": 21.5}
@@ -2510,7 +2510,7 @@ async def test_update_fan_params_sequence(
     From test_coordinator_fan.py.
     """
     # Mock device lookup using the boundary interface
-    mock_coordinator._get_device = MagicMock(return_value=mock_fan_device)
+    mock_coordinator.get_device = MagicMock(return_value=mock_fan_device)
 
     # Define a tiny schema for testing (just 2 params) to avoid 30+ iterations
     tiny_schema = ["11", "22"]
@@ -2551,7 +2551,7 @@ async def test_set_fan_param_no_bound_remote(
     From test_coordinator_fan.py (renamed from test_coordinator_set_fan_param_no_binding).
     """
     # Mock device lookup using the boundary interface
-    mock_coordinator._get_device = MagicMock(return_value=mock_fan_device)
+    mock_coordinator.get_device = MagicMock(return_value=mock_fan_device)
 
     # 1. Simulate an Unbound Fan (get_bound_rem returns None)
     mock_fan_device.get_bound_rem = MagicMock(return_value=None)
@@ -2586,7 +2586,7 @@ async def test_set_fan_param_explicit_id_precedence(
     mock_fan_device.get_bound_rem.return_value = "32:111111"
 
     # Mock device lookup using the boundary interface
-    mock_coordinator._get_device = MagicMock(return_value=mock_fan_device)
+    mock_coordinator.get_device = MagicMock(return_value=mock_fan_device)
 
     # 2. Action: Call with an EXPLICIT from_id that is DIFFERENT from bound
     # 32:222222 is the 'explicit' remote
@@ -2624,7 +2624,7 @@ async def test_get_fan_param_uses_hgi_fallback(
     mock_dev = MagicMock()
     mock_dev.id = "30:111111"
     mock_dev.get_bound_rem.return_value = None
-    mock_coordinator._get_device = MagicMock(return_value=mock_dev)
+    mock_coordinator.get_device = MagicMock(return_value=mock_dev)
 
     # 3. Setup Entity (to handle set_pending/cleanup)
     mock_entity = MagicMock()

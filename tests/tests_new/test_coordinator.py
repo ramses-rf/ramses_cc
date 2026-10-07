@@ -2305,7 +2305,7 @@ async def test_setup_handles_naive_timestamps(
 
 
 async def test_get_device_lookup(mock_coordinator: RamsesCoordinator) -> None:
-    """Test _get_device lookups via internal list and client fallback.
+    """Test get_device lookups via internal list and client fallback.
 
     Covers lines 373-377.
     """
@@ -2316,7 +2316,7 @@ async def test_get_device_lookup(mock_coordinator: RamsesCoordinator) -> None:
     dev1.id = "01:111111"
     mock_coordinator._devices = [dev1]
 
-    assert mock_coordinator._get_device("01:111111") == dev1
+    assert mock_coordinator.get_device("01:111111") == dev1
 
     # 2. Test fallback to client.device_registry.device_by_id
     dev2 = MagicMock()
@@ -2326,15 +2326,15 @@ async def test_get_device_lookup(mock_coordinator: RamsesCoordinator) -> None:
         "02:222222": dev2
     }
 
-    assert mock_coordinator._get_device("02:222222") == dev2
+    assert mock_coordinator.get_device("02:222222") == dev2
 
     # 3. Test not found (client exists)
-    assert mock_coordinator._get_device("99:999999") is None
+    assert mock_coordinator.get_device("99:999999") is None
 
     # 4. Test not found (no client) -> Hits the final return None
     mock_coordinator.client = None
     mock_coordinator._devices = []  # Clear devices to ensure fall-through
-    assert mock_coordinator._get_device("01:111111") is None
+    assert mock_coordinator.get_device("01:111111") is None
 
 
 async def test_update_device_skips_redundant_update(
@@ -2501,7 +2501,7 @@ async def test_coordinator_get_fan_param(
 
     mock_send = AsyncMock()
 
-    with patch.object(mock_coordinator, "_get_device") as mock_get_dev:
+    with patch.object(mock_coordinator, "get_device") as mock_get_dev:
         mock_dev = MagicMock()
         mock_dev.id = FAN_ID
         mock_get_dev.return_value = mock_dev
@@ -2533,8 +2533,8 @@ async def test_coordinator_set_fan_param(
 
     mock_send = AsyncMock()
 
-    # Patch _get_device so valid check passes
-    with patch.object(mock_coordinator, "_get_device") as mock_get_dev:
+    # Patch get_device so valid check passes
+    with patch.object(mock_coordinator, "get_device") as mock_get_dev:
         mock_dev = MagicMock()
         mock_dev.id = FAN_ID
         mock_get_dev.return_value = mock_dev
@@ -2559,8 +2559,8 @@ async def test_coordinator_set_fan_param_no_value(
         "from_id": REM_ID,
     }
 
-    # Patch _get_device so valid check passes and we hit the value check
-    with patch.object(mock_coordinator, "_get_device") as mock_get_dev:
+    # Patch get_device so valid check passes and we hit the value check
+    with patch.object(mock_coordinator, "get_device") as mock_get_dev:
         mock_dev = MagicMock()
         mock_dev.id = FAN_ID
         mock_get_dev.return_value = mock_dev

@@ -45,7 +45,7 @@ def mock_coordinator(
 
     coordinator = RamsesCoordinator(hass, entry)
     coordinator.client = mock_gateway
-    # Create fake devices list if needed, or we patch _get_device
+    # Create fake devices list if needed, or we patch get_device
     coordinator._device_info = {}
 
     entry.runtime_data = coordinator
@@ -119,7 +119,7 @@ async def test_setup_fan_bound_not_rem(
     bound_dev = MagicMock()
     bound_dev.id = "01:999999"
     # Ensure it fails isinstance(HvacRemoteBase) and checks
-    mock_coordinator._get_device = MagicMock(return_value=bound_dev)
+    mock_coordinator.get_device = MagicMock(return_value=bound_dev)
 
     mock_coordinator.options[CONF_SCHEMA] = {
         FAN_ID: {SZ_TR_BOUND: bound_dev.id}
@@ -209,7 +209,7 @@ async def test_setup_fan_bound_success_rem(
     # Create the bound device object
     bound_device = MagicMock()
     bound_device.id = bound_id
-    mock_coordinator._get_device = MagicMock(return_value=bound_device)
+    mock_coordinator.get_device = MagicMock(return_value=bound_device)
 
     # Helper classes to satisfy isinstance checks in coordinator.py
     class MockHvacVentilator:
@@ -258,7 +258,7 @@ async def test_setup_fan_bound_success_dis(
     bound_device.id = bound_id
     bound_device._SLUG = DevType.DIS
     bound_device.slug = bound_device._SLUG
-    mock_coordinator._get_device = MagicMock(return_value=bound_device)
+    mock_coordinator.get_device = MagicMock(return_value=bound_device)
 
     class MockHvacVentilator:
         pass
@@ -291,7 +291,7 @@ async def test_setup_fan_bound_device_not_found(
 
     mock_coordinator.options[CONF_SCHEMA] = {FAN_ID: {SZ_TR_BOUND: bound_id}}
 
-    mock_coordinator._get_device = MagicMock(return_value=None)
+    mock_coordinator.get_device = MagicMock(return_value=None)
 
     class MockHvacVentilator:
         pass
@@ -345,7 +345,7 @@ async def test_setup_fan_bound_bad_device_type(
     bound_device = MagicMock()
     bound_device.id = bound_id
     del bound_device._SLUG  # Ensure no _SLUG attribute exists or it is not DIS
-    mock_coordinator._get_device = MagicMock(return_value=bound_device)
+    mock_coordinator.get_device = MagicMock(return_value=bound_device)
 
     class MockHvacVentilator:
         pass
@@ -438,7 +438,7 @@ async def test_setup_fan_bound_from_schema(
     bound_device.id = bound_id
     bound_device._SLUG = DevType.REM
     bound_device.slug = bound_device._SLUG
-    mock_coordinator._get_device = MagicMock(return_value=bound_device)
+    mock_coordinator.get_device = MagicMock(return_value=bound_device)
 
     class MockHvacVentilator:
         pass
@@ -480,7 +480,7 @@ async def test_setup_fan_bound_schema_is_sole_source(
     bound_device.id = bound_id
     bound_device._SLUG = DevType.REM
     bound_device.slug = bound_device._SLUG
-    mock_coordinator._get_device = MagicMock(return_value=bound_device)
+    mock_coordinator.get_device = MagicMock(return_value=bound_device)
 
     class MockHvacVentilator:
         pass
@@ -524,7 +524,7 @@ async def test_setup_fan_bound_fallback_to_remotes(
     bound_device.id = bound_id
     bound_device._SLUG = DevType.REM
     bound_device.slug = bound_device._SLUG
-    mock_coordinator._get_device = MagicMock(return_value=bound_device)
+    mock_coordinator.get_device = MagicMock(return_value=bound_device)
 
     class MockHvacVentilator:
         pass
@@ -571,7 +571,7 @@ async def test_setup_fan_bound_prefers_bound_over_remotes(
     bound_device.id = bound_id
     bound_device._SLUG = DevType.REM
     bound_device.slug = bound_device._SLUG
-    mock_coordinator._get_device = MagicMock(return_value=bound_device)
+    mock_coordinator.get_device = MagicMock(return_value=bound_device)
 
     class MockHvacVentilator:
         pass
@@ -783,7 +783,7 @@ async def test_setup_fan_bound_multi_rem_list(
         bd = MagicMock()
         bd.id = bid
         bound_devices[bid] = bd
-    mock_coordinator._get_device = MagicMock(
+    mock_coordinator.get_device = MagicMock(
         side_effect=lambda bid: bound_devices.get(bid)
     )
 
@@ -836,7 +836,7 @@ async def test_setup_fan_bound_multi_rem_schema_trait(
         bd = MagicMock()
         bd.id = bid
         bound_devices[bid] = bd
-    mock_coordinator._get_device = MagicMock(
+    mock_coordinator.get_device = MagicMock(
         side_effect=lambda bid: bound_devices.get(bid)
     )
 
@@ -894,7 +894,7 @@ async def test_setup_fan_bound_mixed_rem_and_co2_as_rem(
     rem_device.id = rem_id
     co2_device = MagicMock()
     co2_device.id = co2_id
-    mock_coordinator._get_device = MagicMock(
+    mock_coordinator.get_device = MagicMock(
         side_effect=lambda bid: {rem_id: rem_device, co2_id: co2_device}.get(
             bid
         )
@@ -942,7 +942,7 @@ async def test_setup_fan_bound_single_str_normalized_to_list(
 
     bound_device = MagicMock()
     bound_device.id = bound_id
-    mock_coordinator._get_device = MagicMock(return_value=bound_device)
+    mock_coordinator.get_device = MagicMock(return_value=bound_device)
 
     class MockHvacVentilator:
         pass
