@@ -1145,7 +1145,7 @@ class RamsesServiceHandler:
         if not device_id:
             return "", "", ""
 
-        device = self._coordinator._get_device(device_id)
+        device = self._coordinator.get_device(device_id)
         if not device:
             return device_id, device_id.replace(":", "_"), ""
 

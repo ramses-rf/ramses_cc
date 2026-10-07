@@ -1437,7 +1437,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         # non-faked REM would collide with the physical remote's transmissions.
         bound_rem = self._bound_rem or self._device.get_bound_rem()
         if bound_rem:
-            rem_dev = self.coordinator._get_device(str(bound_rem))
+            rem_dev = self.coordinator.get_device(str(bound_rem))
             if rem_dev is not None and not rem_dev.is_faked:
                 return base_modes  # REM not faked — don't offer its commands
             rem_commands = remotes.get(str(bound_rem), {})
@@ -1600,7 +1600,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                 # the REM is configured for faking.  This mirrors the
                 # check in remote.py's async_send_command.
                 if bound_rem:
-                    rem_dev = self.coordinator._get_device(str(bound_rem))
+                    rem_dev = self.coordinator.get_device(str(bound_rem))
                     if rem_dev is not None and not rem_dev.is_faked:
                         raise HomeAssistantError(
                             f"Bound REM {bound_rem} is not configured for "

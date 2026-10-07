@@ -257,7 +257,7 @@ class RamsesFanHandler:
                 bound_device_id,
             )
 
-            bound_device = self.coordinator._get_device(bound_device_id)
+            bound_device = self.coordinator.get_device(bound_device_id)
 
             if bound_device:
                 # Determine the device type based on the class
