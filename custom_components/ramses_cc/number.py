@@ -1307,7 +1307,7 @@ class RamsesPollingInterval(RamsesNumberBase):
         self, coordinator: RamsesCoordinator, device: RamsesRFEntity
     ) -> None:
         """Initialize the polling interval entity."""
-        description = RamsesEntityDescription(
+        description = RamsesNumberEntityDescription(
             key="polling_interval",
             translation_key="polling_interval",
         )

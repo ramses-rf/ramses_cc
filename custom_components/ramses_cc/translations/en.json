@@ -828,6 +828,11 @@
         }
     },
     "entity": {
+        "number": {
+            "polling_interval": {
+                "name": "Polling Interval"
+            }
+        },
         "event": {
             "ramses_cc_learn_event": {
                 "name": "Learn",

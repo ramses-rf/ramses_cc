@@ -31,7 +31,7 @@ _CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.services.py
 # fmt: off
 EXPECTED_ENTITIES = [  # adjust this list when adding entity descriptions
     "18:006402-status", "18_006402-discover_known_devices", "18_006402-force_update", "18_006402-sync_topology",
-    "01:145038-status", "01:145038-sys_info", "01:145038", "01:145038-heat_demand", "01:145038-active_fault", "01:145038-device_status", "01:145038-last_msg",
+    "01:145038-status", "01:145038-sys_info", "01:145038", "01:145038-heat_demand", "01:145038-active_fault", "01:145038-device_status", "01:145038-last_msg", "01:145038_polling_interval",
 
     "01:145038_02", "01:145038_02-heat_demand", "01:145038_02-window_open",
     "01:145038_0A", "01:145038_0A-heat_demand", "01:145038_0A-window_open",
@@ -48,15 +48,15 @@ EXPECTED_ENTITIES = [  # adjust this list when adding entity descriptions
     "10:125802-dhw_blocking", "10:125802-dhw_enabled", "10:125802-dhw_flow_rate", "10:125802-dhw_setpoint",
     "10:125802-dhw_temp", "10:125802-fault_present", "10:125802-flame_active", "10:125802-heat_demand",
     "10:125802-last_msg", "10:125802-max_rel_modulation", "10:125802-otc_active", "10:125802-outside_temp",
-    "10:125802-rel_modulation_level", "10:125802-summer_mode",
+    "10:125802-rel_modulation_level", "10:125802-summer_mode", "10:125802_polling_interval",
 
-    "13:081775-active", "13:081775-relay_demand", "13:081775-device_status", "13:081775-last_msg",  # missing?
-    "13:120241-active", "13:120241-relay_demand", "13:120241-device_status", "13:120241-last_msg",
-    "13:120242-active", "13:120242-relay_demand", "13:120242-device_status", "13:120242-last_msg",
-    "13:202850-active", "13:202850-relay_demand", "13:202850-device_status", "13:202850-last_msg",  # missing?
+    "13:081775-active", "13:081775-relay_demand", "13:081775-device_status", "13:081775-last_msg", "13:081775_polling_interval",  # missing?
+    "13:120241-active", "13:120241-relay_demand", "13:120241-device_status", "13:120241-last_msg", "13:120241_polling_interval",
+    "13:120242-active", "13:120242-relay_demand", "13:120242-device_status", "13:120242-last_msg", "13:120242_polling_interval",
+    "13:202850-active", "13:202850-relay_demand", "13:202850-device_status", "13:202850-last_msg", "13:202850_polling_interval",  # missing?
 
     "22:140285-battery_low", "22:140285-temperature", "22:140285-device_status", "22:140285-last_msg",
-    "32:097710-device_status", "32:097710-model", "32:097710-last_msg", "32:139773-device_status", "32:139773-model", "32:139773-last_msg",
+    "32:097710-device_status", "32:097710-model", "32:097710-last_msg", "32:097710_polling_interval", "32:139773-device_status", "32:139773-model", "32:139773-last_msg", "32:139773_polling_interval",
     "34:092243-battery_low", "34:092243-temperature", "34:092243-device_status", "34:092243-last_msg",
 ]
 # fmt: on
