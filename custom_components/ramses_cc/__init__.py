@@ -42,6 +42,7 @@ from homeassistant.helpers.service import verify_domain_control
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
+from ramses_tx.address import is_hgi_id
 from ramses_tx.transport.helpers import redact_url
 
 from .const import (
@@ -55,7 +56,6 @@ from .const import (
     CONF_SEND_PACKET,
     DEFAULT_HGI_ID,
     DOMAIN,
-    HGI_PREFIX,
     STORAGE_KEY,
     STORAGE_VERSION,
     SVC_ACCEPT_DISCOVERED_DEVICE,
@@ -611,7 +611,7 @@ def _healed_serial_port_options(
     if isinstance(schema, dict):
         root_owner = schema.get(SZ_OWNER)
         has_accepted_hgi = any(
-            dev_id.startswith(HGI_PREFIX)
+            is_hgi_id(dev_id)
             and isinstance(entry, dict)
             and entry.get("_class", "").upper() == "HGI"
             and entry.get(SZ_TR_OWNER) == root_owner

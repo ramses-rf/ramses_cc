@@ -38,7 +38,7 @@ from ramses_rf.schemas import (
     SZ_SYSTEM,
     SZ_UFH_SYSTEM,
 )
-from ramses_tx.address import packet_addrs
+from ramses_tx.address import is_hgi_id, packet_addrs
 from ramses_tx.const import Code, IndexT, Verb
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.exceptions import (
@@ -53,7 +53,6 @@ from .const import (
     ATTR_POLLING_INTERVAL,
     CONF_SCHEMA,
     DOMAIN,
-    HGI_PREFIX,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
     SZ_TR_DISABLED,
@@ -1339,7 +1338,7 @@ class RamsesServiceHandler:
             is_hgi = (
                 isinstance(entry, dict)
                 and str(entry.get("_class", "")).upper() == "HGI"
-            ) or device_id.startswith(HGI_PREFIX)
+            ) or is_hgi_id(device_id)
 
             if device_id in device_by_id:
                 already_present.append(device_id)
@@ -1948,7 +1947,7 @@ class RamsesServiceHandler:
         :return: A refusal reason, or None when removal is allowed.
         """
         dev_entry = schema.get(device_id)
-        is_hgi = device_id.startswith(HGI_PREFIX) or (
+        is_hgi = is_hgi_id(device_id) or (
             isinstance(dev_entry, dict)
             and str(dev_entry.get("_class", "")).upper() == "HGI"
         )

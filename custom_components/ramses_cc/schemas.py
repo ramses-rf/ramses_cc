@@ -43,6 +43,7 @@ from ramses_rf.schemas import (
     SZ_SYSTEM,
     SZ_UFH_SYSTEM,
 )
+from ramses_tx.address import is_hgi_id
 from ramses_tx.const import (
     COMMAND_REGEX,
     DEFAULT_GAP_DURATION,
@@ -368,7 +369,7 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
         # ramses_rf doesn't need them in the schema (the HGI is the gateway
         # itself, not a controlled device).  Keeping them here would cause
         # ramses_rf to try loading them as TCS/VCS entries.
-        if isinstance(k, str) and k.startswith(HGI_PREFIX):
+        if isinstance(k, str) and is_hgi_id(k):
             continue
         # Remove _disabled, _skipped, & foreign-owner devices from orphan lists
         if k in (SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC) and isinstance(v, list):
@@ -464,7 +465,7 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
         for dev_id in undisabled_ids:
             # Skip HGI gateways — they are not heating or HVAC devices
             # and should not be in any orphan list.
-            if dev_id.startswith(HGI_PREFIX):
+            if is_hgi_id(dev_id):
                 continue
             if dev_id[:3] not in _HEAT_PREFIXES:
                 hvac_orphans.add(dev_id)
@@ -1468,9 +1469,7 @@ def sync_learned_topology(
         {SZ_ZONES, SZ_SYSTEM, SZ_DHW_SYSTEM, SZ_UFH_SYSTEM, SZ_ORPHANS}
     )
     for dev_id, dev_entry in new_schema.items():
-        if not isinstance(dev_entry, dict) or not str(dev_id).startswith(
-            HGI_PREFIX
-        ):
+        if not isinstance(dev_entry, dict) or not is_hgi_id(str(dev_id)):
             continue
         if dev_id in config_only_keys:
             continue
@@ -1492,9 +1491,7 @@ def sync_learned_topology(
     for orphan_key in (SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC):
         orphan_list = new_schema.get(orphan_key)
         if isinstance(orphan_list, list):
-            cleaned = [
-                d for d in orphan_list if not str(d).startswith(HGI_PREFIX)
-            ]
+            cleaned = [d for d in orphan_list if not is_hgi_id(d)]
             if cleaned != orphan_list:
                 if cleaned:
                     new_schema[orphan_key] = cleaned
@@ -1614,7 +1611,7 @@ def sync_learned_topology(
             # HGI discovery candidates (18: with _class: HGI) are
             # skipped here — see the comment block above.
             if (
-                dev_id.startswith(HGI_PREFIX)
+                is_hgi_id(dev_id)
                 and isinstance(new_schema[dev_id], dict)
                 and (
                     new_schema[dev_id].get("_class", "").upper() == "HGI"
@@ -1654,7 +1651,7 @@ def sync_learned_topology(
                 # Explicitly removed device — leave ownerless so
                 # eligible_devices() keeps gating it out (issue 1257).
                 continue
-            if dev_id.startswith(HGI_PREFIX) and (
+            if is_hgi_id(dev_id) and (
                 dev_entry.get("_class", "").upper() == "HGI"
                 or dev_entry.get("_removed_from_pool")
             ):
@@ -1894,7 +1891,7 @@ def sync_learned_topology(
             # not a TCS.  Comments like "bound to 18:072981" on a CTL
             # mean the CTL is paired with that gateway, not that the HGI
             # is a temperature control system with zones.
-            if comment_tcs_id and comment_tcs_id.startswith(HGI_PREFIX):
+            if comment_tcs_id and is_hgi_id(comment_tcs_id):
                 continue
             # Skip invalid zone indices (ramses_rf only allows 00-0B)
             if zone_index and not _VALID_ZONE_INDEX_RE.match(zone_index):
@@ -2695,7 +2692,7 @@ def sync_learned_topology(
         to_remove |= {
             d
             for d in config_heat_orphans
-            if isinstance(d, str) and d.startswith(HGI_PREFIX)
+            if isinstance(d, str) and is_hgi_id(d)
         }
         if to_remove:
             remaining = sorted(
@@ -3103,7 +3100,7 @@ def sync_learned_topology(
         to_remove |= {
             d
             for d in config_hvac_orphans
-            if isinstance(d, str) and d.startswith(HGI_PREFIX)
+            if isinstance(d, str) and is_hgi_id(d)
         }
         if to_remove:
             remaining = sorted(config_hvac_orphans - to_remove)
@@ -3131,7 +3128,7 @@ def sync_learned_topology(
     if (
         active_hgi_id
         and isinstance(active_hgi_id, str)
-        and active_hgi_id.startswith(HGI_PREFIX)
+        and is_hgi_id(active_hgi_id)
         and active_hgi_id != DEFAULT_HGI_ID
     ):
         hgi_ids.add(active_hgi_id)
@@ -3140,7 +3137,7 @@ def sync_learned_topology(
         for dev_id in device_comments:
             if (
                 isinstance(dev_id, str)
-                and dev_id.startswith(HGI_PREFIX)
+                and is_hgi_id(dev_id)
                 and dev_id != DEFAULT_HGI_ID
                 and dev_id not in foreign_ids
                 and dev_id not in _removed

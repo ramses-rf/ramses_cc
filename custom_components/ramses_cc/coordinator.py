@@ -82,6 +82,7 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.systems import DhwZone, Evohome, System, Zone
 from ramses_rf.topology import Child
+from ramses_tx.address import is_hgi_id
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import HGI_ID_PATTERN, SZ_ACTIVE_HGI, Code
 from ramses_tx.dtos import CommandDTO, PacketDTO
@@ -114,7 +115,6 @@ from .const import (
     DEFAULT_PACKET_LOG_RETENTION_DAYS,
     DEFAULT_WAIT_ONLINE_TIMEOUT,
     DOMAIN,
-    HGI_PREFIX,
     SIGNAL_NEW_DEVICES,
     SIGNAL_UPDATE,
     STORAGE_KEY,
@@ -671,7 +671,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             k
             for k, v in schema.items()
             if isinstance(v, dict)
-            and k.startswith(HGI_PREFIX)
+            and is_hgi_id(k)
             and v.get(SZ_TR_OWNER) == root_owner
             and v.get("_class") == "HGI"
             and not v.get("_removed_from_pool")
@@ -694,7 +694,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             isinstance(v, dict)
             and str(v.get("_preferred_type", "")).lower() == "mqtt"
             for k, v in schema.items()
-            if str(k).startswith(HGI_PREFIX)
+            if is_hgi_id(k)
         )
         mqtt_in_play = (
             str(port_name).startswith("mqtt://")
@@ -774,7 +774,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 addr = packet.get("addr1") or packet.get("src")
                 if (
                     isinstance(addr, str)
-                    and addr.startswith(HGI_PREFIX)
+                    and is_hgi_id(addr)
                     and addr != DEFAULT_HGI_ID
                 ):
                     last_hgi_id = addr
@@ -911,7 +911,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             for _dev_id, _entry in _migrated_schema.items():
                 if not (
                     isinstance(_dev_id, str)
-                    and _dev_id.startswith(HGI_PREFIX)
+                    and is_hgi_id(_dev_id)
                     and _dev_id != DEFAULT_HGI_ID
                     and isinstance(_entry, dict)
                     and _entry.get("_class", "").upper() == "HGI"
@@ -1065,7 +1065,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     and SZ_TR_OWNER not in dev_entry
                 ):
                     continue
-                if dev_id.startswith(HGI_PREFIX) and (
+                if is_hgi_id(dev_id) and (
                     dev_entry.get("_class", "").upper() == "HGI"
                     or dev_entry.get("_removed_from_pool")
                 ):
@@ -1120,7 +1120,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             or _primary_port_name.startswith("rfc2217://")
         )
         if _is_serial_primary and not any(
-            k.startswith(HGI_PREFIX)
+            is_hgi_id(k)
             and isinstance(v, dict)
             and v.get("_class", "").upper() == "HGI"
             for k, v in config_schema.items()
@@ -1133,7 +1133,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 addr = packet.get("addr1") or packet.get("src")
                 if (
                     isinstance(addr, str)
-                    and addr.startswith(HGI_PREFIX)
+                    and is_hgi_id(addr)
                     and addr != DEFAULT_HGI_ID
                 ):
                     last_hgi_id = addr
@@ -1370,7 +1370,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             )
         elif (
             primary_hgi
-            and primary_hgi.startswith(HGI_PREFIX)
+            and is_hgi_id(primary_hgi)
             and primary_hgi not in schema
         ):
             # Don't add the primary HGI to the schema at startup —
@@ -1431,7 +1431,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 for hgi_id in pool_hgi_ids:
                     hgi_str = str(hgi_id)
                     if (
-                        hgi_str.startswith(HGI_PREFIX)
+                        is_hgi_id(hgi_str)
                         and hgi_str != DEFAULT_HGI_ID
                         and hgi_str != primary_hgi
                         and hgi_str not in schema
@@ -1457,10 +1457,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     # logs "FILTER EXCEPTION: Device XXX failed filter
                     # checks: it is not an allowed device_id" and drops
                     # all packets from the serial HGI (issue 1185).
-                    if (
-                        hgi_str.startswith(HGI_PREFIX)
-                        and self.client is not None
-                    ):
+                    if is_hgi_id(hgi_str) and self.client is not None:
                         try:
                             gwy_cfg = self.client.config
                             if (
@@ -1480,7 +1477,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         for dev_id, entry in schema.items():
             if (
-                dev_id.startswith(HGI_PREFIX)
+                is_hgi_id(dev_id)
                 and isinstance(entry, dict)
                 and entry.get("_class", "").upper() == "HGI"
             ):
@@ -2015,7 +2012,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         pool_hgis: list[str] = []
         for dev_id, entry in schema.items():
             if not (
-                dev_id.startswith(HGI_PREFIX)
+                is_hgi_id(dev_id)
                 and dev_id != DEFAULT_HGI_ID
                 and isinstance(entry, dict)
                 and entry.get("_class", "").upper() == "HGI"
@@ -2078,7 +2075,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             return accepted
         for dev_id, entry in schema.items():
             if not (
-                dev_id.startswith(HGI_PREFIX)
+                is_hgi_id(dev_id)
                 and dev_id != DEFAULT_HGI_ID
                 and isinstance(entry, dict)
                 and entry.get("_class", "").upper() == "HGI"
@@ -2193,7 +2190,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     if root_owner:
                         for dev_id, entry in schema.items():
                             if (
-                                dev_id.startswith(HGI_PREFIX)
+                                is_hgi_id(dev_id)
                                 and dev_id != DEFAULT_HGI_ID
                                 and isinstance(entry, dict)
                                 and entry.get("_class", "").upper() == "HGI"
@@ -2215,7 +2212,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     if root_owner:
                         for dev_id, entry in schema.items():
                             if (
-                                dev_id.startswith(HGI_PREFIX)
+                                is_hgi_id(dev_id)
                                 and dev_id != DEFAULT_HGI_ID
                                 and isinstance(entry, dict)
                                 and entry.get("_class", "").upper() == "HGI"
@@ -2259,7 +2256,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             dev_id
             for dev_id, entry in schema.items()
             if root_owner is not None
-            and dev_id.startswith(HGI_PREFIX)
+            and is_hgi_id(dev_id)
             and dev_id != DEFAULT_HGI_ID
             and isinstance(entry, dict)
             and entry.get("_class", "").upper() == "HGI"
@@ -3341,7 +3338,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             _root_owner = _schema.get(SZ_OWNER)
             for _dev_id, _entry in _schema.items():
                 if (
-                    _dev_id.startswith(HGI_PREFIX)
+                    is_hgi_id(_dev_id)
                     and _dev_id != DEFAULT_HGI_ID
                     and isinstance(_entry, dict)
                     and _entry.get("_class", "").upper() == "HGI"
@@ -3592,7 +3589,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         for dev_id, entry in schema_dict.items():
             if not isinstance(entry, dict):
                 continue
-            if not dev_id.startswith(HGI_PREFIX):
+            if not is_hgi_id(dev_id):
                 continue
             if entry.get("_class", "").upper() != "HGI":
                 continue
@@ -4920,7 +4917,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 # Add the active HGI
                 if (
                     isinstance(active_hgi_id, str)
-                    and active_hgi_id.startswith(HGI_PREFIX)
+                    and is_hgi_id(active_hgi_id)
                     and active_hgi_id != DEFAULT_HGI_ID
                     and active_hgi_id not in gwy_cfg.known_list
                 ):
@@ -4941,7 +4938,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                         child_hgi
                         and not is_callback
                         and isinstance(child_hgi, str)
-                        and child_hgi.startswith(HGI_PREFIX)
+                        and is_hgi_id(child_hgi)
                         and child_hgi != DEFAULT_HGI_ID
                         and child_hgi not in gwy_cfg.known_list
                     ):
@@ -5018,7 +5015,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 dev_id
                 for dev_id, entry in schema_dict.items()
                 if root_owner is not None
-                and dev_id.startswith(HGI_PREFIX)
+                and is_hgi_id(dev_id)
                 and dev_id != DEFAULT_HGI_ID
                 and isinstance(entry, dict)
                 and entry.get("_class", "").upper() == "HGI"
@@ -5336,7 +5333,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             for dev_entry in registry_entries
             for domain, ident in dev_entry.identifiers
             if domain == DOMAIN
-            and not str(ident).startswith(HGI_PREFIX)
+            and not is_hgi_id(str(ident))
             and not device_in_schema(schema, ident)
         )
         _LOGGER.debug(
