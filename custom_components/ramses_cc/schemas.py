@@ -1651,7 +1651,7 @@ def sync_learned_topology(
                 # Explicitly removed device — leave ownerless so
                 # eligible_devices() keeps gating it out (issue 1257).
                 continue
-            if dev_id.startswith(HGI_PREFIX) and (
+            if is_hgi_id(dev_id) and (
                 dev_entry.get("_class", "").upper() == "HGI"
                 or dev_entry.get("_removed_from_pool")
             ):
