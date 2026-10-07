@@ -301,11 +301,11 @@ async def async_setup_entry(
                 or _has_existing_param_entities(ent_reg, d.id)
             )
         ]
+        pending_entities = coordinator._parameter_entities_pending
+
         if fan_devices:
             _LOGGER.debug("Found %d FAN devices to process", len(fan_devices))
             # Load entities from registry for existing devices
-            pending_entities = coordinator._parameter_entities_pending
-
             for device in fan_devices:
                 _LOGGER.debug(
                     "Loading parameter entities from registry for %s",
