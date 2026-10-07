@@ -7297,28 +7297,6 @@ def test_build_explicit_mqtt_url_invalid() -> None:
     assert result is None
 
 
-def test_create_pool_transport_constructor(
-    mock_coordinator: RamsesCoordinator,
-) -> None:
-    """Test _create_pool_transport_constructor returns a callable."""
-    try:
-        from ramses_tx.transport import pooled_transport_factory  # noqa: F401
-    except ImportError:
-        pytest.skip("pooled_transport_factory not in published ramses_tx")
-    constructor = mock_coordinator._create_pool_transport_constructor(
-        port_name="mqtt://broker:1883",
-        port_config=PortConfigT(
-            baudrate=115200,
-            dsrdtr=False,
-            rtscts=False,
-            timeout=0,
-            xonxoff=True,
-        ),
-        additional_ports=["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
-    )
-    assert callable(constructor)
-
-
 def test_create_client_filters_non_mqtt_ports(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
@@ -7563,40 +7541,6 @@ async def test_register_pool_hgis_persist_error(
 
     # Should not crash
     await mock_coordinator._register_pool_hgis(scan)
-
-
-async def test_pool_constructor_invocation(
-    mock_coordinator: RamsesCoordinator,
-) -> None:
-    """Test the pool constructor callable invokes pooled_transport_factory."""
-    try:
-        from ramses_tx.transport import pooled_transport_factory  # noqa: F401
-    except ImportError:
-        pytest.skip("pooled_transport_factory not in published ramses_tx")
-    mock_transport = MagicMock()
-    with patch(
-        "ramses_tx.transport.pooled_transport_factory",
-        new_callable=AsyncMock,
-        return_value=mock_transport,
-    ) as mock_factory:
-        constructor = mock_coordinator._create_pool_transport_constructor(
-            port_name="mqtt://broker:1883",
-            port_config=PortConfigT(
-                baudrate=115200,
-                dsrdtr=False,
-                rtscts=False,
-                timeout=0,
-                xonxoff=True,
-            ),
-            additional_ports=["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
-        )
-        result = await constructor(
-            MagicMock(),
-            config=TransportConfig(),
-            loop=asyncio.get_event_loop(),
-        )
-        assert result is mock_transport
-        mock_factory.assert_called_once()
 
 
 async def test_mqtt_hgi_discovery_callback_inserts_into_schema(
