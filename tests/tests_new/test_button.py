@@ -254,7 +254,7 @@ async def test_fan_button_created_with_remote_target(
     # Arrange
     factory = _ButtonFactory(mock_coordinator)
     registry_entry = _registry_entity(device_id="device-rem")
-    if hasattr(mock_fan, "supports_10d0"):  # requires _rf 0.60.10
+    if hasattr(mock_fan, "supports_10d0"):
         mock_fan.supports_10d0.return_value = True
 
     # Act

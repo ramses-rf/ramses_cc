@@ -67,7 +67,7 @@ class RamsesButtonEntityDescription(
     service: str | None = None  # ramses_cc service to call when pressed
     service_data: dict[str, str] | None = None
     target: dict[str, Any] | None = None
-    entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
+    entity_category: EntityCategory | None = None
 
 
 # Gateway-level service buttons created for each HGI.
@@ -195,13 +195,13 @@ class _ButtonFactory:
         if not isinstance(fan, HvacVentilator):
             return []
 
-        if hasattr(fan, "supports_10d0"):  # requires _rf 0.60.10
+        if hasattr(fan, "supports_10d0"):
             if not getattr(fan, "supports_10d0", False):
                 _LOGGER.debug(
-                    "Device %s does not support 10D0 Filter Change, skipping entities",
+                    "Device %s does not seem to support 10D0 Filter Change",
                     fan.id,
                 )
-                return []
+                # return []  # continue until the _supports check works reliably
 
         rem_id = fan.get_bound_rem()
         if rem_id is None:
@@ -249,7 +249,6 @@ class _ButtonFactory:
                 icon="mdi:restart-alert",
                 service=SVC_RESET_FILTER,
                 target={"entity_id": [remote_entity.entity_id]},
-                entity_category=None,
             ),
             normalize_device_id(fan.id),
         )
