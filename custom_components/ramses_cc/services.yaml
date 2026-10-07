@@ -210,8 +210,7 @@ reset_filter_counter:
   target:
     entity:
       - integration: ramses_cc
-        domain:
-          - remote
+        domain: remote
 
 #
 # evohome controller service calls (CH/DHW)

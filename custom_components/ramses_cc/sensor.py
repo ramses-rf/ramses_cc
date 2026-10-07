@@ -214,7 +214,7 @@ async def async_setup_entry(
 class FakedCo2Capable(Protocol):
     """Protocol for devices capable of setting CO2 concentration."""
 
-    id: str
+    id: DeviceIdT
     is_faked: bool
 
     async def set_co2_level(self, value: int) -> object:
@@ -226,7 +226,7 @@ class FakedCo2Capable(Protocol):
 class VentilationDemandCapable(Protocol):
     """Protocol for faked sensors capable of sending ventilation demand."""
 
-    id: str
+    id: DeviceIdT
     is_faked: bool
 
     async def set_ventilation_demand(
@@ -240,7 +240,7 @@ class VentilationDemandCapable(Protocol):
 class FakedHumidityCapable(Protocol):
     """Protocol for devices capable of setting indoor humidity percentage."""
 
-    id: str
+    id: DeviceIdT
     is_faked: bool
 
     async def set_indoor_humidity(self, value: float | None) -> object:
@@ -252,7 +252,7 @@ class FakedHumidityCapable(Protocol):
 class FakedTemperatureCapable(Protocol):
     """Protocol for devices capable of setting temperature."""
 
-    id: str
+    id: DeviceIdT
     is_faked: bool
 
     async def set_temperature(self, value: float | None) -> object:
@@ -297,9 +297,10 @@ class RamsesSensor(RamsesEntity, SensorEntity):
                     payload="00",
                 )
                 try:
-                    await device_gateway(self._device).async_send_raw_command(
-                        cmd
-                    )
+                    gwy = device_gateway(self._device)
+                    if gwy is None:
+                        continue
+                    await gwy.async_send_raw_command(cmd)
                     _LOGGER.debug("Polled %s for %s", code, self._device.id)
                 except Exception as err:
                     _LOGGER.debug(
@@ -488,7 +489,8 @@ class RamsesLastMessageSensor(RamsesSensor):
     @property
     def _last_msg(self) -> Any | None:
         """Return the device's last transmitted message, if any."""
-        return self._device.last_command
+        # DeviceBase.last_command — absent on the plain Entity base
+        return getattr(self._device, "last_command", None)
 
     @property
     def native_value(self) -> str | None:

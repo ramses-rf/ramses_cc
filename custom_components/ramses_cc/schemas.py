@@ -102,6 +102,7 @@ from .const import (
     CONF_UNKNOWN_CODES,
     DEFAULT_HGI_ID,
     HGI_PREFIX,
+    # SVC_DISCOVER_KNOWN_DEVICES,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
     SZ_TR_BOUND,
@@ -1564,8 +1565,30 @@ def sync_learned_topology(
     # them to accepted pool members (issue 1119).  The user must accept
     # them via the config flow, which sets _owner and triggers a reload.
     root_owner = new_schema.get(SZ_OWNER)
+
+    # Issue 1238: foreign and explicitly removed/discarded devices must
+    # never be (re-)placed by the learned topology or by device comments.
+    # The scan engine and ramses_rf track all RF traffic, including a
+    # neighbour's system, so both can surface devices that do not belong
+    # to this installation.  Computed before the backfills below — a
+    # device the user removed but which still has a dangling reference
+    # in a list (e.g. a REM in a FAN's remotes[]) must not be silently
+    # resurrected with a fresh root entry (issue 1257).
+    _removed: set[str] = removed_devices or set()
+    foreign_ids: set[str] = set()
+    if root_owner:
+        for dev_id, dev_entry in new_schema.items():
+            if (
+                isinstance(dev_entry, dict)
+                and isinstance(dev_entry.get(SZ_TR_OWNER), str)
+                and dev_entry[SZ_TR_OWNER] != root_owner
+            ):
+                foreign_ids.add(dev_id)
+
     backfill_count = 0
     for dev_id in active_device_ids:
+        if dev_id in _removed or dev_id in foreign_ids:
+            continue
         if dev_id not in new_schema:
             new_schema[dev_id] = {}
             if root_owner:
@@ -1608,6 +1631,39 @@ def sync_learned_topology(
                 "sync_learned_topology: backfilled _owner for %s",
                 dev_id,
             )
+    # Also backfill _owner on non-HGI device entries already in the
+    # config schema — the TCS controller is a system object (never in
+    # client.devices / active_device_ids), and legacy schemas written
+    # before owner tracking have ownerless entries throughout.  Without
+    # the stamp, eligible_devices() would gate them out of entity
+    # creation (issue 1257).  HGI discovery candidates stay ownerless
+    # until the user accepts them via review (issue 1119).
+    if root_owner:
+        for dev_id, dev_entry in new_schema.items():
+            if not (
+                isinstance(dev_id, str)
+                and _DEVICE_ID_RE.match(dev_id)
+                and isinstance(dev_entry, dict)
+                and SZ_TR_OWNER not in dev_entry
+            ):
+                continue
+            if dev_id in _removed:
+                # Explicitly removed device — leave ownerless so
+                # eligible_devices() keeps gating it out (issue 1257).
+                continue
+            if dev_id.startswith(HGI_PREFIX) and (
+                dev_entry.get("_class", "").upper() == "HGI"
+                or dev_entry.get("_removed_from_pool")
+            ):
+                continue
+            dev_entry[SZ_TR_OWNER] = root_owner
+            changed = True
+            backfill_count += 1
+            _LOGGER.info(
+                "sync_learned_topology: backfilled _owner for %s "
+                "(existing schema entry)",
+                dev_id,
+            )
     # Also check remotes/sensors lists (not in active_device_ids above)
     for key, value in list(new_schema.items()):
         if not isinstance(value, dict) or not str(key).startswith(
@@ -1632,6 +1688,8 @@ def sync_learned_topology(
         for list_key in _ZONE_LIST_KEYS:
             if list_key in value and isinstance(value[list_key], list):
                 for dev_id in value[list_key]:
+                    if dev_id in _removed or dev_id in foreign_ids:
+                        continue
                     if dev_id not in new_schema:
                         new_schema[dev_id] = {}
                         if root_owner:
@@ -1652,22 +1710,6 @@ def sync_learned_topology(
             backfill_count,
             root_owner or "(none)",
         )
-
-    # Issue 1238: foreign and explicitly removed/discarded devices must
-    # never be (re-)placed by the learned topology or by device comments.
-    # The scan engine and ramses_rf track all RF traffic, including a
-    # neighbour's system, so both can surface devices that do not belong
-    # to this installation.
-    _removed: set[str] = removed_devices or set()
-    foreign_ids: set[str] = set()
-    if root_owner:
-        for dev_id, dev_entry in new_schema.items():
-            if (
-                isinstance(dev_entry, dict)
-                and isinstance(dev_entry.get(SZ_TR_OWNER), str)
-                and dev_entry[SZ_TR_OWNER] != root_owner
-            ):
-                foreign_ids.add(dev_id)
 
     # Learned TCS entries that must not be synced into the config schema
     # (issue 1238).  Besides foreign-owned or explicitly removed entries,

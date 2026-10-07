@@ -583,6 +583,80 @@ def test_sync_learned_topology_empty_learned() -> None:
     assert sync_learned_topology(config, None) is None  # type: ignore[arg-type]
 
 
+def test_sync_learned_topology_backfills_owner_on_existing_entries() -> None:
+    """Stamps root _owner on non-HGI schema entries missing it.
+
+    The TCS controller is a system object — never in active_device_ids —
+    so the active-device backfill alone leaves it ownerless, which would
+    make eligible_devices() gate out the whole Evohome (issue 1257).
+    HGI discovery candidates must stay ownerless (issue 1119).
+    """
+    config: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "main_tcs": "01:123456",
+        "01:123456": {"_class": "CTL"},  # legacy entry: no _owner
+        "22:111111": {"_class": "SEN"},  # legacy entry: no _owner
+        "18:111111": {"_class": "HGI"},  # discovery candidate — no stamp
+        "18:222222": {
+            "_class": "HGI",
+            "_removed_from_pool": True,
+        },  # removed pool HGI — no stamp
+        "32:333333": {
+            "_owner": "neighbour",
+            "_class": "FAN",
+        },  # foreign — untouched
+    }
+    result = sync_learned_topology(config, {})
+    assert result is not None
+    assert result["01:123456"][SZ_TR_OWNER] == "me"
+    assert result["22:111111"][SZ_TR_OWNER] == "me"
+    assert SZ_TR_OWNER not in result["18:111111"]
+    assert SZ_TR_OWNER not in result["18:222222"]
+    assert result["32:333333"][SZ_TR_OWNER] == "neighbour"
+
+
+def test_sync_learned_topology_no_root_entry_for_removed_devices() -> None:
+    """Removed devices in lists must not be resurrected as root entries.
+
+    A device the user removed (remove_device service, schema-editor
+    delete, or discovery REMOVED/DISCARDED) can still be referenced in a
+    FAN's remotes list or a zone's actuators — the learned schema keeps
+    citing it until restart.  The SSOT list backfill must skip it,
+    otherwise the removal is silently undone on the next save cycle
+    (issue 1257, dangling-ref cleanup).
+    """
+    config: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "32:153289": {"_owner": "me", SZ_REMOTES: ["37:168270"]},
+        "01:123456": {
+            SZ_ZONES: {"02": {"actuators": ["04:099999"]}},
+        },
+    }
+    result = sync_learned_topology(
+        config, {}, removed_devices={"37:168270", "04:099999"}
+    )
+    # Both are referenced by lists but were explicitly removed — no root
+    # entries, no _owner stamps.
+    if result is not None:
+        assert "37:168270" not in result
+        assert "04:099999" not in result
+
+
+def test_sync_learned_topology_no_owner_stamp_on_removed_devices() -> None:
+    """A removed device with a leftover root entry stays ownerless.
+
+    If a removed device's root entry is still present (partial manual
+    delete), stamping _owner on it would make it entity-eligible again.
+    """
+    config: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "37:168270": {"_class": "REM"},  # no _owner, but marked removed
+    }
+    result = sync_learned_topology(config, {}, removed_devices={"37:168270"})
+    if result is not None:
+        assert SZ_TR_OWNER not in result.get("37:168270", {})
+
+
 def test_sync_learned_topology_hvac_orphans() -> None:
     """Removes HVAC devices from orphans_hvac when they're in an HVAC entry."""
     config: dict[str, Any] = {
@@ -3039,7 +3113,7 @@ def test_sync_learned_topology_backfills_root_entry_for_list_device() -> None:
 def test_sync_learned_topology_no_backfill_when_root_exists() -> None:
     """No backfill when root entry already exists — no changes."""
     config: dict[str, Any] = {
-        "32:153289": {SZ_REMOTES: ["37:168270"]},
+        "32:153289": {"_owner": "me", SZ_REMOTES: ["37:168270"]},
         "37:168270": {"_owner": "me", "_class": "REM"},
         SZ_OWNER: "me",
     }

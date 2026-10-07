@@ -1762,24 +1762,18 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
     def _async_save(self) -> ConfigFlowResult:
         """Save the configured options.
 
-        Clears the coordinator's ``_suppress_reload`` flag so the
-        update listener (triggered by ``async_create_entry``) actually
-        reloads the integration.  Without this, a race with
-        ``sync_learned_topology`` (which sets ``_suppress_reload`` when
-        persisting schema/comments) can suppress the reload that the
-        config flow expects — leaving the running coordinator with
-        stale transport config (e.g. MQTT pool bridge not restarted
-        after a non-primary HGI switches from USB to MQTT).
+        Does not suppress the reload, so the update listener (triggered
+        by ``async_create_entry``) actually reloads the integration —
+        the running coordinator has stale transport config otherwise
+        (e.g. MQTT pool bridge not restarted after a non-primary HGI
+        switches from USB to MQTT).  ``_suppress_reload`` is a count of
+        *pending* suppressed updates: tokens queued by earlier writes
+        (e.g. ``sync_learned_topology``) are consumed by their own
+        listener tasks before this save's listener runs, so it must not
+        be cleared here (issue 1279).
 
         :return: The generated config flow result.
         """
-        # Clear _suppress_reload so the update listener reloads.
-        coordinator = getattr(self.config_entry, "runtime_data", None)
-        if coordinator is not None and hasattr(
-            coordinator, "_suppress_reload"
-        ):
-            coordinator._suppress_reload = 0.0  # noqa: SLF001
-
         result = self.async_create_entry(title="", data=self.options)
 
         # Reload only if setup failing; updates handled by update listener
@@ -3617,6 +3611,8 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             # Process accept/decline for each device
             config_schema = deepcopy(self.options.get(CONF_SCHEMA, {}))
             changed = False
+            accepted_ids: list[str] = []
+            needs_reload = False
 
             # Determine the root owner name.  If the user provided one,
             # store it as the root _owner key.  Default to "me" if not set.
@@ -3691,6 +3687,13 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         owner=user_input.get(f"owner_{device_id}"),
                         ctl_id=ctl_id,
                     )
+                    # An accepted HGI changes pool/transport composition
+                    # (_preferred_type) — that needs a full reload.  All
+                    # other accepts can be applied live (issue 1288).
+                    if is_hgi_id(device_id):
+                        needs_reload = True
+                    else:
+                        accepted_ids.append(device_id)
                     # Add to schema using the generated schema entry
                     if accepted.metadata.schema_entry:
                         from ramses_rf.helpers import deep_merge
@@ -3983,22 +3986,21 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             if changed:
                 self.options[CONF_SCHEMA] = order_schema(config_schema)
 
-            # Persist discovery metadata before the reload triggered by
-            # _async_save().  Without this, the ACCEPTED/DISCARDED status
-            # set by accept_device/discard_device above is lost when the
-            # coordinator is torn down and recreated — the new coordinator
-            # restores from .storage/, which only gets updated during the
-            # 5-minute checkpoint.  After reload, check_for_new_devices
-            # sees the devices with no metadata and re-notifies them as
-            # NEW (issue 917).
+            # Persist discovery metadata before saving.  Without this, the
+            # ACCEPTED/DISCARDED status set by accept_device/discard_device
+            # above is lost if the coordinator is torn down and recreated —
+            # the new coordinator restores from .storage/, which only gets
+            # updated during the 5-minute checkpoint.  After a reload,
+            # check_for_new_devices sees the devices with no metadata and
+            # re-notifies them as NEW (issue 917).
             #
             # IMPORTANT: skip topology sync during this save.  Otherwise
             # sync_learned_topology's enriched write-back sets
             # _suppress_reload, which suppresses the reload from
-            # _async_save().  Without that reload, the running gateway
-            # keeps its stale (empty) known_list and blocks all packets
-            # from the just-accepted devices — the gateway never learns
-            # topology and zones end up without sensors (issue 1023).
+            # _async_save() when an HGI accept forces one below.  Without
+            # that reload, the running gateway keeps its stale transport
+            # config (issue 1023).  Non-HGI accepts take the live-update
+            # path instead and update the include lists themselves.
             # The unload chain (_async_save_on_unload) handles topology
             # sync skipping and .storage persistence during the actual
             # reload; this pre-save just ensures discovery metadata is
@@ -4016,7 +4018,55 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 finally:
                     coordinator._skip_topology_sync = False  # noqa: SLF001
 
-            return self._async_save()
+            if needs_reload:
+                # Transport-relevant change (accepted HGI —
+                # _preferred_type decides pool/transport composition).
+                # The running gateway must be rebuilt.
+                return self._async_save()
+
+            # Non-transport changes only (plain device accepts, skips,
+            # declines, class/name/owner updates) — apply them to the
+            # running coordinator instead of reloading, mirroring the
+            # accept_discovered_device service path (issue 1288):
+            # update runtime options + include lists, suppress the
+            # listener's reload, then create the entities.
+            from .helpers import add_to_include_lists
+            from .services import _MockServiceCall
+
+            coordinator.options = deepcopy(self.options)
+            if coordinator.client:
+                for accepted_id in accepted_ids:
+                    add_to_include_lists(coordinator.client, accepted_id)
+
+            # Suppress this save's reload only if it will actually
+            # change options — an unneeded token would leak into
+            # suppressing a future legitimate update (issue 1279).
+            if self.config_entry is not None and self.options != dict(
+                self.config_entry.options
+            ):
+                coordinator._suppress_reload += 1  # noqa: SLF001
+            result = self.async_create_entry(title="", data=self.options)
+
+            # Reload only if setup failing; updates handled otherwise
+            if self.config_entry is not None and self.config_entry.state in (
+                ConfigEntryState.SETUP_ERROR,
+                ConfigEntryState.SETUP_RETRY,
+            ):
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(
+                        self.config_entry.entry_id
+                    )
+                )
+
+            for accepted_id in accepted_ids:
+                _LOGGER.info(
+                    "review_discovered: accepted %s, triggering discovery",
+                    accepted_id,
+                )
+                await coordinator.async_discover_known_devices(
+                    _MockServiceCall({"device_id": accepted_id})
+                )
+            return result
 
         # Build a summary table for the description
         lines: list[str] = []

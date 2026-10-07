@@ -53,7 +53,7 @@ from ramses_rf.const import (
     SZ_SETPOINT,
     SZ_SYSTEM_MODE,
 )
-from ramses_rf.devices import HvacVentilator
+from ramses_rf.devices import HvacVentilator, Temperature
 from ramses_rf.enums import ThermalMode
 from ramses_rf.models.dto import UfhCircuitDTO
 from ramses_rf.strategies.base import HvacStrategyBase
@@ -313,7 +313,14 @@ async def async_setup_entry(
     @callback
     def add_devices(devices: Any) -> None:
         entities = [
-            description.ramses_cc_class(coordinator, device, description)
+            description.ramses_cc_class(
+                coordinator,
+                # the isinstance guard pairs each description's
+                # ramses_rf_class with its ramses_cc_class — mypy
+                # cannot correlate the two fields statically
+                device,  # type: ignore[arg-type]
+                description,
+            )
             for device in devices
             for description in CLIMATE_DESCRIPTIONS
             if isinstance(device, description.ramses_rf_class)
@@ -1033,6 +1040,11 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             )
 
         sensor = self._device.sensor
+        if not isinstance(sensor, Temperature):
+            raise HomeAssistantError(
+                f"Zone {self.entity_id} sensor does not support "
+                "set_temperature."
+            )
         await sensor.set_temperature(temperature)
 
         # Also update the zone's temp_state so that current_temperature
@@ -1271,7 +1283,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         super().__init__(coordinator, device, entity_description)
 
         self._device = device
-        self._bound_rem = None
+        self._bound_rem: str | None = None
         self._last_known_curr_temp: float | None = None
         self._last_known_curr_hum: int | None = None
         self._last_known_fan_info: str | None = None
@@ -1564,7 +1576,12 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                         raise ValueError(
                             f"Failed to parse packet_str: {packet_str}"
                         )
-                    await device_gateway(self._device).async_send_raw_command(
+                    gwy = device_gateway(self._device)
+                    if gwy is None:
+                        raise HomeAssistantError(
+                            f"Gateway unavailable for device {self._device.id}"
+                        )
+                    await gwy.async_send_raw_command(
                         cmd, num_repeats=2, priority=Priority.HIGH
                     )
                     # No optimistic state update: ventilators don't ack
@@ -1602,7 +1619,12 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                 if cmd is None:
                     raise ValueError(f"Failed to parse cmd_str: {cmd_str}")
 
-                await device_gateway(self._device).async_send_raw_command(
+                gwy = device_gateway(self._device)
+                if gwy is None:
+                    raise HomeAssistantError(
+                        f"Gateway unavailable for device {self._device.id}"
+                    )
+                await gwy.async_send_raw_command(
                     cmd, num_repeats=2, priority=Priority.HIGH
                 )
                 # No optimistic update — see comment above (issue 1116).
@@ -1687,7 +1709,7 @@ class RamsesClimateEntityDescription(
     RamsesEntityDescription,
     ClimateEntityDescription,
 ):
-    """Class describing Ramses binary sensor entities."""
+    """Class describing Ramses Climate entities."""
 
     # integration-specific attributes
     ramses_cc_class: (

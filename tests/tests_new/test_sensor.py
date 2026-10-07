@@ -60,7 +60,7 @@ from ramses_rf.devices import (
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.enums import PumpRelayState, ThermalMode
 from ramses_rf.exceptions import DeviceNotFaked
-from ramses_tx.const import Verb
+from ramses_tx.const import Code, Verb
 from ramses_tx.dtos import CommandDTO
 
 
@@ -852,7 +852,7 @@ async def test_ramses_sensor_async_update_polls_with_verb_rq(
     desc = RamsesSensorEntityDescription(
         key="test_poll_sensor",
         ramses_rf_attr="temp",
-        poll_codes=["30C9"],
+        poll_codes=[Code._30C9],
     )
     sensor = RamsesSensor(mock_coordinator, mock_device, desc)
     sensor._attr_should_poll = True

@@ -33,7 +33,7 @@ from custom_components.ramses_cc.const import (
     SZ_KNOWN_LIST,
 )
 from ramses_rf.const import SZ_MODE, SZ_SETPOINT, SZ_SYSTEM_MODE
-from ramses_rf.devices import HvacVentilator
+from ramses_rf.devices import HvacVentilator, Temperature
 from ramses_rf.enums import ThermalMode
 from ramses_rf.models import TemperatureState
 from ramses_rf.models.dto import ThermalDemandDTO, UfhCircuitDTO
@@ -730,7 +730,7 @@ async def test_zone_methods_and_services(
     with pytest.raises(HomeAssistantError):
         await zone.async_fake_zone_temp(20.0)
 
-    mock_device.sensor = AsyncMock()
+    mock_device.sensor = AsyncMock(spec=Temperature)
     mock_device.temp_state = TemperatureState()
     await zone.async_fake_zone_temp(22.5)
     mock_device.sensor.set_temperature.assert_awaited_with(22.5)

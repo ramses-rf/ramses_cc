@@ -92,7 +92,10 @@ directory = "coverage_html"
   ]
   explicit_package_bases = true
 
-  follow_imports = "skip"  # TODO: don't use this feature
+  # Third-party imports that cannot be type-checked are skipped
+  # per-module in the overrides below — ramses_rf/ramses_tx ARE
+  # followed (they are mypy --strict), so cross-repo type errors
+  # surface here instead of becoming Any.
 
   # see: https://mypy.readthedocs.io/en/stable/existing_code.html#introduce-stricter-options
 
@@ -139,6 +142,24 @@ directory = "coverage_html"
     "yaml.*",
   ]
   ignore_missing_imports = true
+
+# Third-party deps whose imports are skipped entirely: they are either
+# untyped or their plugin-typed APIs can't be followed without pulling
+# in their whole dependency graph.  Kept narrow — add a module here
+# only with a comment explaining why it can't be followed.
+[[tool.mypy.overrides]]
+  module = [
+    "homeassistant.*",
+    "pytest_homeassistant_custom_component.*",
+    "yaml.*",
+    "voluptuous.*",
+    "probatio.*",
+    "serialx.*",
+    "serial.*",
+    "pytest.*",
+    "syrupy.*",
+  ]
+  follow_imports = "skip"
 
 
 [[tool.mypy.overrides]]

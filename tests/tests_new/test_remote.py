@@ -334,8 +334,8 @@ async def test_async_reset_filter_counter_remote_success(
     # Assert debug logging
     with patch("custom_components.ramses_cc.remote._LOGGER") as mock_logger:
         await remote_entity.async_reset_filter_counter()
-        mock_logger.debug.assert_called_once_with(
-            "reset_filter_counter: sent W 10D0 from %s to %s",
+        mock_logger.info.assert_called_once_with(
+            "reset_filter_counter: sent W 10D0 from rem %s to fan %s",
             REMOTE_ID,
             "18:654321",
         )
@@ -412,8 +412,8 @@ async def test_async_reset_filter_counter_fan_success(
     # Assert debug logging
     with patch("custom_components.ramses_cc.remote._LOGGER") as mock_logger:
         await fan_remote_entity.async_reset_filter_counter()
-        mock_logger.debug.assert_called_once_with(
-            "reset_filter_counter: sent W 10D0 from %s to %s",
+        mock_logger.info.assert_called_once_with(
+            "reset_filter_counter: sent W 10D0 from rem %s to fan %s",
             "32:153001",
             "30:160000",
         )

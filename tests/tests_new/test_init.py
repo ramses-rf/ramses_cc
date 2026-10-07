@@ -432,6 +432,35 @@ async def test_async_update_listener(hass: HomeAssistant) -> None:
         mock_reload.assert_called_once_with(entry.entry_id)
 
 
+async def test_async_update_listener_suppressed_updates(
+    hass: HomeAssistant, mock_coordinator: MagicMock
+) -> None:
+    """Each suppressed write consumes one token; exhausted → reload.
+
+    Regression test for issue 1279: suppression is a count of pending
+    suppressed updates, not a timestamp — so a listener task that runs
+    late (busy startup loop) still skips the reload for its own write,
+    while the next *unsuppressed* update still triggers a reload.
+    """
+    entry = MagicMock()
+    entry.entry_id = "test_suppressed_reload"
+    entry.runtime_data = mock_coordinator
+    mock_coordinator._suppress_reload = 2  # noqa: SLF001
+
+    with patch.object(
+        hass.config_entries, "async_reload", AsyncMock()
+    ) as mock_reload:
+        # Two queued listener runs for two suppressed writes: no reload
+        await async_update_listener(hass, entry)
+        await async_update_listener(hass, entry)
+        mock_reload.assert_not_called()
+        assert mock_coordinator._suppress_reload == 0  # noqa: SLF001
+
+        # A further (unsuppressed) update must still reload the entry
+        await async_update_listener(hass, entry)
+        mock_reload.assert_called_once_with(entry.entry_id)
+
+
 async def test_async_unload_entry_success(
     hass: HomeAssistant, mock_coordinator: MagicMock
 ) -> None:

@@ -55,7 +55,6 @@ from ramses_rf.devices import (
 )
 from ramses_rf.devices.dev_base import DeviceBase
 from ramses_rf.entity import Entity as RamsesRFEntity
-from ramses_rf.gateway import Gateway
 from ramses_rf.systems.tcs import Logbook, System
 from ramses_tx.const import SZ_IS_EVOFW3
 from ramses_tx.schemas import SZ_KNOWN_LIST, SZ_SCHEMA
@@ -313,7 +312,9 @@ class RamsesGatewayBinarySensor(RamsesBinarySensor):
         :return: Dictionary of attributes for the gateway.
         :rtype: dict[str, Any]
         """
-        gwy: Gateway = device_gateway(self._device)
+        gwy = device_gateway(self._device)
+        if gwy is None:
+            return {}
         engine = gateway_engine(gwy)
 
         # NOTE: this property is sync, so the async gwy.config_snapshot()

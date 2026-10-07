@@ -162,6 +162,26 @@ class RamsesFanHandler:
 
         return async_unsubscribe
 
+    def create_button_entities(self, device: RamsesRFEntity) -> None:
+        """Signal button platform to create buttons for a device.
+
+        The button platform handles entity creation via its discovery callback.
+        This method just signals that a new FAN device has
+        been discovered.
+
+        :param device: The ramses_rf device instance to create buttons for.
+        """
+        device_id = device.id
+        _LOGGER.debug(
+            "Signaling button platform about FAN device %s",
+            device_id,
+        )
+        async_dispatcher_send(
+            self.hass,
+            SIGNAL_NEW_DEVICES.format(Platform.BUTTON),
+            [device],
+        )
+
     def create_parameter_entities(self, device: RamsesRFEntity) -> None:
         """Signal number platform to create parameter entities for a device.
 
@@ -263,7 +283,7 @@ class RamsesFanHandler:
                     device_type,
                     bound_device_id,
                 )
-                # add the HvacVentilator device id to the coordinator's dict
+                # add the HvacVentilator device id to the fan_handler dict
                 self._fan_bound_to_remote[str(bound_device_id)] = device.id
             else:
                 _LOGGER.warning(
@@ -296,7 +316,7 @@ class RamsesFanHandler:
                         device.id,
                     )
 
-                    # Send discovery probe (restores pre-0.58.3 behavior).
+                    # Send 2411 discovery probe (restores pre-0.58.3 behavior).
                     # This sets supports_2411 = True if the device responds,
                     # allowing entity creation to proceed. See issue 851.
                     if hasattr(device, "async_probe_2411_support"):
@@ -308,6 +328,20 @@ class RamsesFanHandler:
                             _LOGGER.debug(
                                 "2411 probe failed for %s: %s", device.id, err
                             )
+
+                    # Send 10D0 discovery probe for Filter Remaining
+                    if hasattr(device, "async_probe_10d0_support"):
+                        try:
+                            await device.async_probe_10d0_support()
+                            # Wait briefly for response
+                            await asyncio.sleep(0.5)
+                        except Exception as err:
+                            _LOGGER.debug(
+                                "10D0 probe failed for %s: %s", device.id, err
+                            )
+
+                    # Create button entities
+                    self.create_button_entities(device)
 
                     # Create parameter entities (supports_2411 may now be True)
                     self.create_parameter_entities(device)
