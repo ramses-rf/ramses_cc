@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant, ServiceRegistry
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.ramses_cc.const import DOMAIN
+from custom_components.ramses_cc.helpers import normalize_device_id
 from custom_components.ramses_cc.number import (
     RamsesNumberBase,
     RamsesNumberEntityDescription,
@@ -20,7 +21,6 @@ from custom_components.ramses_cc.number import (
     async_setup_entry,
     create_parameter_entities,
     get_param_descriptions,
-    normalize_device_id,
 )
 from ramses_rf.entity import Entity as RamsesRFEntity
 

@@ -7,14 +7,19 @@ import dataclasses
 import inspect
 import logging
 import re
-import time
-from collections.abc import Awaitable, Callable, Coroutine, Sequence
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Coroutine,
+    Mapping,
+    Sequence,
+)
 from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime as dt, timedelta as td
 from functools import lru_cache
 from threading import Semaphore
-from typing import TYPE_CHECKING, Any, Final, TypeVar
+from typing import TYPE_CHECKING, Any, Final, TypeVar, cast
 
 import probatio as prob
 from homeassistant.components.persistent_notification import (
@@ -41,10 +46,16 @@ from homeassistant.util import dt as dt_util
 from serialx import SerialException
 
 from ramses_rf.config import strip_and_map_traits as _strip_and_map_traits
-from ramses_rf.const import SZ_ACTUATORS, SZ_NAME, SZ_SENSOR, SZ_ZONES, DevType
+from ramses_rf.const import (
+    DEV_TYPE_MAP,
+    SZ_ACTUATORS,
+    SZ_NAME,
+    SZ_SENSOR,
+    SZ_ZONES,
+    DevType,
+)
 from ramses_rf.devices import (
     _CLASS_BY_SLUG,
-    DEV_TYPE_MAP,
     Controller,
     Device,
     DeviceHvac,
@@ -69,7 +80,7 @@ from ramses_rf.schemas import (
     SZ_SYSTEM,
     SZ_UFH_SYSTEM,
 )
-from ramses_rf.systems import Evohome, System, Zone
+from ramses_rf.systems import DhwZone, Evohome, System, Zone
 from ramses_rf.topology import Child
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import HGI_ID_PATTERN, SZ_ACTIVE_HGI, Code
@@ -77,7 +88,7 @@ from ramses_tx.dtos import CommandDTO, PacketDTO
 from ramses_tx.exceptions import TransportError as _TransportError
 from ramses_tx.schemas import extract_serial_port
 from ramses_tx.transport.helpers import redact_url
-from ramses_tx.typing import DeviceIdT
+from ramses_tx.typing import DeviceIdT, PortConfigT, SerPortNameT
 
 from .const import (
     CONF_ADDITIONAL_PORTS,
@@ -145,6 +156,8 @@ from .mqtt_pool_bridge import RamsesMqttPoolBridge
 from .schemas import (
     _SCHEMA_EXTENSION_KEYS,
     _strip_and_orchestrate,
+    device_in_schema,
+    eligible_devices,
     merge_schemas,
     remove_device_from_schema,
     sync_learned_topology,
@@ -290,6 +303,12 @@ class _MqttHgiDiscoveryCallback:
         if not isinstance(raw_schema, dict):
             return
         schema = deepcopy(raw_schema)
+        # The primary HGI is the active local gateway — it can never
+        # be "declined", so it is auto-owned instead of offered as a
+        # discovery candidate (issue 1020/R102).
+        is_primary = (
+            hgi_str == self._coordinator._get_primary_hgi_id()  # noqa: SLF001
+        )
         # Only add if not already present (don't overwrite existing
         # entries — the user may have already rejected it).
         if hgi_str not in schema:
@@ -303,17 +322,43 @@ class _MqttHgiDiscoveryCallback:
                 "_class": "HGI",
                 "_comment": build_hgi_comment(["mqtt"]),
             }
+            if is_primary:
+                schema[hgi_str][SZ_TR_OWNER] = schema.get(SZ_OWNER) or "me"
             # No _owner — this is a discovery candidate.
             new_options = dict(self._coordinator.entry.options)
             new_options[CONF_SCHEMA] = schema
             self._coordinator.options = new_options
-            self._coordinator._suppress_reload = time.time()
-            self._coordinator.hass.config_entries.async_update_entry(
-                self._coordinator.entry, options=new_options
+            self._coordinator._persist_options_no_reload(  # noqa: SLF001
+                new_options
             )
             _LOGGER.info(
                 "MqttPoolBridge: added HGI %s to schema as "
                 "discovery candidate (no _owner)",
+                hgi_str,
+            )
+        elif (
+            is_primary
+            and isinstance(schema[hgi_str], dict)
+            and SZ_TR_OWNER not in schema[hgi_str]
+            and not schema[hgi_str].get("_removed_from_pool")
+        ):
+            # Primary stored as an ownerless candidate by an earlier
+            # run — backfill _owner now that it is seen online.
+            schema[hgi_str][SZ_TR_OWNER] = schema.get(SZ_OWNER) or "me"
+            _comment = str(schema[hgi_str].get("_comment", "")).lower()
+            if "mqtt" not in _comment:
+                schema[hgi_str]["_comment"] = build_hgi_comment(
+                    ["usb", "mqtt"] if "usb" in _comment else ["mqtt"]
+                )
+            new_options = dict(self._coordinator.entry.options)
+            new_options[CONF_SCHEMA] = schema
+            self._coordinator.options = new_options
+            self._coordinator._persist_options_no_reload(  # noqa: SLF001
+                new_options
+            )
+            _LOGGER.info(
+                "MqttPoolBridge: primary HGI %s auto-owned "
+                "(was stored as ownerless candidate)",
                 hgi_str,
             )
         else:
@@ -370,9 +415,8 @@ class _MqttHgiDiscoveryCallback:
         new_options = dict(self._coordinator.entry.options)
         new_options[CONF_SCHEMA] = schema
         self._coordinator.options = new_options
-        self._coordinator._suppress_reload = time.time()
-        self._coordinator.hass.config_entries.async_update_entry(
-            self._coordinator.entry, options=new_options
+        self._coordinator._persist_options_no_reload(  # noqa: SLF001
+            new_options
         )
         _LOGGER.info(
             "MqttPoolBridge: updated HGI %s _comment to '%s' "
@@ -400,7 +444,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         self._is_serial_active: bool = False
         self.discovery_manager: DiscoveryManager | None = None
         self._cached_discovery_state: dict[str, Any] | None = None
-        self._suppress_reload: float = 0.0  # timestamp; >0 means suppressed
+        self._suppress_reload: int = 0  # count of pending suppressed updates
         self._skip_topology_sync: bool = False
         self._skip_discovery_save: bool = False
         self._discovery_filter_ids: set[str] | None = None
@@ -463,7 +507,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         self._devices: list[Device] = []
         self._systems: list[System] = []
         self._zones: list[Zone] = []
-        self._dhws: list[Zone] = []
+        self._dhws: list[DhwZone] = []
         self._circuits: list[UfhCircuit] = []
         self._parameter_entities_pending: set[str] = set()
         self._parameter_entities_loaded: set[str] = set()
@@ -479,6 +523,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # False before any packets have arrived).
         self._gateway_offline_notified: bool = False
         self._health_check_count: int = 0
+        # Schema orphans: _schema_orphans_notified prevents re-creating
+        # the persistent notification on every discovery cycle.
+        self._schema_orphans_notified: bool = False
         self._scan: Any = None
 
         # Initialize platforms dictionary to store platform references
@@ -499,6 +546,30 @@ class RamsesCoordinator(DataUpdateCoordinator):
             name=DOMAIN,
             update_interval=td(seconds=scan_interval),
         )
+
+    def _persist_options_no_reload(self, options: Mapping[str, Any]) -> None:
+        """Persist options without triggering a config-entry reload.
+
+        ``async_update_entry`` schedules the update listener as a task
+        and returns True only when the options actually changed.  Counting
+        the real updates — instead of stamping a 5-second timestamp —
+        keeps suppression in step with the queued listener task, so a
+        late-running listener or an early flag reset can no longer cause
+        a spurious reload (issue 1279).
+
+        The credit is taken *before* the call: HA creates listener tasks
+        with ``eager_start=True``, so the listener body runs synchronously
+        inside ``async_update_entry`` and must already see the pending
+        credit.  When the options did not change (returns False, no
+        listener queued) the credit is rolled back.
+
+        :param options: The full options mapping to persist.
+        """
+        self._suppress_reload += 1
+        if not self.hass.config_entries.async_update_entry(
+            self.entry, options=options
+        ):
+            self._suppress_reload -= 1
 
     @property
     def active_hgi_id(self) -> str | None:
@@ -523,6 +594,15 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if not active_hgi_id and gwy.hgi:
             active_hgi_id = gwy.hgi.id
         return active_hgi_id
+
+    @property
+    def devices(self) -> list[Device]:
+        """Return the list of devices known to the coordinator.
+
+        :return: List of devices, empty before the first gateway sync.
+        :rtype: list[Device]
+        """
+        return self._devices
 
     @property
     def serial_port_hgi_map(self) -> dict[str, str]:
@@ -845,9 +925,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             if _hgi_comments_migrated:
                 _new_options = dict(self.entry.options)
                 _new_options[CONF_SCHEMA] = _migrated_schema
-                self.hass.config_entries.async_update_entry(
-                    self.entry, options=_new_options
-                )
+                self._persist_options_no_reload(_new_options)
                 _LOGGER.info(
                     "Migrated HGI _comment fields to include warning suffix"
                 )
@@ -967,9 +1045,56 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # Persist the sanitised schema to the config entry so the fix
             # survives reloads (self.options is in-memory only).
             new_options = {**self.entry.options, CONF_SCHEMA: config_schema}
-            self.hass.config_entries.async_update_entry(
-                self.entry, options=new_options
-            )
+            self._persist_options_no_reload(new_options)
+
+        # Backfill _owner on pre-owner-gating schema entries (issue
+        # 1257, 2.3).  Schemas saved before owner tracking have device
+        # entries without _owner — without this stamp, eligible_devices()
+        # would gate them out of entity creation on upgrade.  HGI
+        # discovery candidates (18: with _class: HGI or
+        # _removed_from_pool) stay ownerless until the user accepts them
+        # (issue 1119).  sync_learned_topology applies the same rule.
+        if isinstance(config_schema, dict):
+            root_owner = config_schema.get(SZ_OWNER) or "me"
+            owner_backfilled = False
+            for dev_id, dev_entry in config_schema.items():
+                if not (
+                    isinstance(dev_id, str)
+                    and _DEVICE_ID_RE.match(dev_id)
+                    and isinstance(dev_entry, dict)
+                    and SZ_TR_OWNER not in dev_entry
+                ):
+                    continue
+                if dev_id.startswith(HGI_PREFIX) and (
+                    dev_entry.get("_class", "").upper() == "HGI"
+                    or dev_entry.get("_removed_from_pool")
+                ):
+                    continue
+                dev_entry[SZ_TR_OWNER] = root_owner
+                owner_backfilled = True
+            if owner_backfilled:
+                if SZ_OWNER not in config_schema:
+                    config_schema[SZ_OWNER] = root_owner
+                self.options[CONF_SCHEMA] = config_schema
+                # Persist so later self.options rebuilds from
+                # entry.options don't lose the stamps.  The entry may
+                # not be registered yet during early setup/tests.
+                if (
+                    self.hass.config_entries.async_get_entry(
+                        self.entry.entry_id
+                    )
+                    is not None
+                ):
+                    new_options = {
+                        **self.entry.options,
+                        CONF_SCHEMA: config_schema,
+                    }
+                    self._persist_options_no_reload(new_options)
+                _LOGGER.info(
+                    "Backfilled _owner=%s on pre-owner-gating schema "
+                    "entries (owner-gated entity creation, issue 1257)",
+                    root_owner,
+                )
 
         cached_schema = client_state.get(SZ_SCHEMA, {})
         _LOGGER.debug("CACHED_SCHEMA: %s", cached_schema)
@@ -1027,9 +1152,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     **self.entry.options,
                     CONF_SCHEMA: config_schema,
                 }
-                self.hass.config_entries.async_update_entry(
-                    self.entry, options=new_options
-                )
+                self._persist_options_no_reload(new_options)
 
         # Try merging schemas
         if cached_schema and (
@@ -1075,10 +1198,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         )
         self.entry.async_on_unload(unsub_stop)
 
-        # Reset _suppress_reload — it may have been set by
-        # _async_mark_ssot_migrated above to prevent the update listener
-        # from reloading during setup.
-        self._suppress_reload = 0.0
+        # No _suppress_reload reset needed — the counter drains as each
+        # queued update-listener task runs; clearing it early was the
+        # race that caused spurious startup reloads (issue 1279).
 
     def _async_mark_ssot_migrated(
         self, *, schema: dict[str, Any] | None = None
@@ -1101,13 +1223,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         new_options = {**self.entry.options, CONF_ADVANCED_FEATURES: advanced}
         if schema is not None:
             new_options[CONF_SCHEMA] = schema
-        # Set _suppress_reload so the update listener (scheduled as an
-        # async task by async_update_entry) skips the reload.  The flag
-        # is reset at the end of async_setup.
-        self._suppress_reload = time.time()
-        self.hass.config_entries.async_update_entry(
-            self.entry, options=new_options
-        )
+        # Suppress the reload that the update listener (scheduled as an
+        # async task by async_update_entry) would otherwise trigger.
+        self._persist_options_no_reload(new_options)
         _LOGGER.info("SSOT migration marked as done in config entry")
 
     async def async_start(self) -> None:
@@ -1394,11 +1512,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if schema_changed:
             new_options = dict(self.entry.options)
             new_options[CONF_SCHEMA] = schema
-            self._suppress_reload = time.time()
             try:
-                self.hass.config_entries.async_update_entry(
-                    self.entry, options=new_options
-                )
+                self._persist_options_no_reload(new_options)
                 _LOGGER.info(
                     "Persisted schema changes (cleared "
                     "_suppress_not_seen from HGI entries)"
@@ -2032,9 +2147,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
             new_schema[SZ_OWNER] = root_owner
         new_options = dict(self.entry.options)
         new_options[CONF_SCHEMA] = new_schema
-        self.hass.config_entries.async_update_entry(
-            self.entry, options=new_options
-        )
+        self.options = new_options
+        self._persist_options_no_reload(new_options)
         self._primary_auto_accepted = True
         _LOGGER.info(
             "Auto-accepted primary HGI %s as pool member "
@@ -2679,10 +2793,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         new_options = dict(self.entry.options)
         new_options[CONF_SCHEMA] = new_schema
         self.options = new_options
-        self._suppress_reload = time.time()
-        self.hass.config_entries.async_update_entry(
-            self.entry, options=new_options
-        )
+        self._persist_options_no_reload(new_options)
         _LOGGER.debug(
             "Wrote %d command(s) to schema _commands for %s",
             len(commands),
@@ -3022,7 +3133,13 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 pool_constructor = (
                     self._create_hybrid_pool_transport_constructor(
                         port_name=str(_port_name_raw),
-                        port_config={},
+                        port_config=PortConfigT(
+                            baudrate=115200,
+                            dsrdtr=False,
+                            rtscts=False,
+                            timeout=0,
+                            xonxoff=True,
+                        ),
                         serial_additional=_zigbee_additional_mqtt,
                         mqtt_hgi_ids=all_hgi_ids_hybrid,
                         primary_hgi_id=None,
@@ -3374,7 +3491,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         self,
         *,
         port_name: str,
-        port_config: dict[str, Any],
+        port_config: PortConfigT,
         additional_ports: list[str],
     ) -> Callable[..., Awaitable[Any]]:
         """Create a transport_constructor for the gateway pool.
@@ -3387,7 +3504,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         :param port_name: The primary serial port name.
         :type port_name: str
         :param port_config: The primary port configuration dict.
-        :type port_config: dict[str, Any]
+        :type port_config: PortConfigT
         :param additional_ports: List of additional port names.
         :type additional_ports: list[str]
         :returns: An async transport constructor callable.
@@ -3414,13 +3531,13 @@ class RamsesCoordinator(DataUpdateCoordinator):
             **kwargs: Any,
         ) -> Any:
             """Create a PooledTransport wrapping all pool members."""
-            all_ports = [port_name, *additional_ports]
+            all_ports = [
+                SerPortNameT(p) for p in (port_name, *additional_ports)
+            ]
             # All children share the same port_config for now.
             # Per-child configs can be added when the config flow supports
             # per-port settings.
-            all_configs: list[dict[str, Any]] | None = [port_config] * len(
-                all_ports
-            )
+            all_configs: list[PortConfigT] = [port_config] * len(all_ports)
 
             _LOGGER.debug(
                 "PooledTransport: creating pool with %d ports: %s",
@@ -3538,10 +3655,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # and a reload would be disruptive.  On the next startup,
             # the probe will find all HGIs already have "usb" in
             # _comment and won't trigger another update.
-            self._suppress_reload = time.time()
-            self.hass.config_entries.async_update_entry(
-                self.entry, options=new_options
-            )
+            self._persist_options_no_reload(new_options)
             _LOGGER.info(
                 "SerialProbe: marked %d HGI(s) as USB-capable",
                 count,
@@ -3551,7 +3665,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         self,
         *,
         port_name: str,
-        port_config: dict[str, Any],
+        port_config: PortConfigT,
         serial_additional: list[str],
         mqtt_hgi_ids: list[str],
         primary_hgi_id: str | None = None,
@@ -3571,6 +3685,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         :param port_name: The primary serial port name.
         :param port_config: The primary port configuration dict.
+        :type port_config: PortConfigT
         :param serial_additional: Additional serial port names.
         :param mqtt_hgi_ids: MQTT HGI IDs for callback-driven children.
         :param primary_hgi_id: The primary port's HGI ID if known
@@ -3621,7 +3736,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 serial_ports = list(_serial_additional)
             else:
                 serial_ports = [_port_name, *_serial_additional]
-            all_serial_configs: list[dict[str, Any]] = [
+            all_serial_configs: list[PortConfigT] = [
                 deepcopy(_port_config) for _ in serial_ports
             ]
 
@@ -3719,7 +3834,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             transport = await pooled_transport_factory(
                 protocol,
                 config=config,
-                port_names=serial_ports,
+                port_names=[SerPortNameT(p) for p in serial_ports],
                 port_configs=all_serial_configs,
                 extra=extra,
                 loop=loop or _hass.loop,
@@ -3731,6 +3846,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # If there are MQTT callback children, create the
             # RamsesMqttPoolBridge and attach it to the pool.
             if _mqtt_hgi_ids:
+                from ramses_tx.transport.pooled import PooledTransport
+
                 from .mqtt_pool_bridge import RamsesMqttPoolBridge
 
                 mqtt_topic = _self.options.get(
@@ -3754,7 +3871,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 # Attach the bridge to the existing pool's
                 # callback-driven children (after serial children).
                 await _self.mqtt_bridge.async_attach_to_pool(
-                    transport,
+                    cast(PooledTransport, transport),
                     callback_child_start_index=len(serial_ports),
                 )
 
@@ -3977,6 +4094,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # discovery manager so the user gets a persistent notification.
         self._check_rf_contradictions()
         await self.async_save_client_state()
+        # Topology events may have created/bound new devices — pick them
+        # up immediately instead of waiting for the next periodic
+        # discovery cycle (issue 1257, owner-gated discovery).
+        await self._discover_new_entities()
 
     def _check_rf_contradictions(self) -> None:
         """Check ramses_rf known_list for contradiction-based class changes.
@@ -4004,7 +4125,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if not self.client or not self.discovery_manager:
             return
 
-        rf_known = self.client.config.known_list
+        # cast(object) — the declared DeviceListT may differ from the
+        # runtime shape across ramses_rf versions, so the guards below
+        # must stay meaningful to mypy.
+        rf_known = cast(object, self.client.config.known_list)
         if not isinstance(rf_known, dict):
             return
         # Use self.entry.options (live) — see _async_discovery_checkpoint.
@@ -4266,14 +4390,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     # flight (causing lingering tasks).
                     #
                     # NOTE: async_update_entry schedules the update listener
-                    # as an async task.  Setting _suppress_reload to a
-                    # timestamp and checking it with a 5-second window in
-                    # the update listener avoids the race condition where
-                    # the flag is reset before the listener runs.
-                    self._suppress_reload = time.time()
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, options=new_options
-                    )
+                    # as an async task.  _persist_options_no_reload counts
+                    # each real update so the queued listener run skips the
+                    # reload — no timing window to expire (issue 1279).
+                    self._persist_options_no_reload(new_options)
             elif comments_refreshed:
                 # No topology changes (enriched is None), but the scan engine
                 # captured new zone bindings in device_comments.  Persist the
@@ -4298,10 +4418,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 new_options = dict(self.entry.options)
                 new_options[CONF_SCHEMA] = config_schema
                 self.options = new_options
-                self._suppress_reload = time.time()
-                self.hass.config_entries.async_update_entry(
-                    self.entry, options=new_options
-                )
+                self._persist_options_no_reload(new_options)
             else:
                 # No topology changes and no comments refreshed, but we
                 # still need to sync remotes to schema _commands (Phase 3a
@@ -4326,11 +4443,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
                         new_options = dict(self.entry.options)
                         new_options[CONF_SCHEMA] = migrated_schema
                         self.options = new_options
-                        self._suppress_reload = time.time()
                         try:
-                            self.hass.config_entries.async_update_entry(
-                                self.entry, options=new_options
-                            )
+                            self._persist_options_no_reload(new_options)
                         except Exception as err:
                             _LOGGER.debug(
                                 "Failed to persist remotes sync to schema: %s",
@@ -4428,7 +4542,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         ):
             return device
         if self.client and hasattr(self.client, "device_registry"):
-            return self.client.device_registry.device_by_id.get(device_id)
+            return self.client.device_registry.device_by_id.get(
+                DeviceIdT(device_id)
+            )
         return None
 
     def async_register_platform(
@@ -4708,7 +4824,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         during startup (is_active returns False before any packets
         have arrived).
         """
-        gateway: Gateway = self.client
+        gateway: Gateway | None = self.client
         if gateway is None or gateway.hgi is None:
             return
 
@@ -4960,10 +5076,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 new_options = dict(self.entry.options)
                 new_options[CONF_SCHEMA] = schema_dict
                 self.options = new_options
-                self._suppress_reload = time.time()
-                self.hass.config_entries.async_update_entry(
-                    self.entry, options=new_options
-                )
+                self._persist_options_no_reload(new_options)
 
             # Un-exclude HGIs whose serial transport has disconnected
             # (e.g. USB unplugged).  Their MQTT packets should flow
@@ -4980,6 +5093,27 @@ class RamsesCoordinator(DataUpdateCoordinator):
         ):
             self.discovery_manager.active_hgi_id = active_hgi_id
 
+        # Owner-gated entity creation (issue 1257, step 2.3): only
+        # devices eligible per the config schema may get entities —
+        # accepted devices (_owner == root), in-schema HGIs, members of
+        # accepted parents' lists and children bound to an eligible
+        # parent.  Discovery candidates (entry without _owner) and
+        # foreign devices (_owner != root) stay entity-less until
+        # accepted.  When no usable schema is present, keep legacy
+        # behaviour (ungated) rather than blocking all entity creation.
+        _schema = self.options.get(CONF_SCHEMA)
+        eligible: set[str] | None = (
+            eligible_devices(_schema)
+            if isinstance(_schema, dict) and _schema
+            else None
+        )
+
+        # Devices removed from the schema by hand keep their HA registry
+        # entries and entities — flag them for review instead of tearing
+        # them down (issue 1257, flag-don't-teardown).
+        if isinstance(_schema, dict):
+            self._report_schema_orphans(_schema)
+
         # Snapshot lists to avoid RuntimeError if ramses_rf updates
         # continuously (fixes silent failure when list size changes).
         # Filter out the ramses_rf sentinel HGI (18:000730) — it's a
@@ -4989,9 +5123,15 @@ class RamsesCoordinator(DataUpdateCoordinator):
         current_devices = [
             d
             for d in gateway.device_registry.devices
-            if d.id not in self._disabled_device_ids and d.id != DEFAULT_HGI_ID
+            if d.id not in self._disabled_device_ids
+            and d.id != DEFAULT_HGI_ID
+            and (eligible is None or d.id in eligible)
         ]
-        current_systems = list(gateway.device_registry.systems)
+        current_systems = [
+            s
+            for s in gateway.device_registry.systems
+            if eligible is None or s.id in eligible
+        ]
 
         # --- DIAGNOSTIC LOGGING ---
         # This will reveal if ramses_rf has actually found any devices.
@@ -5066,7 +5206,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         ]
         self._zones, new_zones = find_new_entities(self._zones, current_zones)
 
-        current_dhws: list[Zone] = [
+        current_dhws: list[DhwZone] = [
             s.dhw for s in current_systems if isinstance(s, Evohome) and s.dhw
         ]
         self._dhws, new_dhws = find_new_entities(self._dhws, current_dhws)
@@ -5164,9 +5304,67 @@ class RamsesCoordinator(DataUpdateCoordinator):
         await async_add_entities(Platform.CLIMATE, new_zones)
         await async_add_entities(Platform.WATER_HEATER, new_dhws)
         await async_add_entities(Platform.NUMBER, new_entities)
+        await async_add_entities(Platform.BUTTON, new_entities)
 
         # Trigger a save if we found something new
         await self.async_save_client_state()
+
+    def _report_schema_orphans(self, schema: dict[str, Any]) -> None:
+        """Flag HA registry devices that are no longer in the schema.
+
+        When a device is removed from the schema manually (schema
+        editor), its HA device-registry entry and entities persist —
+        we flag them via a persistent notification rather than tearing
+        them down (issue 1257).  Child ids (``01:xxx_06`` zones, ``_HW``
+        DHW, UFH circuits) map to entries under their parent, so
+        removing a parent orphans its children too.
+
+        :param schema: The config-entry schema dict.
+        """
+        notification_id = f"{DOMAIN}_schema_orphans"
+        if self.entry.entry_id is None:
+            return
+        dev_reg = dr.async_get(self.hass)
+        registry_entries = dr.async_entries_for_config_entry(
+            dev_reg, self.entry.entry_id
+        )
+        # HGI (18:) devices are transport/pool members configured via the
+        # serial_port options, not schema devices — the active gateway and
+        # pool HGIs must never be flagged as schema orphans.
+        orphaned = sorted(
+            ident
+            for dev_entry in registry_entries
+            for domain, ident in dev_entry.identifiers
+            if domain == DOMAIN
+            and not str(ident).startswith(HGI_PREFIX)
+            and not device_in_schema(schema, ident)
+        )
+        _LOGGER.debug(
+            "Schema orphan check: %d registry entries, orphaned=%s",
+            len(registry_entries),
+            orphaned,
+        )
+        if not orphaned:
+            if self._schema_orphans_notified:
+                self._schema_orphans_notified = False
+                async_dismiss_notification(self.hass, notification_id)
+            return
+        self._schema_orphans_notified = True
+        async_create_notification(
+            self.hass,
+            title="Ramses RF: devices no longer in schema",
+            message=(
+                "The following devices were removed from the schema but "
+                "still have entities in Home Assistant:\n\n"
+                + "\n".join(f"- `{dev_id}`" for dev_id in orphaned)
+                + "\n\nTo remove them from Home Assistant, delete them "
+                "on the device page (Settings → Devices & Services → "
+                "Ramses RF) or call the `ramses_cc.remove_device` "
+                "service — children such as remotes and zones under a "
+                "removed parent are listed separately."
+            ),
+            notification_id=notification_id,
+        )
 
     async def _async_probe_devices_after_failover(self) -> None:
         """Poll HVAC devices after a serial→MQTT failover.

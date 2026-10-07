@@ -44,7 +44,7 @@ from ramses_rf.const import (
     SZ_ZONES,
     DevType,
 )
-from ramses_rf.devices import Device, HvacRemoteBase, HvacVentilator
+from ramses_rf.devices import Device, Fakeable, HvacRemoteBase, HvacVentilator
 from ramses_rf.exceptions import BindingFlowFailed, DeviceNotFoundError
 from ramses_rf.schemas import (
     SZ_APPLIANCE_CONTROL,
@@ -124,7 +124,7 @@ def mock_fan_device() -> MagicMock:
 
     :return: A MagicMock simulating a HvacVentilator device.
     """
-    device = MagicMock()
+    device = MagicMock(spec=HvacVentilator)
     device.id = FAN_ID
     device._SLUG = "FAN"
     device.slug = device._SLUG
@@ -137,7 +137,7 @@ async def test_bind_device_raises_ha_error(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test that async_bind_device raises HomeAssistantError on binding failure."""
-    mock_device = MagicMock()
+    mock_device = MagicMock(spec=Fakeable)
     mock_device.id = "01:123456"
     mock_device.initiate_binding_process_with = AsyncMock(
         side_effect=BindingFlowFailed("Timeout waiting for confirm")
@@ -150,8 +150,8 @@ async def test_bind_device_raises_ha_error(
     call = MagicMock()
     call.data = {
         "device_id": "01:123456",
-        "offer": {"key": "val"},
-        "confirm": {"key": "val"},
+        "offer": {"1FC9": "00"},
+        "confirm": {"1FC9": "00"},
         "device_info": None,
     }
 
@@ -449,7 +449,7 @@ async def test_bind_device_success(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test the happy path for async_bind_device."""
-    mock_device = MagicMock()
+    mock_device = MagicMock(spec=Fakeable)
     mock_device.id = "01:123456"
     mock_device.initiate_binding_process_with = AsyncMock(
         return_value=None
@@ -486,7 +486,7 @@ async def test_bind_device_success(
 async def test_bind_device_preserves_indexed_duplicate_offers(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    mock_device = MagicMock(id="29:150156")
+    mock_device = MagicMock(spec=Fakeable, id="29:150156")
     mock_device.initiate_binding_process_with = AsyncMock(return_value=None)
     mock_client = cast(Any, mock_coordinator.client)
     mock_client.device_registry.fake_device = AsyncMock(
@@ -767,7 +767,7 @@ async def test_get_device_and_from_id_bound_logic(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
     """Test _get_device_and_from_id logic regarding bound devices."""
-    mock_dev = MagicMock()
+    mock_dev = MagicMock(spec=HvacVentilator)
     mock_dev.id = "30:111111"
 
     # Mock the device lookup
@@ -1582,7 +1582,8 @@ async def test_bind_device_generic_exception(
     """Test async_bind_device handles generic exceptions."""
     # We must mock initiate_binding_process_with on the device object itself,
     # NOT on the client.fake_device method (which only raises LookupError).
-    mock_device = MagicMock()
+    mock_device = MagicMock(spec=Fakeable)
+    mock_device.id = "01:123456"
     mock_client = cast(Any, mock_coordinator.client)
     mock_client.device_registry.fake_device = AsyncMock(
         return_value=mock_device
@@ -2956,7 +2957,7 @@ async def test_async_bind_device_routes_to_registry(
 
     # Setup the device registry mock
     mock_registry = AsyncMock()
-    mock_device = AsyncMock()
+    mock_device = AsyncMock(spec=Fakeable)
     mock_device.id = "01:123456"
 
     # Assign the mock device to be returned by the registry
@@ -2975,8 +2976,8 @@ async def test_async_bind_device_routes_to_registry(
         data={
             "device_id": "01:123456",
             "device_info": None,
-            "offer": {"00": "val"},
-            "confirm": {"00": "val"},
+            "offer": {"1FC9": "00"},
+            "confirm": {"1FC9": "00"},
         },
     )
 
@@ -4780,6 +4781,83 @@ async def test_remove_device_clears_main_tcs(
     schema = mock_coordinator.options[CONF_SCHEMA]
     assert SZ_MAIN_TCS not in schema
     assert "01:216136" not in schema
+
+
+async def test_remove_device_cascades_registry_children(
+    mock_coordinator: RamsesCoordinator,
+    hass: HomeAssistant,
+) -> None:
+    """Removing a parent device also removes its child registry entries.
+
+    Zone children (``<ctl>_NN``) can only exist under the parent — after
+    ``remove_device`` on the CTL, their registry entries must not linger
+    as orphans (issue 1257).
+    """
+    dev_reg = dr.async_get(hass)
+    entry_id = mock_coordinator.entry.entry_id
+    for ramses_id in ("01:216136", "01:216136_03", "01:216136_04"):
+        dev_reg.async_get_or_create(
+            config_entry_id=entry_id,
+            identifiers={(DOMAIN, ramses_id)},
+        )
+
+    handler = RamsesServiceHandler(mock_coordinator)
+    mock_coordinator.options[CONF_SCHEMA] = {
+        SZ_MAIN_TCS: "01:216136",
+        "01:216136": {SZ_ZONES: {"03": {}, "04": {}}},
+    }
+
+    call = MagicMock()
+    call.data = {"device_id": "01:216136"}
+
+    with patch.object(
+        mock_coordinator.hass.config_entries, "async_update_entry"
+    ):
+        await handler.async_remove_device(call)
+
+    assert "01:216136" not in mock_coordinator.options[CONF_SCHEMA]
+    remaining = dr.async_entries_for_config_entry(dev_reg, entry_id)
+    assert remaining == []
+
+
+async def test_remove_device_child_keeps_parent_registry_entry(
+    mock_coordinator: RamsesCoordinator,
+    hass: HomeAssistant,
+) -> None:
+    """Removing a child id removes only that child's registry entry."""
+    dev_reg = dr.async_get(hass)
+    entry_id = mock_coordinator.entry.entry_id
+    for ramses_id in ("01:216136", "01:216136_03"):
+        dev_reg.async_get_or_create(
+            config_entry_id=entry_id,
+            identifiers={(DOMAIN, ramses_id)},
+        )
+
+    handler = RamsesServiceHandler(mock_coordinator)
+    mock_coordinator.options[CONF_SCHEMA] = {
+        SZ_MAIN_TCS: "01:216136",
+        "01:216136": {SZ_ZONES: {"03": {}, "04": {}}},
+    }
+
+    call = MagicMock()
+    call.data = {"device_id": "01:216136_03"}
+
+    with patch.object(
+        mock_coordinator.hass.config_entries, "async_update_entry"
+    ):
+        await handler.async_remove_device(call)
+
+    # Zone 03 gone from schema, zone 04 and the parent kept
+    schema = mock_coordinator.options[CONF_SCHEMA]
+    assert "03" not in schema["01:216136"].get(SZ_ZONES, {})
+    assert "04" in schema["01:216136"][SZ_ZONES]
+    remaining_ids = {
+        ident
+        for dev_entry in dr.async_entries_for_config_entry(dev_reg, entry_id)
+        for domain, ident in dev_entry.identifiers
+        if domain == DOMAIN
+    }
+    assert remaining_ids == {"01:216136"}
 
 
 async def test_remove_device_from_schema(

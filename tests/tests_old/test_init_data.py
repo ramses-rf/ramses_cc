@@ -30,7 +30,7 @@ _CALL_LATER_DELAY: Final = 0  # from: custom_components.ramses_cc.services.py
 
 # fmt: off
 EXPECTED_ENTITIES = [  # adjust this list when adding entity descriptions
-    "18:006402-status",
+    "18:006402-status", "18_006402-discover_known_devices", "18_006402-force_update", "18_006402-sync_topology",
     "01:145038-status", "01:145038-sys_info", "01:145038", "01:145038-heat_demand", "01:145038-active_fault", "01:145038-device_status", "01:145038-last_msg",
 
     "01:145038_02", "01:145038_02-heat_demand", "01:145038_02-window_open",

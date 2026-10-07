@@ -37,6 +37,20 @@ class _AsyncAttrState:
     last_dispatch: float = 0.0
 
 
+def normalize_device_id(device_id: str) -> str:
+    """Normalize a device ID for use in entity IDs.
+
+    Replaces colons with underscores and converts to lowercase to
+    ensure consistency.
+
+    :param device_id: The device ID to normalize
+    :type device_id: str
+    :return: The normalized device ID
+    :rtype: str
+    """
+    return str(device_id).replace(":", "_").lower()
+
+
 def ha_device_id_to_ramses_device_id(
     hass: HomeAssistant, ha_device_id: str
 ) -> str | None:
@@ -370,7 +384,7 @@ def parse_packet_string(packet_str: str) -> CommandDTO | None:
             addr2=dto.addr2,
             addr3=dto.addr3,
             code=dto.code,
-            payload=dto.payload,
+            payload=dto.raw_payload,
         )
     except PacketInvalid:
         return None
@@ -513,7 +527,7 @@ def engine_transport(obj: Any) -> Any:
     return transport or getattr(obj, "transport", None)
 
 
-def device_gateway(device: Any) -> Gateway:
+def device_gateway(device: Any) -> Gateway | None:
     """Return the gateway a device is bound to.
 
     Uses the public ``gateway`` property.

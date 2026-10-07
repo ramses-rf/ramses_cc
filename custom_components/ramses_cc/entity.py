@@ -75,7 +75,7 @@ class RamsesEntity(CoordinatorEntity):
         self._device = device
         self.entity_description = entity_description
 
-        self._attr_unique_id = device.id
+        self._attr_unique_id: str = device.id
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, device.id)})
         self._update_lock = asyncio.Lock()
         self._dropped_updates: int = 0
@@ -130,7 +130,7 @@ class RamsesEntity(CoordinatorEntity):
         :return: A dictionary of attributes derived from the device
             and description.
         """
-        attrs = {
+        attrs: dict[str, Any] = {
             ATTR_ID: self._device.id,
         }
         interval = resolve_async_attr(

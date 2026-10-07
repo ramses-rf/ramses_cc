@@ -3002,6 +3002,9 @@ async def test_review_discovered_accept_device(hass: HomeAssistant) -> None:
     mock_coord.discovery_manager.get_devices.return_value = [mock_entry]
     mock_coord.discovery_manager.accept_device.return_value = accepted_entry
     mock_coord.async_save = AsyncMock()
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.async_discover_known_devices = AsyncMock()
+    mock_coord._suppress_reload = 0  # counter, not timestamp (issue 1279)
     config_entry.runtime_data = mock_coord
 
     result = await hass.config_entries.options.async_init(
@@ -3036,6 +3039,10 @@ async def test_review_discovered_accept_device(hass: HomeAssistant) -> None:
     # root_owner "me" — see issue with 37:154519 accept + owner: not-me).
     saved_schema = config_entry.options.get(CONF_SCHEMA, {})
     assert saved_schema.get("04:056053", {}).get(SZ_TR_OWNER) == "henk"
+    # Non-HGI accepts apply live — include lists + entity discovery on
+    # the running coordinator, reload suppressed (issue 1288)
+    mock_coord.async_discover_known_devices.assert_called_once()
+    assert mock_coord._suppress_reload > 0
 
 
 async def test_review_discovered_decline_device(hass: HomeAssistant) -> None:
@@ -3469,6 +3476,8 @@ async def test_review_discovered_bulk_accept_all(hass: HomeAssistant) -> None:
         mock_entry1,
         mock_entry2,
     ]
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.async_discover_known_devices = AsyncMock()
     config_entry.runtime_data = mock_coord
 
     result = await hass.config_entries.options.async_init(
@@ -3491,6 +3500,7 @@ async def test_review_discovered_bulk_accept_all(hass: HomeAssistant) -> None:
     )
     assert result.get("type") == FlowResultType.CREATE_ENTRY
     assert mock_coord.discovery_manager.accept_device.call_count == 2
+    assert mock_coord.async_discover_known_devices.call_count == 2
 
 
 async def test_review_discovered_bulk_decline_all(hass: HomeAssistant) -> None:
@@ -3534,6 +3544,8 @@ async def test_review_discovered_bulk_decline_all(hass: HomeAssistant) -> None:
         mock_entry1,
         mock_entry2,
     ]
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.async_discover_known_devices = AsyncMock()
     config_entry.runtime_data = mock_coord
 
     result = await hass.config_entries.options.async_init(
@@ -3600,6 +3612,8 @@ async def test_review_discovered_per_device_overrides_bulk(
         mock_entry1,
         mock_entry2,
     ]
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.async_discover_known_devices = AsyncMock()
     config_entry.runtime_data = mock_coord
 
     result = await hass.config_entries.options.async_init(
@@ -3672,6 +3686,8 @@ async def test_review_discovered_bulk_none_no_action(
         mock_entry1,
         mock_entry2,
     ]
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.async_discover_known_devices = AsyncMock()
     config_entry.runtime_data = mock_coord
 
     result = await hass.config_entries.options.async_init(
@@ -3740,6 +3756,8 @@ async def test_review_discovered_bulk_none_per_device_still_works(
         mock_entry1,
         mock_entry2,
     ]
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.async_discover_known_devices = AsyncMock()
     config_entry.runtime_data = mock_coord
 
     result = await hass.config_entries.options.async_init(
@@ -5085,6 +5103,8 @@ async def test_options_flow_review_discovered_actions(
         mock_mismatch_zone
     ]
     mock_coord.discovery_manager.accept_device.return_value = mock_dev_entry
+    mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.async_discover_known_devices = AsyncMock()
     config_entry.runtime_data = mock_coord
 
     flow = RamsesOptionsFlowHandler(config_entry)
@@ -5434,6 +5454,7 @@ async def test_options_flow_review_discovered_bulk_and_decline(
     mock_coord = MagicMock()
     mock_coord.discovery_manager = MagicMock()
     mock_coord.async_save_client_state = AsyncMock()
+    mock_coord.async_discover_known_devices = AsyncMock()
     mock_coord.store = MagicMock()
     mock_coord.store.async_save_backup = AsyncMock()
 

@@ -80,6 +80,7 @@ from ramses_tx.schemas import (
     SZ_SERIAL_PORT,
 )
 from ramses_tx.transport.base import TransportConfig
+from ramses_tx.typing import PortConfigT
 
 # Constants
 FAN_ID = "30:111222"
@@ -1539,6 +1540,69 @@ async def test_save_client_state_topology_sync_sets_suppress_reload(
     cast(
         Any, mock_coordinator.hass.config_entries
     ).async_update_entry.assert_called()
+
+
+def test_persist_options_no_reload_counts_real_updates(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """_persist_options_no_reload only counts updates that queued a
+    listener task (i.e. async_update_entry returned True).
+
+    Regression test for issue 1279: with the old timestamp scheme a
+    listener task that ran >5s late would not be suppressed, and a flag
+    reset could expose earlier queued listeners.  The counter tracks
+    each real update instead — no timing window, no leaks.
+    """
+    update_entry = cast(
+        Any, mock_coordinator.hass.config_entries
+    ).async_update_entry
+
+    mock_coordinator._suppress_reload = 0  # noqa: SLF001
+    update_entry.return_value = True
+
+    mock_coordinator._persist_options_no_reload({"schema": {"a": 1}})  # noqa: SLF001
+    assert mock_coordinator._suppress_reload == 1  # noqa: SLF001
+
+    mock_coordinator._persist_options_no_reload({"schema": {"a": 2}})  # noqa: SLF001
+    assert mock_coordinator._suppress_reload == 2  # noqa: SLF001
+
+    # A no-op write (options unchanged → returns False → no listener
+    # task queued) must NOT consume a suppression slot
+    update_entry.return_value = False
+    mock_coordinator._persist_options_no_reload({"schema": {"a": 2}})  # noqa: SLF001
+    assert mock_coordinator._suppress_reload == 2  # noqa: SLF001
+
+
+def test_persist_options_no_reload_eager_listener(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """The suppression credit must be in place before async_update_entry.
+
+    HA schedules update listeners with ``eager_start=True``, so the
+    listener body runs synchronously inside ``async_update_entry`` —
+    before the call returns.  If the credit were only taken afterwards,
+    the eager listener would see a zero count and reload anyway.
+    """
+    update_entry = cast(
+        Any, mock_coordinator.hass.config_entries
+    ).async_update_entry
+    listener_saw: list[int] = []
+
+    def _update_entry_eager(*args: Any, **kwargs: Any) -> bool:
+        # Emulate HA: options changed → listener fires eagerly and,
+        # like async_update_listener, consumes one credit if present.
+        listener_saw.append(mock_coordinator._suppress_reload)  # noqa: SLF001
+        if mock_coordinator._suppress_reload:  # noqa: SLF001
+            mock_coordinator._suppress_reload -= 1  # noqa: SLF001
+        return True
+
+    update_entry.side_effect = _update_entry_eager
+
+    mock_coordinator._suppress_reload = 0  # noqa: SLF001
+    mock_coordinator._persist_options_no_reload({"schema": {"a": 1}})  # noqa: SLF001
+
+    assert listener_saw == [1]
+    assert mock_coordinator._suppress_reload == 0  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -7243,7 +7307,13 @@ def test_create_pool_transport_constructor(
         pytest.skip("pooled_transport_factory not in published ramses_tx")
     constructor = mock_coordinator._create_pool_transport_constructor(
         port_name="mqtt://broker:1883",
-        port_config={},
+        port_config=PortConfigT(
+            baudrate=115200,
+            dsrdtr=False,
+            rtscts=False,
+            timeout=0,
+            xonxoff=True,
+        ),
         additional_ports=["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
     )
     assert callable(constructor)
@@ -7511,7 +7581,13 @@ async def test_pool_constructor_invocation(
     ) as mock_factory:
         constructor = mock_coordinator._create_pool_transport_constructor(
             port_name="mqtt://broker:1883",
-            port_config={},
+            port_config=PortConfigT(
+                baudrate=115200,
+                dsrdtr=False,
+                rtscts=False,
+                timeout=0,
+                xonxoff=True,
+            ),
             additional_ports=["mqtt://broker:1883/RAMSES/GATEWAY/18:002222"],
         )
         result = await constructor(
@@ -7579,6 +7655,101 @@ async def test_mqtt_hgi_discovery_callback_does_not_overwrite(
     schema = mock_coordinator.entry.options.get(CONF_SCHEMA, {})
     # Should still have the owner (not overwritten)
     assert schema["18:999999"].get(SZ_TR_OWNER) == "me"
+
+
+async def test_mqtt_hgi_discovery_auto_owns_primary(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """The primary HGI is auto-owned, not a discovery candidate.
+
+    The primary is the active local gateway — it can never be
+    declined, so it must get _owner immediately rather than waiting
+    for the user to accept it (issue 1020/R102).
+    """
+    mock_coordinator.entry.options = {CONF_SCHEMA: {SZ_OWNER: "me"}}
+    mock_coordinator._get_primary_hgi_id = MagicMock(  # noqa: SLF001
+        return_value="18:001234"
+    )
+
+    def _update_entry(entry: Any, **kwargs: Any) -> None:
+        if "options" in kwargs:
+            entry.options = kwargs["options"]
+
+    mock_coordinator.hass.config_entries.async_update_entry.side_effect = (
+        _update_entry
+    )
+
+    callback = _MqttHgiDiscoveryCallback(mock_coordinator)
+    callback.on_unknown_hgi("18:001234", topic="RAMSES/GATEWAY/18:001234")
+
+    schema = mock_coordinator.entry.options.get(CONF_SCHEMA, {})
+    assert "18:001234" in schema
+    assert schema["18:001234"].get("_class") == "HGI"
+    assert schema["18:001234"].get(SZ_TR_OWNER) == "me"
+
+
+async def test_mqtt_hgi_discovery_backfills_owner_on_primary(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """A primary stored as ownerless candidate gets _owner backfilled."""
+    mock_coordinator.entry.options = {
+        CONF_SCHEMA: {
+            SZ_OWNER: "me",
+            "18:001234": {
+                "_class": "HGI",
+                "_comment": "Supports: mqtt (auto-generated)",
+            },
+        }
+    }
+    mock_coordinator._get_primary_hgi_id = MagicMock(  # noqa: SLF001
+        return_value="18:001234"
+    )
+
+    def _update_entry(entry: Any, **kwargs: Any) -> None:
+        if "options" in kwargs:
+            entry.options = kwargs["options"]
+
+    mock_coordinator.hass.config_entries.async_update_entry.side_effect = (
+        _update_entry
+    )
+
+    callback = _MqttHgiDiscoveryCallback(mock_coordinator)
+    callback.on_unknown_hgi("18:001234", topic="RAMSES/GATEWAY/18:001234")
+
+    schema = mock_coordinator.entry.options.get(CONF_SCHEMA, {})
+    assert schema["18:001234"].get(SZ_TR_OWNER) == "me"
+
+
+async def test_mqtt_hgi_discovery_respects_removed_primary(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """An explicitly pool-removed primary is not re-owned (issue 1183)."""
+    mock_coordinator.entry.options = {
+        CONF_SCHEMA: {
+            SZ_OWNER: "me",
+            "18:001234": {
+                "_class": "HGI",
+                "_removed_from_pool": True,
+            },
+        }
+    }
+    mock_coordinator._get_primary_hgi_id = MagicMock(  # noqa: SLF001
+        return_value="18:001234"
+    )
+
+    def _update_entry(entry: Any, **kwargs: Any) -> None:
+        if "options" in kwargs:
+            entry.options = kwargs["options"]
+
+    mock_coordinator.hass.config_entries.async_update_entry.side_effect = (
+        _update_entry
+    )
+
+    callback = _MqttHgiDiscoveryCallback(mock_coordinator)
+    callback.on_unknown_hgi("18:001234", topic="RAMSES/GATEWAY/18:001234")
+
+    schema = mock_coordinator.entry.options.get(CONF_SCHEMA, {})
+    assert SZ_TR_OWNER not in schema["18:001234"]
 
 
 # -- _get_accepted_hgi_ids tests (issue 1119) -----------------------------
@@ -8740,7 +8911,13 @@ async def test_create_hybrid_pool_transport_constructor(
     """Test _create_hybrid_pool_transport_constructor returns a callable."""
     constructor = mock_coordinator._create_hybrid_pool_transport_constructor(
         port_name="/dev/ttyACM0",
-        port_config={"baudrate": 115200},
+        port_config=PortConfigT(
+            baudrate=115200,
+            dsrdtr=False,
+            rtscts=False,
+            timeout=0,
+            xonxoff=True,
+        ),
         serial_additional=["/dev/ttyACM1"],
         mqtt_hgi_ids=["18:001111"],
     )
@@ -8784,7 +8961,13 @@ async def test_hybrid_pool_serial_identity_ignores_zigbee_child_count(
     ):
         constructor = mock_coordinator._create_hybrid_pool_transport_constructor(
             port_name="/dev/ttyACM0",
-            port_config={},
+            port_config=PortConfigT(
+                baudrate=115200,
+                dsrdtr=False,
+                rtscts=False,
+                timeout=0,
+                xonxoff=True,
+            ),
             serial_additional=[
                 "zigbee://10:bd:a3:ff:fe:a7:e0:dc/0xfc00/0x0000/10/0xfc01/0x0000/10"
             ],
@@ -8808,7 +8991,13 @@ async def test_create_hybrid_pool_transport_constructor_no_serial(
     """Test constructor with no serial children, only MQTT."""
     constructor = mock_coordinator._create_hybrid_pool_transport_constructor(
         port_name="mqtt://broker:1883",
-        port_config={},
+        port_config=PortConfigT(
+            baudrate=115200,
+            dsrdtr=False,
+            rtscts=False,
+            timeout=0,
+            xonxoff=True,
+        ),
         serial_additional=[],
         mqtt_hgi_ids=["18:001111", "18:002222"],
     )
@@ -8843,7 +9032,13 @@ async def test_hybrid_pool_constructor_with_mqtt_primary(
     ):
         constructor = mock_coordinator._create_hybrid_pool_transport_constructor(
             port_name="mqtt_ha",
-            port_config={},
+            port_config=PortConfigT(
+                baudrate=115200,
+                dsrdtr=False,
+                rtscts=False,
+                timeout=0,
+                xonxoff=True,
+            ),
             serial_additional=[
                 "zigbee://10:bd:a3:ff:fe:a7:e0:dc/0xfc00/0x0000/10/0xfc01/0x0000/10"
             ],
@@ -8876,7 +9071,13 @@ async def test_create_hybrid_pool_transport_constructor_import_error(
         try:
             mock_coordinator._create_hybrid_pool_transport_constructor(
                 port_name="/dev/ttyACM0",
-                port_config={},
+                port_config=PortConfigT(
+                    baudrate=115200,
+                    dsrdtr=False,
+                    rtscts=False,
+                    timeout=0,
+                    xonxoff=True,
+                ),
                 serial_additional=[],
                 mqtt_hgi_ids=[],
             )
@@ -11336,3 +11537,114 @@ def test_zigbee_rejoin_unload_callback_returns_none(
     with patch("asyncio.current_task", return_value=watcher_task):
         assert unload_cb() is None
     watcher_task.cancel.assert_not_called()
+
+
+async def test_discover_new_entities_owner_gate(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Owner-gated discovery: only schema-eligible devices get entities.
+
+    Devices in ramses_rf's registry that are absent from the config
+    schema — or carry a foreign ``_owner`` — must not produce entities
+    (issue 1257, owner-gated entity creation).
+    """
+    assert mock_coordinator.client is not None
+
+    # Schema: one accepted CTL and a foreign-owned TRV.  The packet-seen
+    # device 04:123456 has no schema entry at all.
+    mock_coordinator.options[CONF_SCHEMA] = {
+        SZ_OWNER: "me",
+        "01:123456": {SZ_TR_OWNER: "me"},
+        "04:000001": {SZ_TR_OWNER: "not-me"},
+    }
+
+    mock_system = MagicMock(spec=Evohome)
+    mock_system.id = "01:123456"
+    mock_system.state_store = MagicMock()
+    cast(Any, mock_system.state_store)._msg_value_code = AsyncMock(
+        return_value=None
+    )
+    mock_system.dhw = None
+    mock_system.zones = []
+
+    def _device(dev_id: str) -> MagicMock:
+        dev = MagicMock()
+        dev.id = dev_id
+        dev.state_store = MagicMock()
+        cast(Any, dev.state_store)._msg_value_code = AsyncMock(
+            return_value=None
+        )
+        return dev
+
+    foreign = _device("04:000001")
+    unlisted = _device("04:123456")
+
+    cast(Any, mock_coordinator.client.device_registry).systems = [mock_system]
+    cast(Any, mock_coordinator.client.device_registry).devices = [
+        foreign,
+        unlisted,
+    ]
+    cast(Any, mock_coordinator.client).get_state = MagicMock(
+        return_value=({}, {})
+    )
+
+    with (
+        patch("homeassistant.helpers.device_registry.async_get"),
+        patch(
+            "custom_components.ramses_cc.coordinator.async_dispatcher_send"
+        ) as mock_dispatch,
+    ):
+        await mock_coordinator._discover_new_entities()
+
+    dispatched_ids = {
+        d.id for c in cast(Any, mock_dispatch).call_args_list for d in c[0][2]
+    }
+    assert "01:123456" in dispatched_ids  # accepted CTL → system entities
+    assert "04:000001" not in dispatched_ids  # foreign _owner
+    assert "04:123456" not in dispatched_ids  # not in schema
+
+
+async def test_report_schema_orphans(
+    mock_coordinator: RamsesCoordinator,
+) -> None:
+    """Schema-orphaned registry devices are flagged, not torn down.
+
+    A device removed from the schema by hand keeps its HA registry
+    entry — the coordinator raises a persistent notification listing it
+    (issue 1257, flag-don't-teardown) and dismisses it once resolved.
+    """
+    schema = {SZ_OWNER: "me", "01:123456": {SZ_TR_OWNER: "me"}}
+
+    orphan_entry = MagicMock()
+    orphan_entry.identifiers = {(DOMAIN, "04:123456")}
+    ok_entry = MagicMock()
+    ok_entry.identifiers = {(DOMAIN, "01:123456")}
+
+    with (
+        patch(
+            "homeassistant.helpers.device_registry.async_entries_for_config_entry",
+            return_value=[orphan_entry, ok_entry],
+        ),
+        patch(
+            "custom_components.ramses_cc.coordinator.async_create_notification"
+        ) as mock_notify,
+        patch(
+            "custom_components.ramses_cc.coordinator"
+            ".async_dismiss_notification"
+        ) as mock_dismiss,
+    ):
+        mock_coordinator._report_schema_orphans(schema)
+
+        mock_notify.assert_called_once()
+        kwargs = cast(Any, mock_notify).call_args.kwargs
+        assert "04:123456" in kwargs["message"]
+        assert "- `01:123456`" not in kwargs["message"]
+        assert kwargs["notification_id"] == f"{DOMAIN}_schema_orphans"
+
+        # Orphan resolved (re-added to schema) → notification dismissed.
+        mock_coordinator._report_schema_orphans(
+            {**schema, "04:123456": {SZ_TR_OWNER: "me"}}
+        )
+        mock_dismiss.assert_called_once_with(
+            mock_coordinator.hass, f"{DOMAIN}_schema_orphans"
+        )

@@ -865,6 +865,20 @@
                     }
                 }
             }
+        },
+        "button": {
+            "force_update": {
+                "name": "Force Update"
+            },
+            "sync_topology": {
+                "name": "Sync Topology"
+            },
+            "discover_known_devices": {
+                "name": "Discover Known Devices"
+            },
+            "reset_filter_counter": {
+                "name": "Reset Filter Counter"
+            }
         }
     },
     "selector": {
