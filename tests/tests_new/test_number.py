@@ -1120,8 +1120,10 @@ async def test_setup_entry_mains_device_no_fan(
     # a polling-interval entity is created for the mains-powered device
     assert async_add_entities.called
     added = [
-        e.unique_id
-        for call in async_add_entities.call_args_list
-        for e in call.args[0]
+        e for call in async_add_entities.call_args_list for e in call.args[0]
     ]
-    assert "01:123456_polling_interval" in added
+    polling = next(
+        e for e in added if e.unique_id == "01:123456_polling_interval"
+    )
+    # HA reads entity_description.mode when adding the entity (issue 1310)
+    assert polling.mode is not None
