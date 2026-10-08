@@ -126,6 +126,7 @@ from .helpers import (
     extract_demand,
     resolve_async_attr,
 )
+from .notifications import async_set as async_set_notification
 from .typing import RamsesConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
@@ -574,6 +575,49 @@ class RamsesDeviceModelSensor(RamsesSensor):
         return attrs
 
 
+class RamsesFilterSensor(RamsesSensor):
+    """Filter-remaining sensor that raises a notification when due.
+
+    The FAN's ``hvac_state`` carries ``filter_remaining_days`` /
+    ``filter_remaining_percent`` (from 10D0).  When either reaches zero
+    a persistent notification asks the user to change the filter; it
+    clears automatically once the counter is reset (new 10D0 with a
+    fresh countdown).
+    """
+
+    async def async_added_to_hass(self) -> None:
+        """Check the current filter state when the entity is added."""
+        await super().async_added_to_hass()
+        self._check_filter_due()
+
+    async def _async_update_and_write_state(self) -> None:
+        """Check the filter state after each device update."""
+        await super()._async_update_and_write_state()
+        self._check_filter_due()
+
+    def _check_filter_due(self) -> None:
+        """Create or clear the filter-change notification."""
+        hvac_state = getattr(self._device, "hvac_state", None)
+        days = getattr(hvac_state, "filter_remaining_days", None)
+        pct = getattr(hvac_state, "filter_remaining_percent", None)
+        due = (days is not None and days <= 0) or (
+            pct is not None and pct <= 0
+        )
+        async_set_notification(
+            self.hass,
+            f"filter_change_{self._device.id.replace(':', '_')}",
+            due,
+            title="Filter change required",
+            message=(
+                f"Device {self._device.id} reports its ventilation "
+                "filter needs changing.\n\n"
+                "After replacing the filter, use the device's "
+                "**Reset filter counter** button to restart the "
+                "countdown — this notification will clear itself."
+            ),
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
 class RamsesSensorEntityDescription(
     RamsesEntityDescription, SensorEntityDescription
@@ -979,6 +1023,7 @@ SENSOR_DESCRIPTIONS: tuple[RamsesSensorEntityDescription, ...] = (
         name="Filter remaining",
         native_unit_of_measurement=UnitOfTime.DAYS,
         poll_codes=[Code._10D0],
+        ramses_cc_class=RamsesFilterSensor,
     ),
     RamsesSensorEntityDescription(
         key=SZ_FILTER_REMAINING_PERCENT,

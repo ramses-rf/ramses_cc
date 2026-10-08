@@ -2491,7 +2491,7 @@ def test_serial_silence_fails_over_to_mqtt(hass: HomeAssistant) -> None:
     bridge._excluded_mqtt_rx[TEST_HGI_1] = dt_now() - td(minutes=1)
 
     with patch(
-        "custom_components.ramses_cc.mqtt_pool_bridge.pn_async_create"
+        "custom_components.ramses_cc.notifications._pn_create"
     ) as mock_notify:
         failed_over = bridge.serial_silence_check()
 
@@ -2534,15 +2534,16 @@ def test_no_mqtt_rx_no_failover(hass: HomeAssistant) -> None:
 
 def test_serial_revive_re_excludes(hass: HomeAssistant) -> None:
     """A failovered HGI re-excludes after sustained serial traffic."""
+    from custom_components.ramses_cc import notifications as _notif
     from ramses_tx.helpers import dt_now
 
     bridge = _excluded_bridge(hass)
     bridge._degraded_hgi_ids.add(TEST_HGI_1)
     bridge._excluded_hgi_ids.discard(TEST_HGI_1)
-    bridge._serial_warned.add(TEST_HGI_1)
+    _notif._active.add(f"serial_silent_{TEST_HGI_1}")
 
     with patch(
-        "custom_components.ramses_cc.mqtt_pool_bridge.pn_async_dismiss"
+        "custom_components.ramses_cc.notifications._pn_dismiss"
     ) as mock_dismiss:
         # Cycle 1: baseline only — a single packet must not revive.
         bridge._pool = _serial_pool(TEST_HGI_1, dt_now().isoformat(), pkts=1)
@@ -2560,7 +2561,7 @@ def test_serial_revive_re_excludes(hass: HomeAssistant) -> None:
 
     assert TEST_HGI_1 in bridge._excluded_hgi_ids
     assert TEST_HGI_1 not in bridge._degraded_hgi_ids
-    assert TEST_HGI_1 not in bridge._serial_warned
+    assert f"serial_silent_{TEST_HGI_1}" not in _notif._active
     mock_dismiss.assert_called_once()
 
 
@@ -2575,9 +2576,9 @@ def test_serial_recurrence_creates_new_notification(
 
     with (
         patch(
-            "custom_components.ramses_cc.mqtt_pool_bridge.pn_async_create"
+            "custom_components.ramses_cc.notifications._pn_create"
         ) as mock_notify,
-        patch("custom_components.ramses_cc.mqtt_pool_bridge.pn_async_dismiss"),
+        patch("custom_components.ramses_cc.notifications._pn_dismiss"),
     ):
         bridge._excluded_mqtt_rx[TEST_HGI_1] = dt_now()
         assert bridge.serial_silence_check() == [TEST_HGI_1]
@@ -2599,7 +2600,7 @@ def test_serial_stray_packet_does_not_revive(hass: HomeAssistant) -> None:
     bridge._excluded_hgi_ids.discard(TEST_HGI_1)
 
     with patch(
-        "custom_components.ramses_cc.mqtt_pool_bridge.pn_async_dismiss"
+        "custom_components.ramses_cc.notifications._pn_dismiss"
     ) as mock_dismiss:
         # Stray packet (progress), then silence (flat) — no revive.
         bridge._pool = _serial_pool(TEST_HGI_1, dt_now().isoformat(), pkts=1)

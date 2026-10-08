@@ -47,6 +47,16 @@ async def auto_cleanup_config_entries(
         await hass.async_block_till_done()
 
 
+@pytest.fixture(autouse=True)
+def auto_clear_notification_state() -> Generator[None]:
+    """Clear the module-level notification-once state between tests."""
+    from custom_components.ramses_cc import notifications
+
+    notifications._active.clear()
+    yield
+    notifications._active.clear()
+
+
 # NOTE: ? workaround for: https://github.com/MatthewFlamm/pytest-homeassistant-custom-component/issues/198
 @pytest.fixture  # not loading from pytest_homeassistant_custom_component.plugins
 def snapshot(snapshot: SnapshotAssertion) -> SnapshotAssertion:

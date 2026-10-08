@@ -1021,7 +1021,7 @@ async def test_yaml_known_list_cleanup_backs_up_and_notifies(
             return_value=[MagicMock()],
         ),
         patch(
-            "homeassistant.components.persistent_notification.async_create",
+            "custom_components.ramses_cc.notifications._pn_create",
         ) as mock_notify,
     ):
         from custom_components.ramses_cc import async_setup
@@ -1072,7 +1072,7 @@ async def test_yaml_cleanup_notifies_even_without_legacy_keys(
             return_value=[MagicMock()],
         ),
         patch(
-            "homeassistant.components.persistent_notification.async_create",
+            "custom_components.ramses_cc.notifications._pn_create",
         ) as mock_notify,
     ):
         from custom_components.ramses_cc import async_setup
@@ -1120,7 +1120,7 @@ async def test_yaml_cleanup_notifies_with_schema_default_enforce(
             return_value=[MagicMock()],
         ),
         patch(
-            "homeassistant.components.persistent_notification.async_create",
+            "custom_components.ramses_cc.notifications._pn_create",
         ) as mock_notify,
     ):
         from custom_components.ramses_cc import async_setup

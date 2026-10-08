@@ -33,10 +33,6 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import mqtt
 from homeassistant.components.mqtt.models import ReceiveMessage
-from homeassistant.components.persistent_notification import (
-    async_create as pn_async_create,
-    async_dismiss as pn_async_dismiss,
-)
 from homeassistant.core import HomeAssistant, callback
 
 from ramses_tx import exceptions as exc
@@ -49,7 +45,11 @@ from ramses_tx.transport.mqtt_pool import MqttCallbackPoolAdapter
 from ramses_tx.transport.pooled import PooledTransport
 from ramses_tx.typing import DeviceIdT
 
-from .const import DEFAULT_HGI_ID, DOMAIN
+from .const import DEFAULT_HGI_ID
+from .notifications import (
+    async_dismiss as pn_async_dismiss,
+    async_set as pn_async_set,
+)
 
 if TYPE_CHECKING:
     from homeassistant.components.mqtt import PublishPayloadType
@@ -181,8 +181,6 @@ class RamsesMqttPoolBridge:
         # and the number of consecutive checks on which it grew.
         self._serial_last_pkts: dict[str, int] = {}
         self._serial_revive_streak: dict[str, int] = {}
-        # HGIs that already raised a persistent notification.
-        self._serial_warned: set[str] = set()
 
     @property
     def device_ids(self) -> list[str]:
@@ -1000,26 +998,26 @@ class RamsesMqttPoolBridge:
             hgi_id,
             f" since {last_serial}" if last_serial else "",
         )
-        if hgi_id not in self._serial_warned:
-            self._serial_warned.add(hgi_id)
-            pn_async_create(
-                self._hass,
+        pn_async_set(
+            self._hass,
+            f"serial_silent_{hgi_id}",
+            True,
+            title="Gateway serial link silent",
+            message=(
                 f"Gateway {hgi_id}: the serial link is silent while "
                 "its MQTT feed is live — packets were being dropped. "
                 "Temporarily using the MQTT feed; replug or "
-                "power-cycle the gateway to restore the serial link.",
-                title="RAMSES RF: gateway serial link silent",
-                notification_id=f"{DOMAIN}_serial_silent_{hgi_id}",
-            )
+                "power-cycle the gateway to restore the serial link."
+            ),
+        )
 
     def _serial_recover(self, hgi_id: str) -> None:
         """Re-exclude a failovered HGI once its serial leg delivers."""
         self._degraded_hgi_ids.discard(hgi_id)
         self._serial_last_pkts.pop(hgi_id, None)
         self._serial_revive_streak.pop(hgi_id, None)
-        self._serial_warned.discard(hgi_id)
         self.exclude_hgi_id(hgi_id)
-        pn_async_dismiss(self._hass, f"{DOMAIN}_serial_silent_{hgi_id}")
+        pn_async_dismiss(self._hass, f"serial_silent_{hgi_id}")
         _LOGGER.info(
             "MqttPoolBridge: serial gateway %s revived — "
             "re-excluded from MQTT pool",
