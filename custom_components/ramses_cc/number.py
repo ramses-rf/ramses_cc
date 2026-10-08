@@ -93,7 +93,7 @@ def _has_existing_param_entities(entity_registry: Any, device_id: str) -> bool:
 
     entries = getattr(entity_registry, "entities", None)
     if entries is None:
-        entries = getattr(entity_registry, "_entities", {})
+        entries = getattr(entity_registry, "entities", {})
 
     values = entries.values() if hasattr(entries, "values") else ()
     for entry in values:
@@ -128,9 +128,9 @@ async def async_setup_entry(
     :rtype: None
     """
     coordinator: RamsesCoordinator = entry.runtime_data
-    coordinator._parameter_entities_pending.clear()
-    coordinator._parameter_entities_loaded.clear()
-    coordinator._parameter_entities_created.clear()
+    coordinator.parameter_entities_pending.clear()
+    coordinator.parameter_entities_loaded.clear()
+    coordinator.parameter_entities_created.clear()
     platform: EntityPlatform = async_get_current_platform()
     ent_reg = er.async_get(hass)
     # Initialize entities list for both new and existing devices
@@ -162,8 +162,8 @@ async def async_setup_entry(
             return
 
         # If we received entities directly (not devices), just add them
-        pending_entities = coordinator._parameter_entities_pending
-        loaded_entities = coordinator._parameter_entities_loaded
+        pending_entities = coordinator.parameter_entities_pending
+        loaded_entities = coordinator.parameter_entities_loaded
 
         if all(isinstance(d, RamsesNumberBase) for d in device_list):
             _LOGGER.debug("Adding %d entities directly", len(device_list))
@@ -269,8 +269,8 @@ async def async_setup_entry(
                     "Adding entity: %s (unique_id: %s, device: %s)",
                     entity.entity_id,
                     entity.unique_id,
-                    entity._device.id
-                    if hasattr(entity, "_device")
+                    entity.device.id
+                    if hasattr(entity, "device")
                     else "no device",
                 )
             async_add_entities(new_entities, update_before_add=True)
@@ -278,10 +278,10 @@ async def async_setup_entry(
 
             # After adding entities, request their current values
             for entity in new_entities:
-                if hasattr(entity, "_request_parameter_value"):
+                if hasattr(entity, "request_parameter_value"):
                     # Schedule the async request without awaiting it here
                     coordinator.hass.async_create_task(
-                        entity._request_parameter_value()
+                        entity.request_parameter_value()
                     )
 
     # Register the callback with the coordinator
@@ -301,7 +301,7 @@ async def async_setup_entry(
                 or _has_existing_param_entities(ent_reg, d.id)
             )
         ]
-        pending_entities = coordinator._parameter_entities_pending
+        pending_entities = coordinator.parameter_entities_pending
 
         if fan_devices:
             _LOGGER.debug("Found %d FAN devices to process", len(fan_devices))
@@ -385,7 +385,7 @@ class RamsesNumberBase(RamsesEntity, NumberEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _is_pending: bool = False
     _pending_value: float | None = None
-    _pending_timer: asyncio.Task[Any] | None = None
+    pending_timer: asyncio.Task[Any] | None = None
 
     def set_pending(self, value: float | None = None) -> None:
         """Set the entity to a pending state with an optional value.
@@ -442,11 +442,11 @@ class RamsesNumberBase(RamsesEntity, NumberEntity):
 
     async def async_will_remove_from_hass(self) -> None:
         """Cancel pending timeout task when entity is removed."""
-        if self._pending_timer and not self._pending_timer.done():
-            self._pending_timer.cancel()
+        if self.pending_timer and not self.pending_timer.done():
+            self.pending_timer.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await self._pending_timer
-            self._pending_timer = None
+                await self.pending_timer
+            self.pending_timer = None
         await super().async_will_remove_from_hass()
 
     def __init__(
@@ -778,7 +778,7 @@ class RamsesNumberParam(RamsesNumberBase):
                 )
             )
 
-        await self._request_parameter_value()
+        await self.request_parameter_value()
 
     @callback
     def _async_param_updated(self, param_id: str, value: Any) -> None:
@@ -840,7 +840,7 @@ class RamsesNumberParam(RamsesNumberBase):
 
         return value is not None
 
-    async def _request_parameter_value(self) -> None:
+    async def request_parameter_value(self) -> None:
         """Request the current value of this parameter from the device.
 
         This method initiates a request to the device to get the current
@@ -857,7 +857,7 @@ class RamsesNumberParam(RamsesNumberBase):
             or not hasattr(self.entity_description, "ramses_rf_attr")
         ):
             _LOGGER.debug(
-                "_request_parameter_value: missing attributes or hass is None"
+                "request_parameter_value: missing attributes or hass is None"
             )
             return
 
@@ -870,7 +870,7 @@ class RamsesNumberParam(RamsesNumberBase):
         # Get the parameter ID from the entity description
         param_id = self.entity_description.ramses_rf_attr
         if not param_id:
-            _LOGGER.debug("_request_parameter_value: missing parameter ID")
+            _LOGGER.debug("request_parameter_value: missing parameter ID")
             return
 
         # This just checks the store, doesn't send RQ
@@ -915,14 +915,14 @@ class RamsesNumberParam(RamsesNumberBase):
             get_fan_param(param_id)
 
         # Cancel any previous pending timer before starting a new one
-        if self._pending_timer is not None and not self._pending_timer.done():
-            self._pending_timer.cancel()
-        self._pending_timer = self.hass.async_create_task(
+        if self.pending_timer is not None and not self.pending_timer.done():
+            self.pending_timer.cancel()
+        self.pending_timer = self.hass.async_create_task(
             self._clear_pending_after_timeout(30)
         )
         # Track for central cleanup on HA shutdown (issue 802)
         self.coordinator.service_handler.register_pending_timer(
-            self._pending_timer
+            self.pending_timer
         )
 
     def _is_boost_mode_param(self) -> bool:
@@ -1236,7 +1236,7 @@ def create_parameter_entities(
     param_descriptions = get_param_descriptions(
         device, force=restore_from_registry
     )
-    created_param_entities = coordinator._parameter_entities_created
+    created_param_entities = coordinator.parameter_entities_created
     entities: list[RamsesNumberBase] = []
 
     for description in param_descriptions:

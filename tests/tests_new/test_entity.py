@@ -31,7 +31,7 @@ def mock_coordinator(hass: HomeAssistant) -> Any:
     """
     coordinator = MagicMock()
     coordinator.hass = hass
-    coordinator._entities = {}
+    coordinator.entities = {}
     return coordinator
 
 
@@ -211,7 +211,7 @@ async def test_async_added_to_hass(
         await entity.async_added_to_hass()
 
         # 1. Verify entity is registered in the coordinator
-        assert mock_coordinator._entities[DEVICE_ID] == entity
+        assert mock_coordinator.entities[DEVICE_ID] == entity
 
         # 2. Verify signal listener is attached
         expected_signal = f"{SIGNAL_UPDATE}_{DEVICE_ID}"
@@ -256,7 +256,7 @@ def test_extra_state_attributes_discovery_metadata_flags(
     mock_meta.weak_signal = ""
 
     mock_mgr = MagicMock()
-    mock_mgr._metadata = {DEVICE_ID: mock_meta}
+    mock_mgr.metadata = {DEVICE_ID: mock_meta}
     mock_coordinator.discovery_manager = mock_mgr
 
     attrs = entity.extra_state_attributes

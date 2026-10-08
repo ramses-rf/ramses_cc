@@ -351,7 +351,7 @@ def test_clear_async_attr_cache_cancels_tasks() -> None:
     state.resolving_task = mock_task
 
     entity = MagicMock()
-    entity._async_attr_state = {(123, "prop"): state}
+    entity.async_attr_state = {(123, "prop"): state}
 
     clear_async_attr_cache(entity)
     mock_task.cancel.assert_called_once()
@@ -378,7 +378,7 @@ async def test_resolve_async_attr_sync_and_async(hass: HomeAssistant) -> None:
 
     val = resolve_async_attr(entity, obj, "sync_prop")
     assert val == "sync_val"
-    assert not hasattr(entity, "_async_attr_state")
+    assert not hasattr(entity, "async_attr_state")
 
     # 2. Async target resolution test
     async def _async_getter() -> str:
@@ -388,10 +388,10 @@ async def test_resolve_async_attr_sync_and_async(hass: HomeAssistant) -> None:
     obj.async_prop = _async_getter
     res = resolve_async_attr(entity, obj, "async_prop", default="default_val")
     assert res == "default_val"
-    assert hasattr(entity, "_async_attr_state")
+    assert hasattr(entity, "async_attr_state")
 
     # Wait for background task to resolve
-    state_map = entity._async_attr_state
+    state_map = entity.async_attr_state
     state = list(state_map.values())[0]
     if state.resolving_task:
         await state.resolving_task

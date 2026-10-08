@@ -1300,16 +1300,14 @@ class BaseRamsesFlow:
 
                     await store.async_save(_stored)
 
-                    # Add removed devices to the coordinator's _removed_devices
+                    # Add removed devices to the coordinator's removed_devices
                     # set so sync_learned_topology doesn't re-add them from
                     # the learned schema on the next save cycle (issue 905).
                     # ramses_rf has no remove_device API, so the learned schema
                     # still references removed devices until restart.
                     coord = getattr(self.config_entry, "runtime_data", None)
-                    if coord is not None and hasattr(
-                        coord, "_removed_devices"
-                    ):
-                        coord._removed_devices.update(removed_devices)  # noqa: SLF001
+                    if coord is not None and hasattr(coord, "removed_devices"):
+                        coord.removed_devices.update(removed_devices)
 
                 if self._initial_setup:
                     return await self.async_step_advanced_features()
@@ -1766,7 +1764,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         by ``async_create_entry``) actually reloads the integration —
         the running coordinator has stale transport config otherwise
         (e.g. MQTT pool bridge not restarted after a non-primary HGI
-        switches from USB to MQTT).  ``_suppress_reload`` is a count of
+        switches from USB to MQTT).  ``suppress_reload`` is a count of
         *pending* suppressed updates: tokens queued by earlier writes
         (e.g. ``sync_learned_topology``) are consumed by their own
         listener tasks before this save's listener runs, so it must not
@@ -1919,7 +1917,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                                 ) and primary.startswith("mqtt://"):
                                     from .coordinator import RamsesCoordinator
 
-                                    new_url = RamsesCoordinator._build_explicit_mqtt_url(
+                                    new_url = RamsesCoordinator.build_explicit_mqtt_url(
                                         primary, new_primary
                                     )
                                     if new_url:
@@ -2594,7 +2592,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             ):
                 from .coordinator import RamsesCoordinator
 
-                explicit = RamsesCoordinator._build_explicit_mqtt_url(
+                explicit = RamsesCoordinator.build_explicit_mqtt_url(
                     primary_port, dev_id
                 )
                 if explicit:
@@ -3017,7 +3015,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 # or credentials are needed, and no paho client is
                 # created inside HA (issue 1119).
                 # Create/update schema HGI entry with _owner = root_owner
-                # so the coordinator's _extract_pool_hgis_from_schema()
+                # so the coordinator's extract_pool_hgis_from_schema()
                 # includes it as an accepted pool member.
                 schema_dict = deepcopy(self.options.get(CONF_SCHEMA, {}))
                 root_owner = schema_dict.get(SZ_OWNER) or "me"
@@ -3516,18 +3514,18 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         # for new devices.  This stashes schema_device_ids so that
         # check_for_new_devices can suppress notifications for devices
         # that are already in the schema but lost their metadata (issue 917).
-        # NOTE: use _extract_schema_device_ids (unstripped) so that HGI
-        # (18:) entries are included — _strip_and_orchestrate drops them
+        # NOTE: use extract_schema_device_ids (unstripped) so that HGI
+        # (18:) entries are included — strip_and_orchestrate drops them
         # because ramses_rf doesn't need them, but discovery tracking
         # must know they're in the schema (issue 987).
         config_schema_for_sync = self.options.get(CONF_SCHEMA, {})
         if isinstance(config_schema_for_sync, dict):
             from .coordinator import RamsesCoordinator
 
-            schema_device_ids = RamsesCoordinator._extract_schema_device_ids(
+            schema_device_ids = RamsesCoordinator.extract_schema_device_ids(
                 config_schema_for_sync
             )
-            foreign_device_ids = RamsesCoordinator._extract_foreign_device_ids(
+            foreign_device_ids = RamsesCoordinator.extract_foreign_device_ids(
                 config_schema_for_sync
             )
             coordinator.discovery_manager.sync_with_schema(
@@ -3549,7 +3547,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             )
             coordinator.discovery_manager.check_name_mismatches(
                 config_schema_check,
-                zones=coordinator._zones,  # noqa: SLF001
+                zones=coordinator.zones,
             )
 
         new_devices = coordinator.discovery_manager.get_devices(
@@ -3662,7 +3660,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     # schema _skipped, but check_missing_class only consults
                     # metadata.missing_class_dismissed — set both so neither
                     # review path re-surfaces the device.
-                    skip_meta = coordinator.discovery_manager._metadata.get(
+                    skip_meta = coordinator.discovery_manager.metadata.get(
                         device_id
                     )
                     if skip_meta:
@@ -3675,7 +3673,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         # check_missing_class won't re-flag it (issue 1136).
                         from .discovery import DeviceMetadata
 
-                        coordinator.discovery_manager._metadata[device_id] = (
+                        coordinator.discovery_manager.metadata[device_id] = (
                             DeviceMetadata(missing_class_dismissed=True)
                         )
                     changed = True
@@ -3777,7 +3775,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         # check_missing_class can re-flag the device
                         # (issue 1136).
                         accept_meta = (
-                            coordinator.discovery_manager._metadata.get(
+                            coordinator.discovery_manager.metadata.get(
                                 device_id
                             )
                         )
@@ -3853,7 +3851,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                             entry.device.likely_type,
                         )
                     # Clear dismissed flag — mismatch resolved by updating
-                    meta = coordinator.discovery_manager._metadata.get(
+                    meta = coordinator.discovery_manager.metadata.get(
                         device_id
                     )
                     if meta:
@@ -3879,7 +3877,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 # "keep" or "skip" — do nothing to _class, schema stays as-is
                 # Clear the mismatch flag for both "update_class" and "keep"
                 if action in ("update_class", "keep"):
-                    meta = coordinator.discovery_manager._metadata.get(
+                    meta = coordinator.discovery_manager.metadata.get(
                         device_id
                     )
                     if meta:
@@ -3928,7 +3926,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 # so notification doesn't re-fire immediately. For "skip"
                 # also set missing_class_dismissed to prevent re-flagging.
                 if action in ("add_class", "skip"):
-                    meta = coordinator.discovery_manager._metadata.get(
+                    meta = coordinator.discovery_manager.metadata.get(
                         device_id
                     )
                     if meta:
@@ -3979,7 +3977,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 # and "skip".  For "skip", the flag will be re-set on the
                 # next checkpoint by check_name_mismatches (no dismiss —
                 # the schema _name should match the controller).
-                meta = coordinator.discovery_manager._metadata.get(device_id)
+                meta = coordinator.discovery_manager.metadata.get(device_id)
                 if meta:
                     meta.name_mismatch = None
 
@@ -3996,7 +3994,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             #
             # IMPORTANT: skip topology sync during this save.  Otherwise
             # sync_learned_topology's enriched write-back sets
-            # _suppress_reload, which suppresses the reload from
+            # suppress_reload, which suppresses the reload from
             # _async_save() when an HGI accept forces one below.  Without
             # that reload, the running gateway keeps its stale transport
             # config (issue 1023).  Non-HGI accepts take the live-update
@@ -4006,7 +4004,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             # reload; this pre-save just ensures discovery metadata is
             # flushed to .storage before the coordinator is torn down.
             if coordinator.discovery_manager:
-                coordinator._skip_topology_sync = True  # noqa: SLF001
+                coordinator.skip_topology_sync = True
                 try:
                     await coordinator.async_save_client_state()
                 except Exception as err:
@@ -4016,7 +4014,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         err,
                     )
                 finally:
-                    coordinator._skip_topology_sync = False  # noqa: SLF001
+                    coordinator.skip_topology_sync = False
 
             if needs_reload:
                 # Transport-relevant change (accepted HGI —
@@ -4044,7 +4042,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             if self.config_entry is not None and self.options != dict(
                 self.config_entry.options
             ):
-                coordinator._suppress_reload += 1  # noqa: SLF001
+                coordinator.suppress_reload += 1
             result = self.async_create_entry(title="", data=self.options)
 
             # Reload only if setup failing; updates handled otherwise
@@ -4571,7 +4569,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             coordinator.discovery_manager.check_for_lost_devices()
             coordinator.discovery_manager.check_communication_quality(
                 config_schema_check,
-                devices=(coordinator._devices if coordinator.client else None),
+                devices=(coordinator.devices if coordinator.client else None),
             )
 
         orphaned_devices = coordinator.discovery_manager.get_orphaned_devices()
@@ -4639,7 +4637,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     # orphaned notifications are suppressed (issue 988).
                     # An INFO log is still emitted once every
                     # threshold_days as a gentle reminder.
-                    meta = coordinator.discovery_manager._metadata.get(
+                    meta = coordinator.discovery_manager.metadata.get(
                         device_id
                     )
                     if meta:
@@ -4682,7 +4680,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     # the schema so check_orphaned_devices doesn't re-notify
                     # on the next checkpoint cycle (issue 988).  An INFO
                     # log is still emitted once every threshold_days.
-                    meta = coordinator.discovery_manager._metadata.get(
+                    meta = coordinator.discovery_manager.metadata.get(
                         device_id
                     )
                     if meta:
@@ -4698,7 +4696,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 if action == "suppress":
                     # Suppress future weak-signal warnings for this device
                     # by setting _suppress_weak_signal in the schema.
-                    meta = coordinator.discovery_manager._metadata.get(
+                    meta = coordinator.discovery_manager.metadata.get(
                         device_id
                     )
                     if meta:
@@ -4717,7 +4715,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     # but the user doesn't want to suppress future
                     # warnings entirely.  weak_signal_dismissed prevents
                     # re-flagging until quality recovers and degrades again.
-                    meta = coordinator.discovery_manager._metadata.get(
+                    meta = coordinator.discovery_manager.metadata.get(
                         device_id
                     )
                     if meta:
@@ -5068,10 +5066,8 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                                     str(err)[:200],
                                 )
 
-                    foreign_ids = (
-                        RamsesCoordinator._extract_foreign_device_ids(
-                            old_schema
-                        )
+                    foreign_ids = RamsesCoordinator.extract_foreign_device_ids(
+                        old_schema
                     )
                     if foreign_ids:
                         root_owner = old_schema.get(SZ_OWNER, "me")

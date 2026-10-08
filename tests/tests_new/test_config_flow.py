@@ -3004,7 +3004,7 @@ async def test_review_discovered_accept_device(hass: HomeAssistant) -> None:
     mock_coord.async_save = AsyncMock()
     mock_coord.async_save_client_state = AsyncMock()
     mock_coord.async_discover_known_devices = AsyncMock()
-    mock_coord._suppress_reload = 0  # counter, not timestamp (issue 1279)
+    mock_coord.suppress_reload = 0  # counter, not timestamp (issue 1279)
     config_entry.runtime_data = mock_coord
 
     result = await hass.config_entries.options.async_init(
@@ -3042,7 +3042,7 @@ async def test_review_discovered_accept_device(hass: HomeAssistant) -> None:
     # Non-HGI accepts apply live — include lists + entity discovery on
     # the running coordinator, reload suppressed (issue 1288)
     mock_coord.async_discover_known_devices.assert_called_once()
-    assert mock_coord._suppress_reload > 0
+    assert mock_coord.suppress_reload > 0
 
 
 async def test_review_discovered_decline_device(hass: HomeAssistant) -> None:
@@ -3188,7 +3188,7 @@ async def test_review_discovered_skip_dismisses_missing_class(
     mock_coord = MagicMock()
     mock_coord.discovery_manager = MagicMock()
     mock_coord.discovery_manager.get_devices.return_value = [mock_entry]
-    mock_coord.discovery_manager._metadata = {"13:018996": real_meta}
+    mock_coord.discovery_manager.metadata = {"13:018996": real_meta}
     config_entry.runtime_data = mock_coord
 
     result = await hass.config_entries.options.async_init(
@@ -3327,7 +3327,7 @@ async def test_review_discovered_missing_class_per_device_owner(
     mock_coord.discovery_manager.get_missing_class_devices.return_value = [
         mock_entry
     ]
-    mock_coord.discovery_manager._metadata = {
+    mock_coord.discovery_manager.metadata = {
         "37:154519": mock_entry.metadata,
     }
     config_entry.runtime_data = mock_coord
@@ -3404,8 +3404,8 @@ async def test_review_discovered_missing_class_skip(
     mock_coord.discovery_manager.get_missing_class_devices.return_value = [
         mock_entry
     ]
-    # _metadata is accessed directly to clear the missing_class flag
-    mock_coord.discovery_manager._metadata = {
+    # metadata is accessed directly to clear the missing_class flag
+    mock_coord.discovery_manager.metadata = {
         "37:154519": mock_entry.metadata,
     }
     config_entry.runtime_data = mock_coord
@@ -4517,7 +4517,7 @@ async def test_review_device_health_keep_clears_flag(
     mock_coord.discovery_manager.get_orphaned_devices.return_value = [
         mock_entry
     ]
-    mock_coord.discovery_manager._metadata = {"04:056053": mock_meta}
+    mock_coord.discovery_manager.metadata = {"04:056053": mock_meta}
     mock_coord.async_save_client_state = AsyncMock()
     mock_coord.options = {SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}}
     config_entry.runtime_data = mock_coord
@@ -4573,7 +4573,7 @@ async def test_review_device_health_remove_calls_service(
     mock_coord.discovery_manager.get_orphaned_devices.return_value = [
         mock_entry
     ]
-    mock_coord.discovery_manager._metadata = {"04:056053": mock_meta}
+    mock_coord.discovery_manager.metadata = {"04:056053": mock_meta}
     mock_coord.async_save_client_state = AsyncMock()
     mock_coord.options = {SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}}
     config_entry.runtime_data = mock_coord
@@ -4641,7 +4641,7 @@ async def test_review_device_health_remove_service_error_handled(
     mock_coord.discovery_manager.get_orphaned_devices.return_value = [
         mock_entry
     ]
-    mock_coord.discovery_manager._metadata = {"18:149488": mock_meta}
+    mock_coord.discovery_manager.metadata = {"18:149488": mock_meta}
     mock_coord.async_save_client_state = AsyncMock()
     mock_coord.options = {SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"}}
     config_entry.runtime_data = mock_coord
@@ -5249,7 +5249,7 @@ async def test_options_flow_schema_device_removal_and_wipe(
     )
     config_entry.add_to_hass(hass)
     mock_coord = MagicMock()
-    mock_coord._removed_devices = set()
+    mock_coord.removed_devices = set()
     config_entry.runtime_data = mock_coord
 
     flow = RamsesOptionsFlowHandler(config_entry)
@@ -5289,7 +5289,7 @@ async def test_options_flow_schema_device_removal_and_wipe(
         )
 
     assert result.get("type") == FlowResultType.CREATE_ENTRY
-    assert "04:123456" in mock_coord._removed_devices
+    assert "04:123456" in mock_coord.removed_devices
     mock_save.assert_called_once()
 
 
@@ -8406,7 +8406,7 @@ async def test_schema_removal_cleans_device_comments(
     )
     config_entry.add_to_hass(hass)
     mock_coord = MagicMock()
-    mock_coord._removed_devices = set()
+    mock_coord.removed_devices = set()
     config_entry.runtime_data = mock_coord
 
     flow = RamsesOptionsFlowHandler(config_entry)

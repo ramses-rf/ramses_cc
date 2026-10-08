@@ -192,9 +192,9 @@ def resolve_async_attr[T](
             return default
 
         state_map: dict[tuple[int, str], _AsyncAttrState]
-        if not hasattr(entity, "_async_attr_state"):
-            entity._async_attr_state = {}
-        state_map = entity._async_attr_state
+        if not hasattr(entity, "async_attr_state"):
+            entity.async_attr_state = {}
+        state_map = entity.async_attr_state
 
         state_key = (id(obj), attr_name)
         state = state_map.get(state_key)
@@ -298,7 +298,7 @@ def clear_async_attr_cache(entity: Any) -> None:
     many test recipes), overloading the transport.
     """
     state_map: dict[tuple[int, str], _AsyncAttrState] | None = getattr(
-        entity, "_async_attr_state", None
+        entity, "async_attr_state", None
     )
     if not state_map:
         return
@@ -342,7 +342,7 @@ def reset_async_attr_cooldown(entity: Any) -> None:
       will dispatch a fresh ``_resolve()`` that reads the updated state.
     """
     state_map: dict[tuple[int, str], _AsyncAttrState] | None = getattr(
-        entity, "_async_attr_state", None
+        entity, "async_attr_state", None
     )
     if not state_map:
         return

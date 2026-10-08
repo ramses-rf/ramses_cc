@@ -127,7 +127,7 @@ async def _test_common(
     # Phase 4: enforce_known_list is always-on, so devices in known_list/schema
     # are created upfront.  Most configs have only the HGI (1 device), but
     # config_fan_unbind has a FAN device too (2 devices).
-    assert len(coordinator._devices) >= 1  # 18_000730 (HGI)
+    assert len(coordinator.devices) >= 1  # 18_000730 (HGI)
 
     # Phase 4: enforce_known_list always-on may create additional entities
     # for known_list/schema devices (e.g. FAN's bypass_position binary_sensor).

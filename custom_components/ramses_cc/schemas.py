@@ -277,19 +277,19 @@ def normalise_config(config: _SchemaT) -> tuple[str, _SchemaT, _SchemaT]:
     )
 
 
-def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
+def strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
     """Shared stage-1 + stage-3 schema stripping.
 
     This is the single canonical implementation used by both
     ``strip_traits_for_validation()`` (for config_flow validation) and
-    ``RamsesCoordinator._strip_schema_extensions()`` (for feeding the
+    ``RamsesCoordinator.strip_schema_extensions()`` (for feeding the
     Gateway).  It ensures the validation-passing schema matches what the
     gateway actually receives.
 
     Stage 1 (strip ``_`` keys) is delegated to ramses_rf's
     ``strip_traits`` — no duplicate logic.  Stage 2 (mapping
     ``_bound``→``bound``, etc.) is done separately in
-    ``_derive_known_list_from_schema`` via ``strip_and_map_traits``.
+    ``derive_known_list_from_schema`` via ``strip_and_map_traits``.
 
     Stage 3 (orchestration, this function):
     - Skip root-level ``_`` prefixed keys (root ``_owner``, etc.)
@@ -387,7 +387,7 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
         # Stage 1: delegate to ramses_rf's strip_traits
         # (recursive — strips all _ keys, no mapping)
         # Mapping (_bound→bound, etc.) is done separately in
-        # _derive_known_list_from_schema via strip_and_map_traits.
+        # derive_known_list_from_schema via strip_and_map_traits.
         if isinstance(v, dict):
             v = _strip_traits_rf(v)
         # Non-heat device at root level without remotes/sensors — move
@@ -538,7 +538,7 @@ def _strip_and_orchestrate(schema: dict[str, Any]) -> dict[str, Any]:
 def strip_traits_for_validation(schema: _SchemaT) -> _SchemaT:
     """Strip ``_`` prefixed keys and trait-only entries for schema validation.
 
-    Thin wrapper around ``_strip_and_orchestrate()`` — the shared
+    Thin wrapper around ``strip_and_orchestrate()`` — the shared
     stage-1 + stage-3 stripping logic used by both validation (config_flow)
     and gateway feeding (coordinator).  This ensures the validation-passing
     schema matches what the gateway actually receives.
@@ -550,7 +550,7 @@ def strip_traits_for_validation(schema: _SchemaT) -> _SchemaT:
     :param schema: The full schema dict (with traits).
     :return: A cleaned schema dict without ``_`` keys, safe for validation.
     """
-    return _strip_and_orchestrate(schema)
+    return strip_and_orchestrate(schema)
 
 
 # Heat-side prefixes (CH/DHW domain)
@@ -3118,11 +3118,11 @@ def sync_learned_topology(
     # known_list — never in the schema.  By creating a schema entry with
     # _class: "HGI", we track them in the schema so the known_list can
     # eventually be removed.  The entry must NOT have _skipped, otherwise
-    # _derive_known_list_from_schema would exclude it from the known_list
+    # derive_known_list_from_schema would exclude it from the known_list
     # and the scan engine would re-discover the HGI every cycle.
     # If the device matches the active local HGI and root_owner is set,
     # populate _owner: root_owner.
-    # _strip_schema_extensions drops these entries before passing to
+    # strip_schema_extensions drops these entries before passing to
     # ramses_rf (which doesn't support HGI at root level).
     hgi_ids: set[str] = set()
     if (

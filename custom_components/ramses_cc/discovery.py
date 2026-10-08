@@ -265,7 +265,7 @@ class DiscoveryManager:
         self._active_hgi_id = active_hgi_id
 
         # device_id → metadata (persisted to .storage/)
-        self._metadata: dict[str, DeviceMetadata] = {}
+        self.metadata: dict[str, DeviceMetadata] = {}
 
         # Track notified device IDs to avoid duplicate notifications
         self._notified: set[str] = set()
@@ -346,9 +346,9 @@ class DiscoveryManager:
         that send 1100 are boiler relays, not zone actuators).
         """
         result: dict[str, list[str]] = {}
-        for dev_id, dev in self._scan._devices.items():
+        for dev in self._scan.get_devices():
             if dev.codes_seen:
-                result[dev_id] = list(dev.codes_seen)
+                result[dev.device_id] = list(dev.codes_seen)
         return result
 
     def get_scan_domain_ids(self) -> dict[str, tuple[str | None, bool]]:
@@ -369,8 +369,11 @@ class DiscoveryManager:
             included with ``(None, False)``.
         """
         result: dict[str, tuple[str | None, bool]] = {}
-        for dev_id, dev in self._scan._devices.items():
-            result[dev_id] = (dev.domain_id, dev.is_authoritative_domain)
+        for dev in self._scan.get_devices():
+            result[dev.device_id] = (
+                dev.domain_id,
+                dev.is_authoritative_domain,
+            )
         return result
 
     def refresh_device_comments(
@@ -417,7 +420,7 @@ class DiscoveryManager:
             # Devices the user discarded or removed must not get their
             # comment regenerated — this runs every save cycle and would
             # re-add the comment that removal deleted (issue 1238).
-            meta = self._metadata.get(dev_id)
+            meta = self.metadata.get(dev_id)
             if meta is not None and meta.status in (
                 DiscoveryStatus.DISCARDED,
                 DiscoveryStatus.REMOVED,
@@ -554,7 +557,7 @@ class DiscoveryManager:
         """
         devices_data = data.get(SZ_DISCOVERY_DEVICES, {})
         for device_id, meta_dict in devices_data.items():
-            self._metadata[device_id] = DeviceMetadata.from_dict(meta_dict)
+            self.metadata[device_id] = DeviceMetadata.from_dict(meta_dict)
 
         # Restore scan engine state (in-memory device list)
         scan_state = data.get(SZ_DISCOVERY_SCAN_STATE)
@@ -563,7 +566,7 @@ class DiscoveryManager:
 
         _LOGGER.info(
             "DiscoveryManager: restored %d device metadata entries",
-            len(self._metadata),
+            len(self.metadata),
         )
 
     def sync_with_schema(
@@ -632,7 +635,7 @@ class DiscoveryManager:
         )
 
         # Mark devices as REMOVED if in discovery but not in schema
-        for device_id, meta in list(self._metadata.items()):
+        for device_id, meta in list(self.metadata.items()):
             # Skip local active HGI gateway
             if self._active_hgi_id and device_id == self._active_hgi_id:
                 continue
@@ -642,7 +645,7 @@ class DiscoveryManager:
                 if meta.status != DiscoveryStatus.REMOVED:
                     meta.status = DiscoveryStatus.REMOVED
                     meta.enabled = False
-                    self._metadata[device_id] = meta
+                    self.metadata[device_id] = meta
                     self._notified.discard(device_id)
                     _LOGGER.info(
                         "DiscoveryManager: foreign-owner device %s "
@@ -656,7 +659,7 @@ class DiscoveryManager:
             ):
                 meta.status = DiscoveryStatus.REMOVED
                 meta.enabled = False
-                self._metadata[device_id] = meta
+                self.metadata[device_id] = meta
                 self._notified.discard(device_id)
                 _LOGGER.info(
                     "DiscoveryManager: device %s not in schema, marked "
@@ -700,7 +703,7 @@ class DiscoveryManager:
                 else:
                     meta.status = DiscoveryStatus.ACCEPTED
                     meta.enabled = True
-                    self._metadata[device_id] = meta
+                    self.metadata[device_id] = meta
                     _LOGGER.info(
                         "DiscoveryManager: device %s is in schema but had "
                         "NEW status, marked as ACCEPTED",
@@ -716,7 +719,7 @@ class DiscoveryManager:
                 meta.status = DiscoveryStatus.NEW
                 meta.enabled = False
                 self._notified.discard(device_id)
-                self._metadata[device_id] = meta
+                self.metadata[device_id] = meta
                 _LOGGER.info(
                     "DiscoveryManager: device %s is _skipped in schema, "
                     "reset ACCEPTED -> NEW (issue 1136)",
@@ -728,7 +731,7 @@ class DiscoveryManager:
                 # may have been set before the HGI-skip was added to
                 # check_for_lost_devices / check_communication_quality.
                 meta.status = DiscoveryStatus.ACCEPTED
-                self._metadata[device_id] = meta
+                self.metadata[device_id] = meta
                 _LOGGER.info(
                     "DiscoveryManager: HGI %s had stale LOST status, "
                     "cleared to ACCEPTED",
@@ -751,10 +754,10 @@ class DiscoveryManager:
             if device_id in self._foreign_device_ids:
                 continue
             if (
-                device_id not in self._metadata
+                device_id not in self.metadata
                 and device_id not in schema_device_ids
             ):
-                self._metadata[device_id] = DeviceMetadata()
+                self.metadata[device_id] = DeviceMetadata()
                 _LOGGER.info(
                     "DiscoveryManager: device %s added to discovery metadata "
                     "(from scan)",
@@ -816,7 +819,7 @@ class DiscoveryManager:
             schema_class_norm = _normalize_class_slug(schema_class)
 
             # Skip if the user already dismissed this mismatch ("Keep")
-            existing_meta = self._metadata.get(device_id)
+            existing_meta = self.metadata.get(device_id)
             if existing_meta and existing_meta.class_mismatch_dismissed:
                 continue  # user decided — don't re-flag
 
@@ -836,7 +839,7 @@ class DiscoveryManager:
                     and "rf_suggests=" not in existing_meta.class_mismatch
                 ):
                     existing_meta.class_mismatch = None
-                    self._metadata[device_id] = existing_meta
+                    self.metadata[device_id] = existing_meta
                 continue
 
             # Get the scan engine's likely_type
@@ -874,7 +877,7 @@ class DiscoveryManager:
                     and "rf_suggests=" not in existing_meta.class_mismatch
                 ):
                     existing_meta.class_mismatch = None
-                    self._metadata[device_id] = existing_meta
+                    self.metadata[device_id] = existing_meta
                 continue
 
             # Skip HVAC devices with low/medium confidence — the scan
@@ -893,12 +896,12 @@ class DiscoveryManager:
             if is_hvac and dev.confidence != "high":
                 continue
 
-            meta = self._metadata.get(device_id, DeviceMetadata())
+            meta = self.metadata.get(device_id, DeviceMetadata())
             mismatch_desc = (
                 f"schema={schema_class_norm}, discovery={scan_type}"
             )
             meta.class_mismatch = mismatch_desc
-            self._metadata[device_id] = meta
+            self.metadata[device_id] = meta
             mismatches.append((device_id, schema_class_norm, scan_type))
             _LOGGER.debug(
                 "DiscoveryManager: class mismatch for %s — "
@@ -953,12 +956,12 @@ class DiscoveryManager:
         :param device_id: The device ID with the mismatch.
         :param description: Human-readable description of the mismatch.
         """
-        meta = self._metadata.get(device_id, DeviceMetadata())
+        meta = self.metadata.get(device_id, DeviceMetadata())
         if meta.class_mismatch_dismissed:
             return  # user already dismissed this
         if meta.class_mismatch != description:
             meta.class_mismatch = description
-            self._metadata[device_id] = meta
+            self.metadata[device_id] = meta
             if device_id not in self._warned_mismatches:
                 _LOGGER.warning(
                     "DiscoveryManager: class mismatch for %s — %s. "
@@ -981,14 +984,14 @@ class DiscoveryManager:
 
         :param device_id: The device ID whose flag may be stale.
         """
-        meta = self._metadata.get(device_id)
+        meta = self.metadata.get(device_id)
         if (
             meta
             and meta.class_mismatch
             and "rf_suggests=" in meta.class_mismatch
         ):
             meta.class_mismatch = None
-            self._metadata[device_id] = meta
+            self.metadata[device_id] = meta
 
     def get_mismatched_devices(self) -> list[DiscoveredDeviceEntry]:
         """Get devices that have a class mismatch flag set.
@@ -1112,11 +1115,11 @@ class DiscoveryManager:
                 else ", ".join(schema_bound_ids)
             )
             if scan_bound.upper() not in {b.upper() for b in schema_bound_ids}:
-                meta = self._metadata.get(device_id, DeviceMetadata())
+                meta = self.metadata.get(device_id, DeviceMetadata())
                 meta.bound_mismatch = (
                     f"schema={schema_bound_str}, discovery={scan_bound}"
                 )
-                self._metadata[device_id] = meta
+                self.metadata[device_id] = meta
                 mismatches.append((device_id, schema_bound_str, scan_bound))
                 _LOGGER.debug(
                     "DiscoveryManager: bound mismatch for %s — "
@@ -1127,10 +1130,10 @@ class DiscoveryManager:
                 )
             else:
                 # Mismatch resolved — clear the flag
-                existing_meta = self._metadata.get(device_id)
+                existing_meta = self.metadata.get(device_id)
                 if existing_meta and existing_meta.bound_mismatch:
                     existing_meta.bound_mismatch = None
-                    self._metadata[device_id] = existing_meta
+                    self.metadata[device_id] = existing_meta
 
         if mismatches:
             _LOGGER.warning(
@@ -1166,10 +1169,10 @@ class DiscoveryManager:
             schema_class = schema_entry.get(SZ_TR_CLASS)
             if isinstance(schema_class, str) and schema_class:
                 # Has _class — clear any previous missing_class flag
-                existing_meta = self._metadata.get(device_id)
+                existing_meta = self.metadata.get(device_id)
                 if existing_meta and existing_meta.missing_class:
                     existing_meta.missing_class = None
-                    self._metadata[device_id] = existing_meta
+                    self.metadata[device_id] = existing_meta
                 continue
 
             # Skip devices the user already deferred via "Skip for now"
@@ -1182,13 +1185,13 @@ class DiscoveryManager:
                 continue  # scan doesn't know either — not actionable
 
             # Skip if the user already dismissed this missing_class ("Skip")
-            existing_meta = self._metadata.get(device_id)
+            existing_meta = self.metadata.get(device_id)
             if existing_meta and existing_meta.missing_class_dismissed:
                 continue  # user decided — don't re-flag
 
-            meta = self._metadata.get(device_id, DeviceMetadata())
+            meta = self.metadata.get(device_id, DeviceMetadata())
             meta.missing_class = f"discovery={scan_type}"
-            self._metadata[device_id] = meta
+            self.metadata[device_id] = meta
             missing.append(device_id)
             _LOGGER.debug(
                 "DiscoveryManager: missing _class for %s — "
@@ -1272,7 +1275,7 @@ class DiscoveryManager:
                 )
 
             if last_seen < threshold:
-                existing_meta = self._metadata.get(device_id)
+                existing_meta = self.metadata.get(device_id)
                 meta = existing_meta or DeviceMetadata()
 
                 # Check if the user has suppressed notifications for
@@ -1308,7 +1311,7 @@ class DiscoveryManager:
                                 f"(>{threshold_days} days, suppress expired)"
                             )
                             meta.last_orphaned_log = None
-                            self._metadata[device_id] = meta
+                            self.metadata[device_id] = meta
                             orphaned.append(device_id)
                             _LOGGER.info(
                                 "DiscoveryManager: suppress expired for %s "
@@ -1349,7 +1352,7 @@ class DiscoveryManager:
                             threshold_days,
                             suppress_desc,
                         )
-                    self._metadata[device_id] = meta
+                    self.metadata[device_id] = meta
                     continue
 
                 # Not suppressed — flag as orphaned (triggers notification)
@@ -1357,7 +1360,7 @@ class DiscoveryManager:
                     f"last seen {last_seen_str} (>{threshold_days} days)"
                 )
                 meta.last_orphaned_log = None
-                self._metadata[device_id] = meta
+                self.metadata[device_id] = meta
                 orphaned.append(device_id)
                 _LOGGER.debug(
                     "DiscoveryManager: orphaned device %s — last seen %s",
@@ -1369,13 +1372,13 @@ class DiscoveryManager:
                 # Also remove _suppress_not_seen from the schema so that
                 # if the device goes quiet again later, the user gets a
                 # fresh orphaned notification (issue 988).
-                existing_meta = self._metadata.get(device_id)
+                existing_meta = self.metadata.get(device_id)
                 if existing_meta and (
                     existing_meta.orphaned or existing_meta.last_orphaned_log
                 ):
                     existing_meta.orphaned = None
                     existing_meta.last_orphaned_log = None
-                    self._metadata[device_id] = existing_meta
+                    self.metadata[device_id] = existing_meta
                 if schema_entry.get("_suppress_not_seen"):
                     schema_entry.pop("_suppress_not_seen", None)
                     _LOGGER.info(
@@ -1448,11 +1451,11 @@ class DiscoveryManager:
                 continue  # no _name in schema — nothing to compare
 
             if schema_name != runtime_name:
-                meta = self._metadata.get(zone_id, DeviceMetadata())
+                meta = self.metadata.get(zone_id, DeviceMetadata())
                 meta.name_mismatch = (
                     f"schema={schema_name}, controller={runtime_name}"
                 )
-                self._metadata[zone_id] = meta
+                self.metadata[zone_id] = meta
                 mismatches.append((zone_id, schema_name, runtime_name))
                 _LOGGER.debug(
                     "DiscoveryManager: name mismatch for zone %s — "
@@ -1465,10 +1468,10 @@ class DiscoveryManager:
                 )
             else:
                 # Mismatch resolved — clear the flag
-                existing_meta = self._metadata.get(zone_id)
+                existing_meta = self.metadata.get(zone_id)
                 if existing_meta and existing_meta.name_mismatch:
                     existing_meta.name_mismatch = None
-                    self._metadata[zone_id] = existing_meta
+                    self.metadata[zone_id] = existing_meta
 
         if mismatches:
             # Only WARN once per zone — subsequent checks log at DEBUG.
@@ -1600,10 +1603,10 @@ class DiscoveryManager:
             # If we have RSSI data, the device is being heard — clear
             # any stale LOST status (a weak device is not lost).
             if quality.best_rssi is not None:
-                existing = self._metadata.get(device_id)
+                existing = self.metadata.get(device_id)
                 if existing and existing.status == DiscoveryStatus.LOST:
                     existing.status = DiscoveryStatus.ACCEPTED
-                    self._metadata[device_id] = existing
+                    self.metadata[device_id] = existing
                     _LOGGER.info(
                         "DiscoveryManager: %s was LOST but is now "
                         "being heard (rssi=%s), cleared LOST status",
@@ -1642,7 +1645,7 @@ class DiscoveryManager:
             )
             if not is_weak:
                 # Quality is good — clear any previous flag.
-                existing = self._metadata.get(device_id)
+                existing = self.metadata.get(device_id)
                 if existing and (
                     existing.weak_signal
                     or existing.last_weak_signal_log
@@ -1653,7 +1656,7 @@ class DiscoveryManager:
                     # Clear dismissed so the user gets a fresh warning
                     # if the device degrades again after recovering.
                     existing.weak_signal_dismissed = False
-                    self._metadata[device_id] = existing
+                    self.metadata[device_id] = existing
                     _LOGGER.debug(
                         "DiscoveryManager: communication quality "
                         "recovered for %s (rssi=%s, quality=%s)",
@@ -1673,21 +1676,21 @@ class DiscoveryManager:
             if isinstance(schema_entry, dict):
                 if schema_entry.get("_suppress_weak_signal") is True:
                     # Suppressed — clear flag, no notification.
-                    existing = self._metadata.get(device_id)
+                    existing = self.metadata.get(device_id)
                     if existing and existing.weak_signal:
                         existing.weak_signal = None
-                        self._metadata[device_id] = existing
+                        self.metadata[device_id] = existing
                     continue
 
             # Check if the user has dismissed this via review_device_health.
-            existing = self._metadata.get(device_id)
+            existing = self.metadata.get(device_id)
             if existing and existing.weak_signal_dismissed:
                 continue  # user decided — don't re-flag
 
             # Set the flag.
             meta = existing or DeviceMetadata()
             meta.weak_signal = description
-            self._metadata[device_id] = meta
+            self.metadata[device_id] = meta
             flagged.append(device_id)
 
             # Throttle the WARNING log to once per hour per device.
@@ -1706,7 +1709,7 @@ class DiscoveryManager:
 
             if should_log:
                 meta.last_weak_signal_log = now.isoformat()
-                self._metadata[device_id] = meta
+                self.metadata[device_id] = meta
                 _LOGGER.warning(
                     "DiscoveryManager: weak signal for %s — %s. "
                     "Check RF range/batteries, or set "
@@ -1784,7 +1787,7 @@ class DiscoveryManager:
         # the WARNING log; the persistent notification must be sent
         # whenever a mismatch exists, even if already warned.
         counts["class_mismatch"] = sum(
-            1 for meta in self._metadata.values() if meta.class_mismatch
+            1 for meta in self.metadata.values() if meta.class_mismatch
         )
         total = sum(counts.values())
         if total > 0:
@@ -1899,7 +1902,7 @@ class DiscoveryManager:
         return {
             SZ_DISCOVERY_DEVICES: {
                 device_id: meta.to_dict()
-                for device_id, meta in self._metadata.items()
+                for device_id, meta in self.metadata.items()
             },
             SZ_DISCOVERY_SCAN_STATE: self._scan.export_json(),
         }
@@ -1923,7 +1926,7 @@ class DiscoveryManager:
 
         # Include devices from both the engine and metadata (faked devices
         # may not be in the engine since they don't broadcast)
-        all_ids = set(engine_devices.keys()) | set(self._metadata.keys())
+        all_ids = set(engine_devices.keys()) | set(self.metadata.keys())
 
         for device_id in all_ids:
             # Skip the ramses_rf sentinel HGI (18:000730) — it's a
@@ -1949,7 +1952,7 @@ class DiscoveryManager:
                     self._active_hgi_id,
                 )
                 continue
-            meta = self._metadata.get(device_id)
+            meta = self.metadata.get(device_id)
 
             # When a status/enabled filter is applied, skip devices that
             # have no persisted metadata rather than synthesizing a
@@ -2150,7 +2153,7 @@ class DiscoveryManager:
         ``device_comments`` dict instead.
 
         Both ``_comment`` and ``device_comments`` are stripped by
-        ``_strip_schema_extensions`` before ramses_rf sees the schema,
+        ``strip_schema_extensions`` before ramses_rf sees the schema,
         so they survive cache loss (lives in the config entry) but do
         not pollute the ramses_rf schema.
 
@@ -2364,11 +2367,11 @@ class DiscoveryManager:
         """
         if (
             device_id not in {d.device_id for d in self._scan.get_devices()}
-            and device_id not in self._metadata
+            and device_id not in self.metadata
         ):
             raise ValueError(f"Device {device_id} not in discovery list")
 
-        meta = self._metadata.get(device_id, DeviceMetadata())
+        meta = self.metadata.get(device_id, DeviceMetadata())
         meta.status = DiscoveryStatus.ACCEPTED
         meta.enabled = True
         meta.accepted_at = dt.now().isoformat()
@@ -2414,7 +2417,7 @@ class DiscoveryManager:
                 domain_id=domain_id,
             )
 
-        self._metadata[device_id] = meta
+        self.metadata[device_id] = meta
         _LOGGER.info("DiscoveryManager: accepted device %s", device_id)
 
         result = self.get_device(device_id)
@@ -2426,7 +2429,7 @@ class DiscoveryManager:
 
         Devices the user discarded or removed via discovery are tracked
         in persisted metadata — unlike the coordinator's runtime-only
-        ``_removed_devices`` set — so learned topology and device
+        ``removed_devices`` set — so learned topology and device
         comments must not re-add them after a restart either (issue
         1238).
 
@@ -2434,7 +2437,7 @@ class DiscoveryManager:
         """
         return {
             dev_id
-            for dev_id, meta in self._metadata.items()
+            for dev_id, meta in self.metadata.items()
             if meta.status
             in (DiscoveryStatus.DISCARDED, DiscoveryStatus.REMOVED)
         }
@@ -2449,15 +2452,15 @@ class DiscoveryManager:
         :return: The updated device entry.
         :raise ValueError: If the device is not in the discovery list.
         """
-        if device_id not in self._metadata and device_id not in {
+        if device_id not in self.metadata and device_id not in {
             d.device_id for d in self._scan.get_devices()
         }:
             raise ValueError(f"Device {device_id} not in discovery list")
 
-        meta = self._metadata.get(device_id, DeviceMetadata())
+        meta = self.metadata.get(device_id, DeviceMetadata())
         meta.status = DiscoveryStatus.DISCARDED
         meta.enabled = False
-        self._metadata[device_id] = meta
+        self.metadata[device_id] = meta
 
         _LOGGER.info("DiscoveryManager: discarded device %s", device_id)
         result = self.get_device(device_id)
@@ -2474,15 +2477,15 @@ class DiscoveryManager:
         :return: The updated device entry.
         :raise ValueError: If the device is not in the discovery list.
         """
-        if device_id not in self._metadata and device_id not in {
+        if device_id not in self.metadata and device_id not in {
             d.device_id for d in self._scan.get_devices()
         }:
             raise ValueError(f"Device {device_id} not in discovery list")
 
-        meta = self._metadata.get(device_id, DeviceMetadata())
+        meta = self.metadata.get(device_id, DeviceMetadata())
         meta.status = DiscoveryStatus.REMOVED
         meta.enabled = False
-        self._metadata[device_id] = meta
+        self.metadata[device_id] = meta
         # Clear from notified so it can be re-discovered if still present
         self._notified.discard(device_id)
 
@@ -2501,10 +2504,10 @@ class DiscoveryManager:
         :return: The updated device entry.
         :raise ValueError: If the device is not in the discovery list.
         """
-        if device_id not in self._metadata:
+        if device_id not in self.metadata:
             raise ValueError(f"Device {device_id} not in discovery list")
 
-        self._metadata[device_id].enabled = True
+        self.metadata[device_id].enabled = True
         _LOGGER.info("DiscoveryManager: enabled device %s", device_id)
         result = self.get_device(device_id)
         assert result is not None  # just updated metadata
@@ -2520,10 +2523,10 @@ class DiscoveryManager:
         :return: The updated device entry.
         :raise ValueError: If the device is not in the discovery list.
         """
-        if device_id not in self._metadata:
+        if device_id not in self.metadata:
             raise ValueError(f"Device {device_id} not in discovery list")
 
-        self._metadata[device_id].enabled = False
+        self.metadata[device_id].enabled = False
         _LOGGER.info("DiscoveryManager: disabled device %s", device_id)
         result = self.get_device(device_id)
         assert result is not None  # just updated metadata
@@ -2581,7 +2584,7 @@ class DiscoveryManager:
             accepted_at=dt.now().isoformat(),
             schema_entry=fragment,
         )
-        self._metadata[device_id] = meta
+        self.metadata[device_id] = meta
 
         _LOGGER.info(
             "DiscoveryManager: added faked REM %s bound to %s",
@@ -2626,9 +2629,9 @@ class DiscoveryManager:
             # The user sets _owner and _preferred_type via the review
             # flow.  The HGI is in the known_list (without _owner),
             # so commands work even before acceptance.
-            meta = self._metadata.get(dev_id)
+            meta = self.metadata.get(dev_id)
             if meta is None:
-                self._metadata[dev_id] = DeviceMetadata()
+                self.metadata[dev_id] = DeviceMetadata()
                 new_ids.append(dev_id)
                 _LOGGER.info(
                     "check_for_new_devices: HGI discovery candidate %s "
@@ -2653,7 +2656,7 @@ class DiscoveryManager:
                     dev_id,
                 )
                 meta.status = DiscoveryStatus.NEW
-                self._metadata[dev_id] = meta
+                self.metadata[dev_id] = meta
                 new_ids.append(dev_id)
 
         for device_id in engine_devices:
@@ -2680,7 +2683,7 @@ class DiscoveryManager:
             # should not be offered for discovery/review.
             if device_id in self._foreign_device_ids:
                 continue
-            meta = self._metadata.get(device_id)
+            meta = self.metadata.get(device_id)
             if meta is None:
                 # If the device is already in the schema but has no metadata
                 # (e.g. metadata lost during reload because .storage/ wasn't
@@ -2705,7 +2708,7 @@ class DiscoveryManager:
                         device_id,
                     )
                 # Brand new device — create metadata
-                self._metadata[device_id] = DeviceMetadata()
+                self.metadata[device_id] = DeviceMetadata()
                 new_ids.append(device_id)
             elif (
                 meta.status == DiscoveryStatus.NEW
@@ -2727,13 +2730,13 @@ class DiscoveryManager:
                     device_id,
                 )
                 meta.status = DiscoveryStatus.NEW
-                self._metadata[device_id] = meta
+                self.metadata[device_id] = meta
                 new_ids.append(device_id)
             elif meta.status == DiscoveryStatus.REMOVED:
                 # Re-mark REMOVED devices as NEW if they're still seen
                 # (e.g., user removed from schema but device is still present)
                 meta.status = DiscoveryStatus.NEW
-                self._metadata[device_id] = meta
+                self.metadata[device_id] = meta
                 new_ids.append(device_id)
 
         # Mark all reported devices as notified, regardless of whether
@@ -2771,7 +2774,7 @@ class DiscoveryManager:
         now = dt.now()
         lost_ids: list[str] = []
 
-        for device_id, meta in self._metadata.items():
+        for device_id, meta in self.metadata.items():
             if meta.status != DiscoveryStatus.ACCEPTED or not meta.enabled:
                 continue
 

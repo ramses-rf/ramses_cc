@@ -270,12 +270,12 @@ class RamsesServiceHandler:
         if not callable(clear_fn):
             return
         # Cancel any previous pending timer on the entity
-        prev = getattr(entity, "_pending_timer", None)
+        prev = getattr(entity, "pending_timer", None)
         if prev and not prev.done():
             prev.cancel()
         task = self.hass.async_create_task(clear_fn(timeout))
-        if hasattr(entity, "_pending_timer") or entity is not None:
-            entity._pending_timer = task
+        if hasattr(entity, "pending_timer") or entity is not None:
+            entity.pending_timer = task
         self._pending_timers.append(task)
 
     def register_pending_timer(self, task: asyncio.Task[Any]) -> None:
@@ -742,11 +742,11 @@ class RamsesServiceHandler:
         # ~30s each on a degraded transport), so a tracked task would
         # block HA's startup wrap-up for many minutes.
         self.hass.async_create_background_task(
-            self._async_run_fan_param_sequence(call),
+            self.async_run_fan_param_sequence(call),
             "ramses_cc:fan_param_sequence",
         )
 
-    async def _async_run_fan_param_sequence(
+    async def async_run_fan_param_sequence(
         self, call: dict[str, Any] | ServiceCall
     ) -> None:
         """Handle 'update_fan_params' service call (or direct dict)."""
@@ -1464,13 +1464,13 @@ class RamsesServiceHandler:
 
         # TODO: Phase 3 — when ramses_rf exposes TopologyChangedEvent via an
         # external callback API, listen to it here to trigger entity creation
-        # reactively instead of polling _discover_new_entities() on a timer.
+        # reactively instead of polling discover_new_entities() on a timer.
         # The minimal API would be:
         #   client.register_topology_event_callback(self._on_topology_event)
         # This depends on the ramses_rf CQRS event bus work.
 
         # Trigger entity discovery to pick up any new devices
-        await self._coordinator._discover_new_entities()  # noqa: SLF001
+        await self._coordinator.discover_new_entities()
 
         # Schedule a refresh to update entities
         self._schedule_refresh_later()
@@ -1605,10 +1605,10 @@ class RamsesServiceHandler:
         # while pending tasks are in flight).
         #
         # NOTE: async_update_entry schedules the update listener as an async
-        # task, not a synchronous call; _persist_options_no_reload counts
+        # task, not a synchronous call; persist_options_no_reload counts
         # each real update so the queued listener run skips the reload.
         if entry and entry.metadata.schema_entry:
-            self._coordinator._persist_options_no_reload(  # noqa: SLF001
+            self._coordinator.persist_options_no_reload(
                 self._coordinator.options
             )
 
@@ -1808,7 +1808,7 @@ class RamsesServiceHandler:
         # 6. Persist to config entry (reload suppressed — the running
         #    coordinator already reflects the change)
         if self._coordinator.entry:
-            self._coordinator._persist_options_no_reload(current_options)
+            self._coordinator.persist_options_no_reload(current_options)
 
         _LOGGER.info(
             "Removed device %s from schema (will be re-discovered if "
@@ -1917,7 +1917,7 @@ class RamsesServiceHandler:
         if entry and entry.metadata.schema_entry:
             self._apply_schema_entry(entry.metadata.schema_entry, device_id)
 
-            self._coordinator._persist_options_no_reload(  # noqa: SLF001
+            self._coordinator.persist_options_no_reload(
                 self._coordinator.options
             )
 
@@ -2046,7 +2046,7 @@ class RamsesServiceHandler:
         # removed as well rather than left behind as orphans for the user
         # to delete one by one (issue 1257).
         if registry_entry is not None:
-            self._remove_registry_entry_and_children(device_id)
+            self.remove_registry_entry_and_children(device_id)
 
         _LOGGER.info("Removed device %s from schema and registries", device_id)
 
@@ -2069,7 +2069,7 @@ class RamsesServiceHandler:
                 return dev_entry
         return None
 
-    def _remove_registry_entry_and_children(
+    def remove_registry_entry_and_children(
         self, device_id: str, *, include_self: bool = True
     ) -> None:
         """Remove a device's HA registry entry plus its child entries.
@@ -2169,13 +2169,13 @@ class RamsesServiceHandler:
         # Track the removed device so sync_learned_topology doesn't re-add it
         # (ramses_rf has no remove_device API, so the learned schema still
         # references the device until restart).
-        self._coordinator._removed_devices.add(device_id)  # noqa: SLF001
+        self._coordinator.removed_devices.add(device_id)
 
         # 3. Persist to config entry (suppress reload — coordinator will
         #    be reloaded by the caller if needed, or the device simply
         #    disappears on next restart)
         self._coordinator.options = options
-        self._coordinator._persist_options_no_reload(options)  # noqa: SLF001
+        self._coordinator.persist_options_no_reload(options)
 
         # 5. Remove from running ramses_rf client's include lists so
         #    enforce_known_list stops allowing packets for this device

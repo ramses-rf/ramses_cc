@@ -24,13 +24,13 @@ from custom_components.ramses_cc.const import (
 from custom_components.ramses_cc.schemas import (
     SCH_ADVANCED_FEATURES,
     _is_device_placed_elsewhere_in_learned,
-    _strip_and_orchestrate,
     device_in_schema,
     eligible_devices,
     merge_schemas,
     normalise_config,
     order_schema,
     remove_device_from_schema,
+    strip_and_orchestrate,
     strip_traits_for_validation,
     sync_learned_topology,
 )
@@ -2899,9 +2899,9 @@ def test_sync_learned_topology_creates_hgi_schema_entry() -> None:
     for them.  sync_learned_topology should create a minimal empty entry
     so HGIs are tracked in the schema (enabling eventual removal of the
     known_list).  The entry must NOT have _skipped, otherwise
-    _derive_known_list_from_schema would exclude it from the known_list
+    derive_known_list_from_schema would exclude it from the known_list
     and the scan engine would re-discover the HGI every cycle.
-    _strip_schema_extensions drops these before passing to ramses_rf.
+    strip_schema_extensions drops these before passing to ramses_rf.
     """
     config: dict[str, Any] = {
         SZ_MAIN_TCS: "01:123456",
@@ -3234,7 +3234,7 @@ def test_strip_traits_keeps_root_entry_with_traits_for_remotes_device() -> (
     """A device in remotes[] with a root entry that HAS traits (e.g. _class)
     should have the root entry dropped but traits extracted elsewhere.
 
-    The root entry's _ traits are processed by _derive_known_list_from_schema
+    The root entry's _ traits are processed by derive_known_list_from_schema
     before strip_traits_for_validation runs.  After stripping, the empty root
     entry is dropped (not moved to orphans) because the device is in remotes[].
     """
@@ -4310,7 +4310,7 @@ def test_device_placed_elsewhere_in_learned() -> None:
 
 
 def test_strip_and_orchestrate_tcs_orphan_migration() -> None:
-    """Test _strip_and_orchestrate migrating TCS orphans to root orphans_heat/hvac."""
+    """Test strip_and_orchestrate migrating TCS orphans to root orphans_heat/hvac."""
     schema = {
         "01:111111": {
             SZ_ORPHANS: ["04:123456", "32:654321", "13:001122"],
@@ -4319,7 +4319,7 @@ def test_strip_and_orchestrate_tcs_orphan_migration() -> None:
         SZ_ORPHANS_HVAC: [],
     }
 
-    sanitized = _strip_and_orchestrate(schema)
+    sanitized = strip_and_orchestrate(schema)
     assert "04:123456" in sanitized[SZ_ORPHANS_HEAT]
     assert "32:654321" in sanitized[SZ_ORPHANS_HVAC]
     assert sanitized["01:111111"][SZ_ORPHANS] == ["13:001122"]

@@ -417,8 +417,8 @@ class TestCoordinatorUnloadFilter:
 
         coordinator = RamsesCoordinator(hass, entry)
         coordinator.client = _make_mock_client()
-        coordinator._entities = {}
-        coordinator._remotes = {}
+        coordinator.entities = {}
+        coordinator.remotes = {}
         return coordinator
 
     async def test_unload_empty_schema_skips_discovery_save(
@@ -472,8 +472,8 @@ class TestCoordinatorUnloadFilter:
 
         coordinator = RamsesCoordinator(hass, entry)
         coordinator.client = _make_mock_client()
-        coordinator._entities = {}
-        coordinator._remotes = {}
+        coordinator.entities = {}
+        coordinator.remotes = {}
 
         # Discovery state has both KEPT and REMOVED
         coordinator.discovery_manager = MagicMock()
@@ -524,7 +524,7 @@ class TestCoordinatorUnloadFilter:
 
         await coordinator._async_save_on_unload()
 
-        assert coordinator._skip_topology_sync is False
+        assert coordinator.skip_topology_sync is False
         assert coordinator._skip_discovery_save is False
         assert coordinator._discovery_filter_ids is None
 
@@ -785,7 +785,7 @@ def _schema_with_nested_devices() -> dict[str, Any]:
 
 
 class TestSchemaDeviceIdExtractionNested:
-    """Tests that _extract_schema_device_ids finds devices nested inside
+    """Tests that extract_schema_device_ids finds devices nested inside
     TCS structures (appliance_control, DHW, zones, UFH, orphans).
 
     Regression for ramses-rf/ramses_cc#917: the simplified extraction in
@@ -798,44 +798,44 @@ class TestSchemaDeviceIdExtractionNested:
     def test_extract_finds_appliance_control(self) -> None:
         """OTB placed as appliance_control must be found."""
         schema = _schema_with_nested_devices()
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert OTB_ID in result
 
     def test_extract_finds_dhw_sensor_and_valve(self) -> None:
         """DHW sensor and valve must be found."""
         schema = _schema_with_nested_devices()
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert DHW_SENSOR_ID in result
         assert DHW_VALVE_ID in result
 
     def test_extract_finds_zone_sensor(self) -> None:
         """TRV placed as zone sensor must be found."""
         schema = _schema_with_nested_devices()
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert TRV_ID in result
 
     def test_extract_finds_zone_actuator(self) -> None:
         """BDR placed as zone actuator must be found."""
         schema = _schema_with_nested_devices()
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert BDR_ID in result
 
     def test_extract_finds_ufh_controller(self) -> None:
         """UFH controller inside underfloor_heating must be found."""
         schema = _schema_with_nested_devices()
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert UFH_ID in result
 
     def test_extract_finds_orphan(self) -> None:
         """BDR in top-level orphans_heat must be found."""
         schema = _schema_with_nested_devices()
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert BDR2_ID in result
 
     def test_extract_finds_all_devices(self) -> None:
         """All nested devices + CTL must be found."""
         schema = _schema_with_nested_devices()
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         expected = {
             CTL_ID,
             OTB_ID,
