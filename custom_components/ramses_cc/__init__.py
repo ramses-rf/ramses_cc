@@ -634,15 +634,15 @@ async def async_update_listener(
     # accept_discovered_device, where the running coordinator already has
     # the updated options and a reload would be disruptive).
     #
-    # _suppress_reload counts pending suppressed updates: writers
+    # suppress_reload counts pending suppressed updates: writers
     # increment it only when async_update_entry actually changed the
     # options (and thus queued a listener task), and each listener run
     # decrements it once.  A count, not a timestamp — so neither a slow
     # listener nor an early flag reset can leak a spurious reload
     # (issue 1279).
     coordinator = getattr(entry, "runtime_data", None)
-    if coordinator is not None and coordinator._suppress_reload:  # noqa: SLF001
-        coordinator._suppress_reload -= 1  # noqa: SLF001
+    if coordinator is not None and coordinator.suppress_reload:
+        coordinator.suppress_reload -= 1
         _LOGGER.debug(
             "Config entry %s updated, but reload suppressed (accept flow)",
             entry.entry_id,
@@ -761,7 +761,7 @@ async def async_remove_config_entry_device(
         # can only exist under this device — remove their registry
         # entries too.  HA removes the parent's entry itself (issue
         # 1257).
-        coordinator.service_handler._remove_registry_entry_and_children(  # noqa: SLF001
+        coordinator.service_handler.remove_registry_entry_and_children(
             dev_id, include_self=False
         )
     return True
@@ -839,7 +839,7 @@ def async_register_domain_services(
 
     @verify_domain_control(DOMAIN)
     async def async_update_fan_params(call: ServiceCall) -> None:
-        await _coordinator._async_run_fan_param_sequence(call)
+        await _coordinator.async_run_fan_param_sequence(call)
 
     @verify_domain_control(DOMAIN)
     async def async_set_polling_interval(call: ServiceCall) -> None:

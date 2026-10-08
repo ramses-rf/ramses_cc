@@ -166,9 +166,9 @@ def mock_coordinator(
     cast(Any, coordinator.client).async_send_cmd = AsyncMock()
     cast(Any, coordinator.client).dispatcher = MagicMock()
     cast(Any, coordinator.client).dispatcher.send = AsyncMock()
-    coordinator._device_info = {}
+    coordinator.device_info_cache = {}
     coordinator.platforms = {}
-    coordinator._devices = []
+    coordinator.devices = []
 
     mock_entry.runtime_data = coordinator
     return coordinator
@@ -685,7 +685,7 @@ async def test_async_start_with_packet_handler(
 ):
     """Test async_start with packet handler registration."""
     mock_coordinator.client = mock_client
-    mock_coordinator._discover_new_entities = AsyncMock()
+    mock_coordinator.discover_new_entities = AsyncMock()
     mock_coordinator.async_config_entry_first_refresh = AsyncMock()
     mock_coordinator.async_save_client_state = AsyncMock()
 
@@ -762,8 +762,8 @@ async def test_async_update_discovery(
             "custom_components.ramses_cc.coordinator.async_dispatcher_send"
         ) as mock_dispatch,
     ):
-        # Call _discover_new_entities directly (was _async_update_data)
-        await mock_coordinator._discover_new_entities()
+        # Call discover_new_entities directly (was _async_update_data)
+        await mock_coordinator.discover_new_entities()
 
         # Verify signal sent for new devices
         assert cast(Any, mock_dispatch).call_count >= 1
@@ -817,7 +817,7 @@ async def test_discovery_no_redispatch_on_device_recreation(
         ) as mock_dispatch,
     ):
         # --- Act 1: first discovery — zone is new ---
-        await mock_coordinator._discover_new_entities()
+        await mock_coordinator.discover_new_entities()
         climate_calls_1 = [
             c
             for c in cast(Any, mock_dispatch).call_args_list
@@ -847,7 +847,7 @@ async def test_discovery_no_redispatch_on_device_recreation(
         mock_dispatch.reset_mock()
 
         # --- Act 2: second discovery — recreated zone must NOT be re-dispatched ---
-        await mock_coordinator._discover_new_entities()
+        await mock_coordinator.discover_new_entities()
         climate_calls_2 = [
             c
             for c in cast(Any, mock_dispatch).call_args_list
@@ -867,8 +867,8 @@ async def test_discovery_no_redispatch_on_device_recreation(
         )
 
         # --- Assert: known list holds the fresh instance, not the stale one ---
-        assert zone_v2 in mock_coordinator._zones
-        assert zone_v1 not in mock_coordinator._zones
+        assert zone_v2 in mock_coordinator.zones
+        assert zone_v1 not in mock_coordinator.zones
 
 
 async def test_async_update_setup_failure(
@@ -1010,8 +1010,8 @@ async def test_async_update_adds_systems_and_guards(
             ) as mock_dispatch,
             patch("homeassistant.helpers.device_registry.async_get"),
         ):
-            # Call _discover_new_entities directly (was _async_update_data)
-            await mock_coordinator._discover_new_entities()
+            # Call discover_new_entities directly (was _async_update_data)
+            await mock_coordinator.discover_new_entities()
 
             # Use assert_any_call for robust verification
             expected_signal = SIGNAL_NEW_DEVICES.format(Platform.CLIMATE)
@@ -1130,8 +1130,8 @@ async def test_coordinator_update_data_no_client(
     """
     mock_coordinator.client = None
 
-    # Patch _discover_new_entities to ensure it is NOT called
-    with patch.object(mock_coordinator, "_discover_new_entities") as mock_dsc:
+    # Patch discover_new_entities to ensure it is NOT called
+    with patch.object(mock_coordinator, "discover_new_entities") as mock_dsc:
         await mock_coordinator._async_update_data()
         cast(Any, mock_dsc).assert_not_called()
 
@@ -1297,9 +1297,9 @@ async def test_coordinator_run_fan_param_sequence(
     mock_run = AsyncMock()
     cast(
         Any, mock_coordinator.service_handler
-    )._async_run_fan_param_sequence = mock_run
+    ).async_run_fan_param_sequence = mock_run
 
-    await mock_coordinator._async_run_fan_param_sequence(call_data)
+    await mock_coordinator.async_run_fan_param_sequence(call_data)
     mock_run.assert_awaited_once_with(call_data)
 
 
@@ -1311,7 +1311,7 @@ async def test_discovery_task_calls_discovery(
     mock_coordinator.client = MagicMock()
 
     # Patch the discovery method to verify it gets called
-    with patch.object(mock_coordinator, "_discover_new_entities") as mock_dsc:
+    with patch.object(mock_coordinator, "discover_new_entities") as mock_dsc:
         await mock_coordinator._async_discovery_task()
 
         cast(Any, mock_dsc).assert_called_once()
@@ -1326,8 +1326,8 @@ async def test_save_client_state_hybrid_compatibility(
     # Mock the store and internal state needed for the save method
     mock_save = AsyncMock()
     cast(Any, mock_coordinator.store).async_save = mock_save
-    mock_coordinator._remotes = {}
-    mock_coordinator._entities = {}
+    mock_coordinator.remotes = {}
+    mock_coordinator.entities = {}
 
     # --- SCENARIO 1: New Async Client ---
     # get_state returns an Awaitable (Coroutine) that resolves to the tuple
@@ -1356,7 +1356,7 @@ async def test_save_client_state_hybrid_compatibility(
 async def test_save_client_state_unload_uses_config_schema(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """During unload (_skip_topology_sync=True), the config schema is saved
+    """During unload (skip_topology_sync=True), the config schema is saved
     to .storage instead of the learned schema.
 
     This prevents the learned topology from surviving in the cache and
@@ -1373,14 +1373,14 @@ async def test_save_client_state_unload_uses_config_schema(
 
     mock_save = AsyncMock()
     cast(Any, mock_coordinator.store).async_save = mock_save
-    mock_coordinator._remotes = {}
-    mock_coordinator._entities = {}
+    mock_coordinator.remotes = {}
+    mock_coordinator.entities = {}
     cast(Any, mock_coordinator.client).get_state = MagicMock(
         return_value=(learned_schema, {})
     )
 
-    # Simulate unload: _skip_topology_sync = True
-    mock_coordinator._skip_topology_sync = True
+    # Simulate unload: skip_topology_sync = True
+    mock_coordinator.skip_topology_sync = True
     await mock_coordinator.async_save_client_state()
 
     # The saved schema must be the (empty) config schema, not the learned one
@@ -1397,20 +1397,20 @@ async def test_save_client_state_unload_uses_config_schema(
 async def test_save_client_state_skip_topology_sync_no_suppress_reload(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """When _skip_topology_sync is True, async_save_client_state must NOT
-    set _suppress_reload.
+    """When skip_topology_sync is True, async_save_client_state must NOT
+    set suppress_reload.
 
     This is the fix for issue 1023: the review_discovered config flow
     calls async_save_client_state to flush discovery metadata to
     .storage before the reload triggered by _async_save().  Without
-    _skip_topology_sync, the topology sync block sets _suppress_reload
+    skip_topology_sync, the topology sync block sets suppress_reload
     (via async_update_entry), which suppresses the reload from
     _async_save().  The gateway then keeps its stale empty known_list
     and blocks all packets from the just-accepted devices.
 
-    With the fix, config_flow sets _skip_topology_sync=True before
+    With the fix, config_flow sets skip_topology_sync=True before
     calling async_save_client_state, preventing the topology sync
-    block from running and setting _suppress_reload.
+    block from running and setting suppress_reload.
     """
     assert mock_coordinator.client is not None
 
@@ -1437,25 +1437,25 @@ async def test_save_client_state_skip_topology_sync_no_suppress_reload(
 
     mock_save = AsyncMock()
     cast(Any, mock_coordinator.store).async_save = mock_save
-    mock_coordinator._remotes = {}
-    mock_coordinator._entities = {}
+    mock_coordinator.remotes = {}
+    mock_coordinator.entities = {}
     cast(Any, mock_coordinator.client).get_state = MagicMock(
         return_value=(learned_schema, {})
     )
 
-    # Simulate the config_flow path: _skip_topology_sync = True
-    mock_coordinator._skip_topology_sync = True
-    # Reset _suppress_reload to a known state
-    mock_coordinator._suppress_reload = 0.0
+    # Simulate the config_flow path: skip_topology_sync = True
+    mock_coordinator.skip_topology_sync = True
+    # Reset suppress_reload to a known state
+    mock_coordinator.suppress_reload = 0.0
 
     await mock_coordinator.async_save_client_state()
 
-    # _suppress_reload must NOT have been set — the topology sync
+    # suppress_reload must NOT have been set — the topology sync
     # block (which sets it via async_update_entry) must have been
     # skipped entirely.
-    assert mock_coordinator._suppress_reload == 0.0, (
-        f"_suppress_reload was set to {mock_coordinator._suppress_reload} "
-        f"even though _skip_topology_sync=True — the reload from "
+    assert mock_coordinator.suppress_reload == 0.0, (
+        f"suppress_reload was set to {mock_coordinator.suppress_reload} "
+        f"even though skip_topology_sync=True — the reload from "
         f"_async_save() would be suppressed (issue 1023)"
     )
 
@@ -1475,8 +1475,8 @@ async def test_save_client_state_skip_topology_sync_no_suppress_reload(
 async def test_save_client_state_topology_sync_sets_suppress_reload(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """When _skip_topology_sync is False and topology is richer,
-    async_save_client_state DOES set _suppress_reload.
+    """When skip_topology_sync is False and topology is richer,
+    async_save_client_state DOES set suppress_reload.
 
     This is the normal (non-config_flow) path — the periodic save cycle
     writes back enriched topology and suppresses the reload to avoid
@@ -1484,7 +1484,7 @@ async def test_save_client_state_topology_sync_sets_suppress_reload(
 
     This test is the counterpart to the issue 1023 fix test above —
     it verifies that the suppress mechanism still works normally
-    when _skip_topology_sync is False.
+    when skip_topology_sync is False.
     """
     assert mock_coordinator.client is not None
 
@@ -1511,8 +1511,8 @@ async def test_save_client_state_topology_sync_sets_suppress_reload(
 
     mock_save = AsyncMock()
     cast(Any, mock_coordinator.store).async_save = mock_save
-    mock_coordinator._remotes = {}
-    mock_coordinator._entities = {}
+    mock_coordinator.remotes = {}
+    mock_coordinator.entities = {}
     mock_coordinator._devices_with_commands = set()
     cast(Any, mock_coordinator.client).get_state = MagicMock(
         return_value=(learned_schema, {})
@@ -1520,16 +1520,16 @@ async def test_save_client_state_topology_sync_sets_suppress_reload(
     # Mock the schema validator to pass
     mock_coordinator._validate_schema_for_ramserf = MagicMock()
 
-    # _skip_topology_sync = False (normal save cycle)
-    mock_coordinator._skip_topology_sync = False
-    mock_coordinator._suppress_reload = 0.0
+    # skip_topology_sync = False (normal save cycle)
+    mock_coordinator.skip_topology_sync = False
+    mock_coordinator.suppress_reload = 0.0
 
     await mock_coordinator.async_save_client_state()
 
-    # _suppress_reload SHOULD have been set (topology sync ran and
+    # suppress_reload SHOULD have been set (topology sync ran and
     # found enriched topology)
-    assert mock_coordinator._suppress_reload > 0.0, (
-        "_suppress_reload was not set even though topology sync ran "
+    assert mock_coordinator.suppress_reload > 0.0, (
+        "suppress_reload was not set even though topology sync ran "
         "with enriched topology — the normal save cycle should "
         "suppress the reload to avoid transport teardown"
     )
@@ -1543,7 +1543,7 @@ async def test_save_client_state_topology_sync_sets_suppress_reload(
 def test_persist_options_no_reload_counts_real_updates(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """_persist_options_no_reload only counts updates that queued a
+    """persist_options_no_reload only counts updates that queued a
     listener task (i.e. async_update_entry returned True).
 
     Regression test for issue 1279: with the old timestamp scheme a
@@ -1555,20 +1555,20 @@ def test_persist_options_no_reload_counts_real_updates(
         Any, mock_coordinator.hass.config_entries
     ).async_update_entry
 
-    mock_coordinator._suppress_reload = 0  # noqa: SLF001
+    mock_coordinator.suppress_reload = 0  # noqa: SLF001
     update_entry.return_value = True
 
-    mock_coordinator._persist_options_no_reload({"schema": {"a": 1}})  # noqa: SLF001
-    assert mock_coordinator._suppress_reload == 1  # noqa: SLF001
+    mock_coordinator.persist_options_no_reload({"schema": {"a": 1}})  # noqa: SLF001
+    assert mock_coordinator.suppress_reload == 1  # noqa: SLF001
 
-    mock_coordinator._persist_options_no_reload({"schema": {"a": 2}})  # noqa: SLF001
-    assert mock_coordinator._suppress_reload == 2  # noqa: SLF001
+    mock_coordinator.persist_options_no_reload({"schema": {"a": 2}})  # noqa: SLF001
+    assert mock_coordinator.suppress_reload == 2  # noqa: SLF001
 
     # A no-op write (options unchanged → returns False → no listener
     # task queued) must NOT consume a suppression slot
     update_entry.return_value = False
-    mock_coordinator._persist_options_no_reload({"schema": {"a": 2}})  # noqa: SLF001
-    assert mock_coordinator._suppress_reload == 2  # noqa: SLF001
+    mock_coordinator.persist_options_no_reload({"schema": {"a": 2}})  # noqa: SLF001
+    assert mock_coordinator.suppress_reload == 2  # noqa: SLF001
 
 
 def test_persist_options_no_reload_eager_listener(
@@ -1589,18 +1589,18 @@ def test_persist_options_no_reload_eager_listener(
     def _update_entry_eager(*args: Any, **kwargs: Any) -> bool:
         # Emulate HA: options changed → listener fires eagerly and,
         # like async_update_listener, consumes one credit if present.
-        listener_saw.append(mock_coordinator._suppress_reload)  # noqa: SLF001
-        if mock_coordinator._suppress_reload:  # noqa: SLF001
-            mock_coordinator._suppress_reload -= 1  # noqa: SLF001
+        listener_saw.append(mock_coordinator.suppress_reload)  # noqa: SLF001
+        if mock_coordinator.suppress_reload:  # noqa: SLF001
+            mock_coordinator.suppress_reload -= 1  # noqa: SLF001
         return True
 
     update_entry.side_effect = _update_entry_eager
 
-    mock_coordinator._suppress_reload = 0  # noqa: SLF001
-    mock_coordinator._persist_options_no_reload({"schema": {"a": 1}})  # noqa: SLF001
+    mock_coordinator.suppress_reload = 0  # noqa: SLF001
+    mock_coordinator.persist_options_no_reload({"schema": {"a": 1}})  # noqa: SLF001
 
     assert listener_saw == [1]
-    assert mock_coordinator._suppress_reload == 0  # noqa: SLF001
+    assert mock_coordinator.suppress_reload == 0  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -1615,7 +1615,7 @@ async def test_schema_updated_callback_debounces_burst(
     new event does async_save_client_state run.
     """
     mock_coordinator.async_save_client_state = AsyncMock()
-    mock_coordinator._skip_topology_sync = False
+    mock_coordinator.skip_topology_sync = False
 
     # Override the mock's async_create_background_task to actually schedule
     # coros on the real event loop (the default mock closes them immediately).
@@ -1652,11 +1652,11 @@ async def test_schema_updated_callback_debounces_burst(
 async def test_schema_updated_callback_skipped_during_unload(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Step 5: events arriving while _skip_topology_sync is True (unload)
+    """Step 5: events arriving while skip_topology_sync is True (unload)
     are ignored — no debounce task is scheduled, no save runs.
     """
     mock_coordinator.async_save_client_state = AsyncMock()
-    mock_coordinator._skip_topology_sync = True
+    mock_coordinator.skip_topology_sync = True
 
     mock_coordinator._on_rf_schema_updated({"main_tcs": "01:145038"})
 
@@ -1674,11 +1674,11 @@ async def test_schema_updated_callback_cancelled_on_unload(
     so it doesn't race with the unload's own save.
     """
     mock_coordinator.async_save_client_state = AsyncMock()
-    mock_coordinator._skip_topology_sync = False
+    mock_coordinator.skip_topology_sync = False
     mock_coordinator.options = {CONF_SCHEMA: {}}
     cast(Any, mock_coordinator.store).async_save = AsyncMock()
-    mock_coordinator._remotes = {}
-    mock_coordinator._entities = {}
+    mock_coordinator.remotes = {}
+    mock_coordinator.entities = {}
     cast(Any, mock_coordinator.client).get_state = MagicMock(
         return_value=({}, {})
     )
@@ -1939,7 +1939,7 @@ async def test_discover_new_entities_registration_order(
         coordinator.client = mock_gateway
 
         # Manually trigger discovery
-        await coordinator._discover_new_entities()
+        await coordinator.discover_new_entities()
 
         # 4. Assertions
         expected_calls = [
@@ -2242,7 +2242,7 @@ async def test_save_client_state_remotes(
     From test_coordinator_services.py.
     """
     assert mock_coordinator.client is not None
-    mock_coordinator._remotes = {REM_ID: {"boost": "packet_data"}}
+    mock_coordinator.remotes = {REM_ID: {"boost": "packet_data"}}
     mock_save = AsyncMock()
 
     cast(Any, mock_coordinator.client).get_state = MagicMock(
@@ -2309,10 +2309,10 @@ async def test_get_device_lookup(mock_coordinator: RamsesCoordinator) -> None:
     """
     assert mock_coordinator.client is not None
 
-    # 1. Test finding in self._devices
+    # 1. Test finding in self.devices
     dev1 = MagicMock()
     dev1.id = "01:111111"
-    mock_coordinator._devices = [dev1]
+    mock_coordinator.devices = [dev1]
 
     assert mock_coordinator.get_device("01:111111") == dev1
 
@@ -2331,7 +2331,7 @@ async def test_get_device_lookup(mock_coordinator: RamsesCoordinator) -> None:
 
     # 4. Test not found (no client) -> Hits the final return None
     mock_coordinator.client = None
-    mock_coordinator._devices = []  # Clear devices to ensure fall-through
+    mock_coordinator.devices = []  # Clear devices to ensure fall-through
     assert mock_coordinator.get_device("01:111111") is None
 
 
@@ -2376,7 +2376,7 @@ async def test_discovery_task_handles_exception(
     with (
         patch.object(
             mock_coordinator,
-            "_discover_new_entities",
+            "discover_new_entities",
             side_effect=Exception("Boom"),
         ),
         patch("custom_components.ramses_cc.coordinator._LOGGER") as mock_log,
@@ -2440,7 +2440,7 @@ async def test_get_all_fan_params_delegate(
     handler = mock_coordinator.service_handler
     mock_run = AsyncMock()
 
-    cast(Any, handler)._async_run_fan_param_sequence = mock_run
+    cast(Any, handler).async_run_fan_param_sequence = mock_run
 
     # This method is not async, it uses hass.async_create_background_task
     # (a tracked task would block HA's startup wrap-up for minutes).
@@ -2479,7 +2479,7 @@ async def test_async_update_data_success(
 async def test_coordinator_init(mock_coordinator: RamsesCoordinator) -> None:
     """Test coordinator initialization state."""
     assert mock_coordinator.client is not None
-    assert mock_coordinator._devices == []
+    assert mock_coordinator.devices == []
 
 
 async def test_coordinator_get_fan_param(
@@ -2580,7 +2580,7 @@ async def test_coordinator_set_fan_param_no_binding(
     """
     assert mock_coordinator.client is not None
 
-    mock_coordinator._devices = [mock_fan_device]
+    mock_coordinator.devices = [mock_fan_device]
     cast(Any, mock_fan_device).get_bound_rem = MagicMock(return_value=None)
     mock_send = AsyncMock()
 
@@ -2613,7 +2613,7 @@ async def test_get_fan_param_fallback_hgi(
 
     # 2. Setup Device to have NO bound remote
     # This forces the coordinator to look for a fallback (the HGI)
-    mock_coordinator._devices = [mock_fan_device]
+    mock_coordinator.devices = [mock_fan_device]
     cast(Any, mock_fan_device).get_bound_rem.return_value = None
     mock_send = AsyncMock()
 
@@ -2651,7 +2651,7 @@ class TestFanParameterGet:
     """Test cases for the get_fan_param service.
 
     This test class verifies the behaviour of the async_get_fan_param and
-    _async_run_fan_param_sequence methods in the RamsesCoordinator class,
+    async_run_fan_param_sequence methods in the RamsesCoordinator class,
     including error handling and edge cases for parameter reading operations.
     """
 
@@ -2997,7 +2997,7 @@ class TestFanParameterUpdate:
     """Test cases for the update_fan_params service.
 
     This test class verifies the behaviour of the
-    _async_run_fan_param_sequence method in the RamsesCoordinator class.
+    async_run_fan_param_sequence method in the RamsesCoordinator class.
     """
 
     @pytest.fixture(autouse=True)
@@ -3082,7 +3082,7 @@ class TestFanParameterUpdate:
         )
 
         # Act - Call the method under test
-        await self.coordinator.service_handler._async_run_fan_param_sequence(
+        await self.coordinator.service_handler.async_run_fan_param_sequence(
             call
         )
 
@@ -3211,7 +3211,7 @@ async def test_discover_new_entities_hgi_registration(
             new_callable=AsyncMock,
         ),
     ):
-        await mock_coordinator._discover_new_entities()
+        await mock_coordinator.discover_new_entities()
 
         mock_get_device.assert_called_with("18:111111")
 
@@ -3243,24 +3243,24 @@ async def test_discover_entities_does_not_suppress_base_exceptions(
 
     # 3. Call discovery and assert the RuntimeError successfully escapes
     with pytest.raises(RuntimeError, match="Critical transport failure"):
-        await mock_coordinator._discover_new_entities()
+        await mock_coordinator.discover_new_entities()
 
 
 # ── Schema-as-single-source-of-truth tests ──────────────────────────────
 
 
 class TestDeriveKnownListFromSchema:
-    """Tests for _derive_known_list_from_schema."""
+    """Tests for derive_known_list_from_schema."""
 
     def test_empty_schema(self) -> None:
         """Empty schema produces empty known_list."""
-        result = RamsesCoordinator._derive_known_list_from_schema({})
+        result = RamsesCoordinator.derive_known_list_from_schema({})
         assert result == {}
 
     def test_main_tcs_only(self) -> None:
         """Schema with just main_tcs produces CTL in known_list."""
         schema = {"main_tcs": "01:145038", "01:145038": {}}
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "01:145038" in result
         assert result["01:145038"] == {}
 
@@ -3285,7 +3285,7 @@ class TestDeriveKnownListFromSchema:
                 "orphans": ["23:777777"],
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         expected_ids = {
             "01:145038",
             "10:064873",
@@ -3311,7 +3311,7 @@ class TestDeriveKnownListFromSchema:
                 "sensors": ["39:000001"],
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         expected_ids = {"30:111222", "37:168270", "37:168271", "39:000001"}
         assert set(result.keys()) == expected_ids
 
@@ -3321,7 +3321,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["23:111111", "23:222222"],
             "orphans_hvac": ["39:333333"],
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "23:111111" in result
         assert "23:222222" in result
         assert "39:333333" in result
@@ -3334,7 +3334,7 @@ class TestDeriveKnownListFromSchema:
             "01:145038": {"zones": {"01": {"sensor": "04:056053"}}},
             "04:056053": {"_disabled": True},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "01:145038" in result
         assert "04:056053" in result  # included to avoid log spam
 
@@ -3347,7 +3347,7 @@ class TestDeriveKnownListFromSchema:
                 "zones": {"01": {"sensor": "04:056053"}},
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "01:145038" in result  # included to avoid log spam
         assert "04:056053" in result  # zone sensor still collected
 
@@ -3359,7 +3359,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_class": "TRV"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["04:111111"]["class"] == "TRV"
 
     def test_class_ventilator_normalized_to_fan(self) -> None:
@@ -3370,7 +3370,7 @@ class TestDeriveKnownListFromSchema:
             "01:145038": {},
             "32:153289": {"_class": "ventilator", "remotes": ["37:168270"]},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # known_list should have the normalized DevType slug
         assert result["32:153289"]["class"] == "FAN"
 
@@ -3382,7 +3382,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_hvac": ["37:168270"],
             "37:168270": {"_class": "switch"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["37:168270"]["class"] == "REM"
 
     def test_class_lowercase_fan_normalized(self) -> None:
@@ -3392,7 +3392,7 @@ class TestDeriveKnownListFromSchema:
             "01:145038": {},
             "32:153289": {"_class": "fan", "remotes": ["37:168270"]},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["32:153289"]["class"] == "FAN"
 
     def test_alias_trait_propagates_to_known_list(self) -> None:
@@ -3403,7 +3403,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_alias": "Living Room"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["04:111111"]["alias"] == "Living Room"
 
     def test_name_trait_maps_to_alias(self) -> None:
@@ -3414,7 +3414,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_name": "My Sensor"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["04:111111"]["alias"] == "My Sensor"
 
     def test_alias_overrides_name_trait(self) -> None:
@@ -3425,7 +3425,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_name": "Name", "_alias": "Alias"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["04:111111"]["alias"] == "Alias"
 
     def test_user_overrides_merge_with_traits(self) -> None:
@@ -3439,7 +3439,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_class": "TRV", "_alias": "Custom"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["04:111111"]["class"] == "TRV"
         assert result["04:111111"]["alias"] == "Custom"
 
@@ -3457,7 +3457,7 @@ class TestDeriveKnownListFromSchema:
             },
             "04:056053": {"_alias": "Living Room"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["01:145038"]["alias"] == "My Controller"
         assert result["01:145038"]["class"] == "CTL"
         assert result["04:056053"]["alias"] == "Living Room"
@@ -3469,7 +3469,7 @@ class TestDeriveKnownListFromSchema:
         overrides that can add devices outside the schema.
         """
         schema = {"main_tcs": "01:145038", "01:145038": {}}
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # 03:123456 is not in schema → not in known_list
         assert "03:123456" not in result
         # 01:145038 is in schema → kept
@@ -3482,7 +3482,7 @@ class TestDeriveKnownListFromSchema:
         is the sole source of truth — devices that aren't in it don't appear.
         """
         schema = {"main_tcs": "01:145038", "01:145038": {}}
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # 03:123456 is not in schema → not in result
         assert "03:123456" not in result
         # 04:056053 is also not in schema → not in result
@@ -3501,7 +3501,7 @@ class TestDeriveKnownListFromSchema:
             "01:145038": {"zones": {"01": {"sensor": "04:056053"}}},
             "04:056053": {"_alias": "Kitchen TRV"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # 04:056053 is in schema → traits extracted
         assert "04:056053" in result
         assert result["04:056053"]["alias"] == "Kitchen TRV"
@@ -3520,7 +3520,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_hvac": ["18:001234"],
             "18:001234": {"_class": "HGI"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # HGI is in schema → kept
         assert "18:001234" in result
         assert result["18:001234"]["class"] == "HGI"
@@ -3536,7 +3536,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_owner": "me"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "04:111111" in result
 
     def test_owner_not_matching_root_excluded(self) -> None:
@@ -3549,7 +3549,7 @@ class TestDeriveKnownListFromSchema:
             "04:111111": {"_owner": "me"},
             "04:222222": {"_owner": "neighbour"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "04:111111" in result
         assert "04:222222" not in result
 
@@ -3561,7 +3561,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_owner": "someone"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "04:111111" in result  # no root _owner → no filtering
 
     def test_owner_matching_root_but_disabled_included(self) -> None:
@@ -3573,7 +3573,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_owner": "me", "_disabled": True},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # _disabled devices stay in known_list (to avoid DeviceNotFoundError)
         assert "04:111111" in result
 
@@ -3586,7 +3586,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_owner": "neighbour", "_disabled": True},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # foreign → excluded (block_list handles it, not known_list)
         assert "04:111111" not in result
 
@@ -3599,7 +3599,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_owner": "me", "_skipped": True},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # _skipped → excluded (block_list handles it)
         assert "04:111111" not in result
 
@@ -3612,7 +3612,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_owner": "neighbour", "_skipped": True},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "04:111111" not in result
 
     def test_faked_trait_extracted(self) -> None:
@@ -3623,7 +3623,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_hvac": ["37:111111"],
             "37:111111": {"_faked": True, "_class": "REM"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["37:111111"]["faked"] is True
         assert result["37:111111"]["class"] == "REM"
 
@@ -3635,7 +3635,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_hvac": ["37:111111"],
             "37:111111": {"_faked": False},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "faked" not in result["37:111111"]
 
     def test_bound_trait_extracted(self) -> None:
@@ -3649,7 +3649,7 @@ class TestDeriveKnownListFromSchema:
                 "remotes": ["37:168270"],
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["32:153289"]["bound"] == "37:168270"
         assert result["32:153289"]["class"] == "FAN"
 
@@ -3668,7 +3668,7 @@ class TestDeriveKnownListFromSchema:
                 "remotes": ["37:168270"],
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # FAN should be in known_list WITH bound (HVAC, class defaults to HVC)
         assert "32:153289" in result
         assert result["32:153289"]["bound"] == "37:168270"
@@ -3686,7 +3686,7 @@ class TestDeriveKnownListFromSchema:
                 "_bound": "01:145038",
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         # TRV should be in known_list but without bound (heat, no _class)
         assert "04:111111" in result
         assert "bound" not in result["04:111111"]
@@ -3705,7 +3705,7 @@ class TestDeriveKnownListFromSchema:
                 "remotes": ["37:170000", "37:170001"],
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["32:153289"]["bound"] == ["37:170000", "37:170001"]
         assert result["32:153289"]["class"] == "FAN"
 
@@ -3719,7 +3719,7 @@ class TestDeriveKnownListFromSchema:
                 "_class": "REM",
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["37:168270"]["bound"] == "32:153289"
         assert result["37:168270"]["class"] == "REM"
 
@@ -3727,7 +3727,7 @@ class TestDeriveKnownListFromSchema:
         """DIS-classed device keeps bound (DIS is an HVAC class).
 
         DIS was previously treated as a heat class (not in HVVAC_SLUGS),
-        which caused _derive_known_list_from_schema to strip 'bound' from
+        which caused derive_known_list_from_schema to strip 'bound' from
         DIS-classed devices.  Now DIS is in HVVAC_SLUGS and keeps bound.
         """
         schema = {
@@ -3738,7 +3738,7 @@ class TestDeriveKnownListFromSchema:
                 "_class": "DIS",
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["37:168270"]["bound"] == "32:153289"
         assert result["37:168270"]["class"] == "DIS"
 
@@ -3752,7 +3752,7 @@ class TestDeriveKnownListFromSchema:
                 "_class": "SW2",
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["37:168270"]["bound"] == "32:153289"
         assert result["37:168270"]["class"] == "SW2"
 
@@ -3767,7 +3767,7 @@ class TestDeriveKnownListFromSchema:
                 "remotes": ["37:168270"],
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["32:153289"]["scheme"] == "orcon"
 
     def test_faked_bound_scheme_combined(self) -> None:
@@ -3783,7 +3783,7 @@ class TestDeriveKnownListFromSchema:
             },
             "37:168270": {"_faked": True, "_class": "REM"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["32:153289"]["bound"] == "37:168270"
         assert result["32:153289"]["scheme"] == "itho"
         assert result["32:153289"]["class"] == "FAN"
@@ -3802,7 +3802,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_hvac": ["37:111111"],
             "37:111111": {"_faked": True, "_class": "REM"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["37:111111"]["faked"] is True
         assert result["37:111111"]["class"] == "REM"
 
@@ -3821,7 +3821,7 @@ class TestDeriveKnownListFromSchema:
                 "remotes": ["37:168270"],
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["32:153289"]["bound"] == "37:168270"
 
     def test_user_override_wins_over_schema_scheme(self) -> None:
@@ -3839,7 +3839,7 @@ class TestDeriveKnownListFromSchema:
                 "remotes": ["37:168270"],
             },
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["32:153289"]["scheme"] == "orcon"
 
     def test_schema_faked_and_user_other_trait_merge(self) -> None:
@@ -3854,7 +3854,7 @@ class TestDeriveKnownListFromSchema:
             "orphans_hvac": ["37:111111"],
             "37:111111": {"_faked": True, "_class": "REM"},
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["37:111111"]["faked"] is True
         assert result["37:111111"]["class"] == "REM"
 
@@ -3869,7 +3869,7 @@ class TestExtractDeviceIdsFromStripped:
         assert "01:145038" in result
 
     def test_extracts_hvac_from_orphans(self) -> None:
-        """HVAC devices in orphans_hvac are extracted (after _strip_schema_extensions
+        """HVAC devices in orphans_hvac are extracted (after strip_schema_extensions
         moves empty HVAC entries there)."""
         stripped = {"orphans_hvac": ["30:160000"]}
         result = RamsesCoordinator._extract_device_ids_from_stripped(stripped)
@@ -3894,7 +3894,7 @@ class TestExtractDeviceIdsFromStripped:
 
 
 class TestStripSchemaExtensions:
-    """Tests for _strip_schema_extensions."""
+    """Tests for strip_schema_extensions."""
 
     def test_strips_disabled_trait(self) -> None:
         """_disabled trait is stripped from TCS entries."""
@@ -3905,7 +3905,7 @@ class TestStripSchemaExtensions:
                 "zones": {"01": {"sensor": "04:056053"}},
             },
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "_disabled" not in result["01:145038"]
         assert result["01:145038"]["zones"]["01"]["sensor"] == "04:056053"
 
@@ -3923,7 +3923,7 @@ class TestStripSchemaExtensions:
                 },
             },
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         for trait in ("_name", "_alias", "_class", "_comment"):
             assert trait not in result["01:145038"]
         # _name is preserved in zone entries (ramses-rf/ramses_cc#919)
@@ -3937,7 +3937,7 @@ class TestStripSchemaExtensions:
             "01:145038": {},
             "04:222222": {"_disabled": True},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "04:222222" not in result
         assert "01:145038" in result
 
@@ -3949,7 +3949,7 @@ class TestStripSchemaExtensions:
             "orphans_heat": ["04:111111", "04:222222", "04:333333"],
             "04:222222": {"_disabled": True},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "04:222222" not in result  # trait-only entry dropped
         assert "04:111111" in result["orphans_heat"]
         assert "04:222222" not in result["orphans_heat"]  # removed from list
@@ -3961,7 +3961,7 @@ class TestStripSchemaExtensions:
             "orphans_hvac": ["32:111111", "37:222222"],
             "37:222222": {"_disabled": True},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "37:222222" not in result
         assert "32:111111" in result["orphans_hvac"]
         assert "37:222222" not in result["orphans_hvac"]
@@ -3973,33 +3973,33 @@ class TestStripSchemaExtensions:
             "01:145038": {},
             "device_comments": {"01:145038": "My Controller"},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "device_comments" not in result
 
     def test_no_extensions_returns_copy(self) -> None:
         """Schema without extensions is returned as-is (copy)."""
         schema = {"main_tcs": "01:145038", "01:145038": {}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert result == schema
         assert result is not schema  # should be a new dict
 
     def test_vcs_without_remotes_moved_to_orphans(self) -> None:
         """HVAC devices without remotes/sensors are moved to orphans_hvac."""
         schema: dict[str, Any] = {"30:160000": {}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "30:160000" not in result
         assert "30:160000" in result.get("orphans_hvac", [])
 
     def test_vcs_with_sensors_not_modified(self) -> None:
         """HVAC devices that already have sensors are not modified."""
         schema = {"30:160000": {"sensors": ["01:123456"]}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert result["30:160000"] == {"sensors": ["01:123456"]}
 
     def test_vcs_with_remotes_not_modified(self) -> None:
         """HVAC devices that already have remotes are not modified."""
         schema = {"30:160000": {"remotes": ["01:123456"]}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert result["30:160000"] == {"remotes": ["01:123456"]}
 
     def test_trv_in_tcs_orphans_moved_to_heat_orphans(self) -> None:
@@ -4013,7 +4013,7 @@ class TestStripSchemaExtensions:
             "main_tcs": "01:216136",
             "01:216136": {"orphans": ["04:034682", "04:056673"]},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         # TCS orphans list should be gone (no valid entries left)
         assert "orphans" not in result["01:216136"]
         # TRVs moved to top-level orphans_heat
@@ -4026,7 +4026,7 @@ class TestStripSchemaExtensions:
             "main_tcs": "01:216136",
             "01:216136": {"orphans": ["22:012299", "34:058721"]},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "orphans" not in result["01:216136"]
         assert "22:012299" in result["orphans_heat"]
         assert "34:058721" in result["orphans_heat"]
@@ -4037,7 +4037,7 @@ class TestStripSchemaExtensions:
             "main_tcs": "01:216136",
             "01:216136": {"orphans": ["13:042605"]},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert result["01:216136"]["orphans"] == ["13:042605"]
 
     def test_mixed_tcs_orphans_split(self) -> None:
@@ -4046,7 +4046,7 @@ class TestStripSchemaExtensions:
             "main_tcs": "01:216136",
             "01:216136": {"orphans": ["13:042605", "04:034682", "10:064873"]},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         # Valid actuators (BDR, OTB) stay in TCS orphans
         assert sorted(result["01:216136"]["orphans"]) == [
             "10:064873",
@@ -4061,7 +4061,7 @@ class TestStripSchemaExtensions:
             "main_tcs": "01:216136",
             "01:216136": {"orphans": ["32:123456"]},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "orphans" not in result["01:216136"]
         assert "32:123456" in result["orphans_hvac"]
 
@@ -4072,7 +4072,7 @@ class TestStripSchemaExtensions:
             "main_tcs": "01:145038",
             "01:145038": {},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "_owner" not in result
 
     def test_strips_per_device_owner_trait(self) -> None:
@@ -4084,7 +4084,7 @@ class TestStripSchemaExtensions:
             "orphans_heat": ["04:111111"],
             "04:111111": {"_owner": "me"},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "_owner" not in result
         # Device entry should be empty after stripping (trait-only) → dropped
         assert "04:111111" not in result
@@ -4097,7 +4097,7 @@ class TestStripSchemaExtensions:
             "04:111111": {"_owner": "me"},
             "04:222222": {"_owner": "neighbour"},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "04:222222" not in result  # foreign → dropped
         assert "04:222222" not in result.get("orphans_heat", [])
         assert "04:111111" not in result  # trait-only → dropped from result
@@ -4116,7 +4116,7 @@ class TestStripSchemaExtensions:
             },
             "37:168270": {"_faked": True, "_class": "REM"},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         # _ traits stripped from FAN
         assert "_bound" not in result["32:153289"]
         assert "_scheme" not in result["32:153289"]
@@ -4128,12 +4128,12 @@ class TestStripSchemaExtensions:
         assert "37:168270" not in result.get("orphans_hvac", [])
 
     def test_parity_with_strip_traits_for_validation(self) -> None:
-        """_strip_schema_extensions and strip_traits_for_validation produce
+        """strip_schema_extensions and strip_traits_for_validation produce
         identical results for a schema with CTL, zones, DHW, FAN, REM.
 
-        Both paths go through _strip_and_orchestrate — the config_flow
+        Both paths go through strip_and_orchestrate — the config_flow
         validation path (strip_traits_for_validation) and the gateway
-        runtime path (_strip_schema_extensions) must agree.
+        runtime path (strip_schema_extensions) must agree.
         """
         schema: dict[str, Any] = {
             "main_tcs": "01:150000",
@@ -4161,22 +4161,22 @@ class TestStripSchemaExtensions:
             "orphans_heat": [],
             "orphans_hvac": [],
         }
-        coord_result = RamsesCoordinator._strip_schema_extensions(dict(schema))
+        coord_result = RamsesCoordinator.strip_schema_extensions(dict(schema))
         flow_result = strip_traits_for_validation(dict(schema))
         assert coord_result == flow_result
 
 
 # ───────────────────────────────────────────────────────────────────────
-# Coordinator: _extract_schema_device_ids
+# Coordinator: extract_schema_device_ids
 # ───────────────────────────────────────────────────────────────────────
 
 
 class TestExtractSchemaDeviceIds:
-    """Tests for RamsesCoordinator._extract_schema_device_ids."""
+    """Tests for RamsesCoordinator.extract_schema_device_ids."""
 
     def test_empty_schema(self) -> None:
         """Empty schema returns empty set."""
-        result = RamsesCoordinator._extract_schema_device_ids({})
+        result = RamsesCoordinator.extract_schema_device_ids({})
         assert result == set()
 
     def test_with_devices(self) -> None:
@@ -4185,20 +4185,20 @@ class TestExtractSchemaDeviceIds:
             "main_tcs": "01:123456",
             "01:123456": {"zones": {"01": {"sensor": "04:654321"}}},
         }
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert "01:123456" in result
         assert "04:654321" in result
 
     def test_includes_hgi_entries(self) -> None:
         """HGI (18:) entries are included — needed for discovery sync
-        (issue 987).  _strip_and_orchestrate drops them, but
-        _extract_schema_device_ids operates on the unstripped schema."""
+        (issue 987).  strip_and_orchestrate drops them, but
+        extract_schema_device_ids operates on the unstripped schema."""
         schema = {
             "18:130236": {"_class": "HGI", "_owner": "me"},
             "18:149488": {"_class": "HGI", "_owner": "not-me"},
             "32:153289": {"_class": "FAN"},
         }
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert "18:130236" in result
         assert "18:149488" in result
         assert "32:153289" in result
@@ -4208,7 +4208,7 @@ class TestExtractSchemaDeviceIds:
 
         A device with _owner != root _owner is excluded from the
         known_list (for ramses_rf) but MUST be included in
-        _extract_schema_device_ids so the discovery manager knows it's
+        extract_schema_device_ids so the discovery manager knows it's
         already in the schema and doesn't flag it as "new".
         """
         schema = {
@@ -4218,22 +4218,22 @@ class TestExtractSchemaDeviceIds:
             "orphans_hvac": ["37:154519"],
             "37:154519": {"_class": "FAN", "_owner": "not-me"},
         }
-        result = RamsesCoordinator._extract_schema_device_ids(schema)
+        result = RamsesCoordinator.extract_schema_device_ids(schema)
         assert "01:145038" in result
         assert "37:154519" in result  # foreign but still in schema
 
 
 # ───────────────────────────────────────────────────────────────────────
-# Coordinator: _derive_known_list_from_schema
+# Coordinator: derive_known_list_from_schema
 # ───────────────────────────────────────────────────────────────────────
 
 
 class TestDeriveKnownListFromSchemaExtended:
-    """Tests for RamsesCoordinator._derive_known_list_from_schema."""
+    """Tests for RamsesCoordinator.derive_known_list_from_schema."""
 
     def test_empty_schema(self) -> None:
         """Empty schema returns empty known_list."""
-        result = RamsesCoordinator._derive_known_list_from_schema({})
+        result = RamsesCoordinator.derive_known_list_from_schema({})
         assert result == {}
 
     def test_user_overrides_merged(self) -> None:
@@ -4242,7 +4242,7 @@ class TestDeriveKnownListFromSchemaExtended:
         Phase 4: user_overrides removed — traits live in schema as _ prefixed keys.
         """
         schema = {"01:123456": {"_alias": "Living room"}}
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert result["01:123456"]["alias"] == "Living room"
 
     def test_user_overrides_adds_new_device(self) -> None:
@@ -4252,7 +4252,7 @@ class TestDeriveKnownListFromSchemaExtended:
         appear in the schema structure are included in the known_list.
         """
         schema = {"01:123456": {}}
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "01:123456" in result
         # 04:654321 is not in schema → not in result
         assert "04:654321" not in result
@@ -4260,7 +4260,7 @@ class TestDeriveKnownListFromSchemaExtended:
     def test_non_dict_value_skipped(self) -> None:
         """Non-dict values for device-id keys are handled (id still extracted)."""
         schema = {"01:123456": "not a dict"}
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "01:123456" in result
 
     def test_full_schema_with_all_structures(self) -> None:
@@ -4310,7 +4310,7 @@ class TestDeriveKnownListFromSchemaExtended:
             SZ_ORPHANS_HEAT: ["04:b00000"],
             SZ_ORPHANS_HVAC: ["32:c00000"],
         }
-        result = RamsesCoordinator._derive_known_list_from_schema(schema)
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
         expected_ids = {
             "01:100000",
             "01:200000",
@@ -4378,7 +4378,7 @@ class TestValidateSchemaForRamserf:
             RamsesCoordinator._validate_schema_for_ramserf(schema)
 
     def test_root_level_bound_trait_stripped_passes(self) -> None:
-        """A root-level _bound trait is stripped by _strip_schema_extensions
+        """A root-level _bound trait is stripped by strip_schema_extensions
         (which removes all root-level _ prefixed keys), so validation passes."""
         schema = {
             "main_tcs": "01:145038",
@@ -4417,17 +4417,17 @@ class TestValidateSchemaForRamserf:
 
 
 # ───────────────────────────────────────────────────────────────────────
-# Coordinator: _strip_schema_extensions edge cases
+# Coordinator: strip_schema_extensions edge cases
 # ───────────────────────────────────────────────────────────────────────
 
 
 class TestStripSchemaExtensionsExtended:
-    """Tests for RamsesCoordinator._strip_schema_extensions."""
+    """Tests for RamsesCoordinator.strip_schema_extensions."""
 
     def test_strips_none_values(self) -> None:
         """None values are stripped (e.g. main_tcs: None)."""
         schema = {"main_tcs": None, "01:123456": {}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "main_tcs" not in result
         # Empty device entries are moved to orphans (ramses_rf rejects empty dicts)
         assert "01:123456" not in result
@@ -4436,14 +4436,14 @@ class TestStripSchemaExtensionsExtended:
     def test_hvac_without_remotes_moved_to_orphans(self) -> None:
         """HVAC devices (30:) without remotes/sensors are moved to orphans_hvac."""
         schema = {"30:160000": {}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "30:160000" not in result
         assert "30:160000" in result.get("orphans_hvac", [])
 
     def test_hvac_with_sensors_stays_at_root(self) -> None:
         """HVAC devices with sensors stay at root (valid VCS)."""
         schema = {"30:160000": {"sensors": ["32:123456"]}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "30:160000" in result
         assert "remotes" not in result["30:160000"]
         assert result["30:160000"]["sensors"] == ["32:123456"]
@@ -4451,14 +4451,14 @@ class TestStripSchemaExtensionsExtended:
     def test_heat_empty_moved_to_heat_orphans(self) -> None:
         """Heat devices (01:) with empty dict are moved to orphans_heat."""
         schema = {"01:123456": {}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "01:123456" not in result
         assert "01:123456" in result.get("orphans_heat", [])
 
     def test_strips_device_comments_key(self) -> None:
         """device_comments extension key is stripped."""
         schema = {"01:123456": {}, "device_comments": {"01:123456": "test"}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "device_comments" not in result
 
     def test_disabled_false_adds_to_orphans(self) -> None:
@@ -4469,7 +4469,7 @@ class TestStripSchemaExtensionsExtended:
             "orphans_heat": ["10:064873"],
             "04:034692": {"_disabled": False},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "04:034692" not in result  # trait-only entry dropped
         assert "04:034692" in result.get("orphans_heat", [])
 
@@ -4481,7 +4481,7 @@ class TestStripSchemaExtensionsExtended:
             "orphans_heat": ["10:064873"],
             "04:034692": {"_disabled": True},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "04:034692" not in result
         assert "04:034692" not in result.get("orphans_heat", [])
 
@@ -4493,7 +4493,7 @@ class TestStripSchemaExtensionsExtended:
             "orphans_heat": ["10:064873"],
             "04:034692": {},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "04:034692" not in result
         assert "04:034692" in result.get("orphans_heat", [])
 
@@ -4504,14 +4504,14 @@ class TestStripSchemaExtensionsExtended:
             "01:216136": {},
             "orphans_heat": [],
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert result["01:216136"] == {}
         assert "01:216136" not in result.get("orphans_heat", [])
 
     def test_hvac_empty_dict_moved_to_orphans(self) -> None:
         """HVAC (30:) empty dict is moved to orphans_hvac, not kept at root."""
         schema = {"30:160000": {}}
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "30:160000" not in result
         assert "30:160000" in result.get("orphans_hvac", [])
 
@@ -4523,7 +4523,7 @@ class TestStripSchemaExtensionsExtended:
             "orphans_heat": ["10:064873"],
             "04:034692": {"_skipped": True},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "04:034692" not in result
         assert "04:034692" not in result.get("orphans_heat", [])
 
@@ -4535,7 +4535,7 @@ class TestStripSchemaExtensionsExtended:
             "orphans_heat": ["10:064873"],
             "04:034692": {"_skipped": False},
         }
-        result = RamsesCoordinator._strip_schema_extensions(schema)
+        result = RamsesCoordinator.strip_schema_extensions(schema)
         assert "04:034692" not in result
         assert "04:034692" in result.get("orphans_heat", [])
 
@@ -4547,7 +4547,7 @@ class TestStripSchemaExtensionsExtended:
             "orphans_heat": ["10:064873", "04:034692"],
             "04:034692": {"_skipped": True},
         }
-        kl = RamsesCoordinator._derive_known_list_from_schema(schema)
+        kl = RamsesCoordinator.derive_known_list_from_schema(schema)
         assert "04:034692" not in kl
         assert "10:064873" in kl
         assert "01:216136" in kl
@@ -4660,7 +4660,7 @@ async def test_async_discovery_checkpoint_with_manager(
     mock_client = MagicMock(spec=Gateway)
     mock_client.get_state = MagicMock(return_value=({}, {}))
     coordinator.client = mock_client
-    coordinator._remotes = {}
+    coordinator.remotes = {}
 
     coordinator.discovery_manager = MagicMock()
     coordinator.discovery_manager.check_for_new_devices = MagicMock()
@@ -5772,7 +5772,7 @@ async def test_get_saved_packets_string_format_unknown_device(
 
 
 # ───────────────────────────────────────────────────────────────────────
-# Coordinator: _extract_schema_device_ids edge cases (lines 549-580)
+# Coordinator: extract_schema_device_ids edge cases (lines 549-580)
 # ───────────────────────────────────────────────────────────────────────
 
 
@@ -5782,7 +5782,7 @@ def test_extract_schema_device_ids_non_device_key_skipped() -> None:
         "not_a_device_id": {},
         "01:123456": {},
     }
-    result = RamsesCoordinator._extract_schema_device_ids(schema)
+    result = RamsesCoordinator.extract_schema_device_ids(schema)
     assert "01:123456" in result
     assert "not_a_device_id" not in result
 
@@ -5792,7 +5792,7 @@ def test_extract_schema_device_ids_non_dict_value_skipped() -> None:
     schema: dict[str, Any] = {
         "01:123456": "not a dict",
     }
-    result = RamsesCoordinator._extract_schema_device_ids(schema)
+    result = RamsesCoordinator.extract_schema_device_ids(schema)
     assert "01:123456" in result
     # No sub-devices extracted since value is not a dict
 
@@ -5808,7 +5808,7 @@ def test_extract_schema_device_ids_zone_non_dict_skipped() -> None:
             },
         },
     }
-    result = RamsesCoordinator._extract_schema_device_ids(schema)
+    result = RamsesCoordinator.extract_schema_device_ids(schema)
     assert "01:123456" in result
     assert len(result) == 1  # only the CTL itself
 
@@ -5847,7 +5847,7 @@ async def test_async_setup_starts_discovery_scan(hass: HomeAssistant) -> None:
             coordinator, "_async_start_discovery_scan", new_callable=AsyncMock
         ) as mock_start_scan,
         patch.object(
-            coordinator, "_discover_new_entities", new_callable=AsyncMock
+            coordinator, "discover_new_entities", new_callable=AsyncMock
         ),
         patch.object(
             coordinator,
@@ -5960,7 +5960,7 @@ class TestSyncRemotesToSchema:
 
 
 class TestStripSchemaExtensionsCommands:
-    """Test that _commands is stripped by _strip_schema_extensions."""
+    """Test that _commands is stripped by strip_schema_extensions."""
 
     def test_commands_stripped_from_device(self) -> None:
         """_commands is stripped from device entries."""
@@ -5971,7 +5971,7 @@ class TestStripSchemaExtensionsCommands:
             },
             "main_tcs": "01:123456",
         }
-        stripped = RamsesCoordinator._strip_schema_extensions(schema)
+        stripped = RamsesCoordinator.strip_schema_extensions(schema)
         # _commands should not appear anywhere in the stripped schema
         assert SZ_TR_COMMANDS not in str(stripped)
         assert "_alias" not in str(stripped)
@@ -5981,7 +5981,7 @@ class TestStripSchemaExtensionsCommands:
         schema: dict[str, Any] = {
             "32:153001": {SZ_TR_COMMANDS: {"turn_on": "I --- 22F1"}},
         }
-        stripped = RamsesCoordinator._strip_schema_extensions(schema)
+        stripped = RamsesCoordinator.strip_schema_extensions(schema)
         # The device should be in orphans_hvac (no remotes/sensors keys)
         # but _commands must not appear
         assert SZ_TR_COMMANDS not in str(stripped)
@@ -5995,7 +5995,7 @@ class TestStripSchemaExtensionsCommands:
 async def test_startup_load_commands_from_schema(
     mock_hass: MagicMock, mock_entry: MagicMock
 ) -> None:
-    """Coordinator loads _commands from schema into _remotes at startup.
+    """Coordinator loads _commands from schema into remotes at startup.
 
     Schema _commands has highest precedence (SSOT), overriding any
     commands from .storage[remotes] or known_list[commands].
@@ -6025,9 +6025,9 @@ async def test_startup_load_commands_from_schema(
 
     await coordinator.async_setup()
 
-    # Verify _commands from schema were loaded into _remotes
-    assert rem_id in coordinator._remotes
-    assert coordinator._remotes[rem_id] == commands
+    # Verify _commands from schema were loaded into remotes
+    assert rem_id in coordinator.remotes
+    assert coordinator.remotes[rem_id] == commands
 
 
 async def test_startup_load_schema_commands_override_storage(
@@ -6062,13 +6062,13 @@ async def test_startup_load_schema_commands_override_storage(
     await coordinator.async_setup()
 
     # Schema _commands should win (SSOT — highest precedence)
-    assert coordinator._remotes[rem_id] == schema_commands
+    assert coordinator.remotes[rem_id] == schema_commands
 
 
 async def test_startup_load_legacy_known_list_commands(
     mock_hass: MagicMock, mock_entry: MagicMock
 ) -> None:
-    """Schema _commands are loaded into _remotes on startup.
+    """Schema _commands are loaded into remotes on startup.
 
     Phase 4: known_list[commands] legacy fallback was removed.  Commands
     are loaded from schema _commands (SSOT — highest precedence).
@@ -6097,8 +6097,8 @@ async def test_startup_load_legacy_known_list_commands(
 
     await coordinator.async_setup()
 
-    # Schema _commands should be loaded into _remotes
-    assert coordinator._remotes[rem_id] == schema_commands
+    # Schema _commands should be loaded into remotes
+    assert coordinator.remotes[rem_id] == schema_commands
 
 
 async def test_async_save_client_state_else_branch_syncs_remotes(
@@ -6123,10 +6123,10 @@ async def test_async_save_client_state_else_branch_syncs_remotes(
     mock_coordinator.options = {CONF_SCHEMA: config_schema, SZ_KNOWN_LIST: {}}
 
     # Remotes has commands that need migrating
-    mock_coordinator._remotes = {rem_id: commands}
+    mock_coordinator.remotes = {rem_id: commands}
     mock_coordinator._devices_with_commands = set()  # first-time migration
-    mock_coordinator._entities = {}
-    mock_coordinator._skip_topology_sync = False
+    mock_coordinator.entities = {}
+    mock_coordinator.skip_topology_sync = False
 
     # Learned schema is same as config (no enrichment)
     learned_schema = dict(config_schema)
@@ -6171,11 +6171,11 @@ async def test_async_save_client_state_no_resurrection_of_deleted_commands(
     mock_coordinator.options = {CONF_SCHEMA: config_schema, SZ_KNOWN_LIST: {}}
 
     # Remotes still has the old commands (from .storage)
-    mock_coordinator._remotes = {rem_id: commands}
+    mock_coordinator.remotes = {rem_id: commands}
     # Device previously had _commands — should NOT be resurrected
     mock_coordinator._devices_with_commands = {rem_id}
-    mock_coordinator._entities = {}
-    mock_coordinator._skip_topology_sync = False
+    mock_coordinator.entities = {}
+    mock_coordinator.skip_topology_sync = False
 
     # Learned schema is same as config (no enrichment)
     learned_schema = dict(config_schema)
@@ -6220,10 +6220,10 @@ async def test_async_save_client_state_backup_before_migration(
     }
 
     # Remotes has commands that need migrating
-    mock_coordinator._remotes = {rem_id: commands}
+    mock_coordinator.remotes = {rem_id: commands}
     mock_coordinator._devices_with_commands = set()  # first-time migration
-    mock_coordinator._entities = {}
-    mock_coordinator._skip_topology_sync = False
+    mock_coordinator.entities = {}
+    mock_coordinator.skip_topology_sync = False
 
     # Enriched schema (sync_learned_topology returns a richer schema)
     enriched_schema = {rem_id: {"_class": "REM"}, "main_tcs": "01:123456"}
@@ -6278,9 +6278,9 @@ async def test_async_save_client_state_no_backup_when_already_migrated(
         SZ_KNOWN_LIST: {},
     }
 
-    mock_coordinator._remotes = {rem_id: commands}
-    mock_coordinator._entities = {}
-    mock_coordinator._skip_topology_sync = False
+    mock_coordinator.remotes = {rem_id: commands}
+    mock_coordinator.entities = {}
+    mock_coordinator.skip_topology_sync = False
 
     enriched_schema = dict(config_schema)
     cast(Any, mock_coordinator.client).get_state = MagicMock(
@@ -6325,9 +6325,9 @@ async def test_async_save_client_state_survives_validation_failure(
     original_options = {CONF_SCHEMA: config_schema, SZ_KNOWN_LIST: {}}
     mock_coordinator.options = dict(original_options)
 
-    mock_coordinator._remotes = {rem_id: commands}
-    mock_coordinator._entities = {}
-    mock_coordinator._skip_topology_sync = False
+    mock_coordinator.remotes = {rem_id: commands}
+    mock_coordinator.entities = {}
+    mock_coordinator.skip_topology_sync = False
 
     # Enriched schema that will fail validation
     enriched_schema = {rem_id: {"_class": "REM"}, "main_tcs": "01:123456"}
@@ -6812,7 +6812,7 @@ async def test_discover_new_entities_ufh_circuits(
         ) as mock_update_dev,
     ):
         # Act
-        await mock_coordinator._discover_new_entities()
+        await mock_coordinator.discover_new_entities()
 
     # Assert
     assert len(mock_coordinator._circuits) == 2
@@ -6862,7 +6862,7 @@ async def test_async_update_device_ufh_circuit_metadata_and_parent(
         await mock_coordinator._async_update_device(mock_cct)
 
     # Assert
-    dev_info = mock_coordinator._device_info.get("02:123456_00")
+    dev_info = mock_coordinator.device_info_cache.get("02:123456_00")
     assert dev_info is not None
     assert dev_info["name"] == "UFH Circuit 02:123456_00"
     assert (
@@ -6908,7 +6908,7 @@ async def test_async_update_device_ufh_circuit_future_parent_device(
         await mock_coordinator._async_update_device(mock_cct)
 
     # Assert
-    dev_info = mock_coordinator._device_info.get("02:123456_00")
+    dev_info = mock_coordinator.device_info_cache.get("02:123456_00")
     assert dev_info is not None
     assert dev_info["via_device"] == (DOMAIN, "02:123456")
 
@@ -6962,7 +6962,7 @@ async def test_coordinator_connection_state_logging(
 async def test_coordinator_update_schema_commands(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _async_update_schema_commands with FAN auto-comment, REM auto-comment, and clearing commands."""
+    """Test async_update_schema_commands with FAN auto-comment, REM auto-comment, and clearing commands."""
     mock_coordinator.entry = MagicMock()
     mock_coordinator.entry.options = {
         CONF_SCHEMA: {
@@ -6973,7 +6973,7 @@ async def test_coordinator_update_schema_commands(
     mock_coordinator.hass.config_entries.async_update_entry = MagicMock()
 
     # 1. Update commands on FAN
-    await mock_coordinator._async_update_schema_commands(
+    await mock_coordinator.async_update_schema_commands(
         "32:112233", {"boost": "I ..."}
     )
     saved_schema = mock_coordinator.options[CONF_SCHEMA]
@@ -6984,7 +6984,7 @@ async def test_coordinator_update_schema_commands(
     assert saved_schema["32:112233"][SZ_TR_COMMANDS]["boost"] == "I ..."
 
     # 2. Update commands on REM
-    await mock_coordinator._async_update_schema_commands(
+    await mock_coordinator.async_update_schema_commands(
         "37:223344", {"boost": "I ..."}
     )
     saved_schema = mock_coordinator.options[CONF_SCHEMA]
@@ -6993,7 +6993,7 @@ async def test_coordinator_update_schema_commands(
     )
 
     # 3. Clear commands
-    await mock_coordinator._async_update_schema_commands("32:112233", {})
+    await mock_coordinator.async_update_schema_commands("32:112233", {})
     saved_schema = mock_coordinator.options[CONF_SCHEMA]
     assert SZ_TR_COMMANDS not in saved_schema["32:112233"]
 
@@ -7035,7 +7035,7 @@ def test_coordinator_derive_known_list_mqtt_url(
 def test_extract_pool_hgis_from_schema_accepted(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _extract_pool_hgis_from_schema returns accepted HGIs."""
+    """Test extract_pool_hgis_from_schema returns accepted HGIs."""
     mock_coordinator.entry.options = {
         CONF_SCHEMA: {
             "_owner": "me",
@@ -7055,7 +7055,7 @@ def test_extract_pool_hgis_from_schema_accepted(
     # Should return 18:001111 (primary, now included for LWT detection),
     # 18:002222 (accepted), and 18:004444 (discovery candidate),
     # but NOT 18:003333 (foreign owner)
-    result = mock_coordinator._extract_pool_hgis_from_schema()
+    result = mock_coordinator.extract_pool_hgis_from_schema()
     assert "18:001111" in result  # primary, included for LWT detection
     assert "18:002222" in result
     assert "18:004444" in result
@@ -7066,12 +7066,12 @@ def test_extract_pool_hgis_from_schema_accepted(
 def test_extract_pool_hgis_empty_schema(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _extract_pool_hgis_from_schema with empty schema."""
+    """Test extract_pool_hgis_from_schema with empty schema."""
     mock_coordinator.entry.options = {CONF_SCHEMA: {}}
     mock_coordinator.options = {
         SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
     }
-    assert mock_coordinator._extract_pool_hgis_from_schema() == []
+    assert mock_coordinator.extract_pool_hgis_from_schema() == []
 
 
 def test_extract_pool_hgis_disabled_excluded(
@@ -7087,7 +7087,7 @@ def test_extract_pool_hgis_disabled_excluded(
     mock_coordinator.options = {
         SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
     }
-    result = mock_coordinator._extract_pool_hgis_from_schema()
+    result = mock_coordinator.extract_pool_hgis_from_schema()
     assert "18:002222" not in result
 
 
@@ -7153,20 +7153,20 @@ def test_is_pool_enabled_serial_only_schema_hgis(
 def test_get_primary_hgi_id_from_url(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id extracts HGI from MQTT URL."""
+    """Test get_primary_hgi_id extracts HGI from MQTT URL."""
     mock_coordinator.options = {
         SZ_SERIAL_PORT: {
             SZ_PORT_NAME: "mqtt://broker:1883/RAMSES/GATEWAY/18:001111"
         },
     }
     mock_coordinator.entry.options = {CONF_SCHEMA: {}}
-    assert mock_coordinator._get_primary_hgi_id() == "18:001111"
+    assert mock_coordinator.get_primary_hgi_id() == "18:001111"
 
 
 def test_get_primary_hgi_id_from_conf(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id uses CONF_MQTT_HGI_ID when set."""
+    """Test get_primary_hgi_id uses CONF_MQTT_HGI_ID when set."""
     from custom_components.ramses_cc.const import CONF_MQTT_HGI_ID
 
     mock_coordinator.options = {
@@ -7174,13 +7174,13 @@ def test_get_primary_hgi_id_from_conf(
         CONF_MQTT_HGI_ID: "18:009999",
     }
     mock_coordinator.entry.options = {CONF_SCHEMA: {}}
-    assert mock_coordinator._get_primary_hgi_id() == "18:009999"
+    assert mock_coordinator.get_primary_hgi_id() == "18:009999"
 
 
 def test_get_primary_hgi_id_wildcard_fallback(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id falls back to schema for wildcard MQTT."""
+    """Test get_primary_hgi_id falls back to schema for wildcard MQTT."""
     mock_coordinator.options = {
         SZ_SERIAL_PORT: {SZ_PORT_NAME: "mqtt://broker:1883"},
     }
@@ -7192,25 +7192,25 @@ def test_get_primary_hgi_id_wildcard_fallback(
         }
     }
     # Should return the first accepted HGI from schema
-    result = mock_coordinator._get_primary_hgi_id()
+    result = mock_coordinator.get_primary_hgi_id()
     assert result in ("18:001111", "18:002222")
 
 
 def test_get_primary_hgi_id_serial_returns_none(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id returns None for serial transport."""
+    """Test get_primary_hgi_id returns None for serial transport."""
     mock_coordinator.options = {
         SZ_SERIAL_PORT: {SZ_PORT_NAME: "/dev/ttyUSB0"},
     }
     mock_coordinator.entry.options = {CONF_SCHEMA: {}}
-    assert mock_coordinator._get_primary_hgi_id() is None
+    assert mock_coordinator.get_primary_hgi_id() is None
 
 
 def test_get_primary_hgi_id_skips_sentinel(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id never returns the sentinel 18:000730.
+    """Test get_primary_hgi_id never returns the sentinel 18:000730.
 
     An owned sentinel HGI in the schema must not be selected as the
     primary — it is an internal placeholder, not a real gateway.
@@ -7225,7 +7225,7 @@ def test_get_primary_hgi_id_skips_sentinel(
             "18:001111": {"_class": "HGI", SZ_TR_OWNER: "me"},
         }
     }
-    assert mock_coordinator._get_primary_hgi_id() == "18:001111"
+    assert mock_coordinator.get_primary_hgi_id() == "18:001111"
 
 
 def test_get_primary_hgi_id_sentinel_only_returns_none(
@@ -7241,45 +7241,45 @@ def test_get_primary_hgi_id_sentinel_only_returns_none(
             DEFAULT_HGI_ID: {"_class": "HGI", SZ_TR_OWNER: "me"},
         }
     }
-    assert mock_coordinator._get_primary_hgi_id() is None
+    assert mock_coordinator.get_primary_hgi_id() is None
 
 
 def test_build_explicit_mqtt_url_wildcard() -> None:
-    """Test _build_explicit_mqtt_url appends HGI to wildcard URL."""
-    url = RamsesCoordinator._build_explicit_mqtt_url(
+    """Test build_explicit_mqtt_url appends HGI to wildcard URL."""
+    url = RamsesCoordinator.build_explicit_mqtt_url(
         "mqtt://broker:1883", "18:149488"
     )
     assert url == "mqtt://broker:1883/RAMSES/GATEWAY/18:149488"
 
 
 def test_build_explicit_mqtt_url_with_path() -> None:
-    """Test _build_explicit_mqtt_url appends to existing path."""
-    url = RamsesCoordinator._build_explicit_mqtt_url(
+    """Test build_explicit_mqtt_url appends to existing path."""
+    url = RamsesCoordinator.build_explicit_mqtt_url(
         "mqtt://broker:1883/RAMSES/GATEWAY", "18:149488"
     )
     assert url == "mqtt://broker:1883/RAMSES/GATEWAY/18:149488"
 
 
 def test_build_explicit_mqtt_url_already_has_hgi() -> None:
-    """Test _build_explicit_mqtt_url returns None if HGI already in URL."""
-    url = RamsesCoordinator._build_explicit_mqtt_url(
+    """Test build_explicit_mqtt_url returns None if HGI already in URL."""
+    url = RamsesCoordinator.build_explicit_mqtt_url(
         "mqtt://broker:1883/RAMSES/GATEWAY/18:149488", "18:149488"
     )
     assert url is None
 
 
 def test_build_explicit_mqtt_url_empty() -> None:
-    """Test _build_explicit_mqtt_url returns None for empty inputs."""
-    assert RamsesCoordinator._build_explicit_mqtt_url("", "18:149488") is None
+    """Test build_explicit_mqtt_url returns None for empty inputs."""
+    assert RamsesCoordinator.build_explicit_mqtt_url("", "18:149488") is None
     assert (
-        RamsesCoordinator._build_explicit_mqtt_url("mqtt://broker:1883", "")
+        RamsesCoordinator.build_explicit_mqtt_url("mqtt://broker:1883", "")
         is None
     )
 
 
 def test_build_explicit_mqtt_url_slash_only() -> None:
-    """Test _build_explicit_mqtt_url handles URL with trailing slash."""
-    url = RamsesCoordinator._build_explicit_mqtt_url(
+    """Test build_explicit_mqtt_url handles URL with trailing slash."""
+    url = RamsesCoordinator.build_explicit_mqtt_url(
         "mqtt://broker:1883/", "18:149488"
     )
     assert url is not None
@@ -7287,9 +7287,9 @@ def test_build_explicit_mqtt_url_slash_only() -> None:
 
 
 def test_build_explicit_mqtt_url_invalid() -> None:
-    """Test _build_explicit_mqtt_url returns None on parse error."""
+    """Test build_explicit_mqtt_url returns None on parse error."""
     with patch("urllib.parse.urlparse", side_effect=ValueError("parse error")):
-        result = RamsesCoordinator._build_explicit_mqtt_url(
+        result = RamsesCoordinator.build_explicit_mqtt_url(
             "mqtt://broker:1883", "18:149488"
         )
     assert result is None
@@ -7609,7 +7609,7 @@ async def test_mqtt_hgi_discovery_auto_owns_primary(
     for the user to accept it (issue 1020/R102).
     """
     mock_coordinator.entry.options = {CONF_SCHEMA: {SZ_OWNER: "me"}}
-    mock_coordinator._get_primary_hgi_id = MagicMock(  # noqa: SLF001
+    mock_coordinator.get_primary_hgi_id = MagicMock(  # noqa: SLF001
         return_value="18:001234"
     )
 
@@ -7643,7 +7643,7 @@ async def test_mqtt_hgi_discovery_backfills_owner_on_primary(
             },
         }
     }
-    mock_coordinator._get_primary_hgi_id = MagicMock(  # noqa: SLF001
+    mock_coordinator.get_primary_hgi_id = MagicMock(  # noqa: SLF001
         return_value="18:001234"
     )
 
@@ -7675,7 +7675,7 @@ async def test_mqtt_hgi_discovery_respects_removed_primary(
             },
         }
     }
-    mock_coordinator._get_primary_hgi_id = MagicMock(  # noqa: SLF001
+    mock_coordinator.get_primary_hgi_id = MagicMock(  # noqa: SLF001
         return_value="18:001234"
     )
 
@@ -7835,7 +7835,7 @@ def test_get_accepted_hgi_ids_excludes_sentinel(
     assert DEFAULT_HGI_ID not in accepted
 
 
-# -- _extract_pool_hgis_from_schema with no root owner --------------------
+# -- extract_pool_hgis_from_schema with no root owner --------------------
 
 
 def test_extract_pool_hgis_no_root_owner(
@@ -7865,7 +7865,7 @@ def test_extract_pool_hgis_no_root_owner(
         },
     }
     mock_coordinator.entry.options = mock_coordinator.options
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     assert "18:001111" in pool_hgis
     assert "18:002222" in pool_hgis
     assert "18:003333" not in pool_hgis
@@ -8168,7 +8168,7 @@ def test_extract_pool_hgis_excludes_zigbee_members(
     }
     mock_coordinator.entry.options = mock_coordinator.options
 
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     assert "18:001111" in pool_hgis
     assert "18:002222" in pool_hgis
     assert "18:254172" not in pool_hgis
@@ -8193,7 +8193,7 @@ def test_extract_pool_hgis_zigbee_primary_port_excludes(
     }
     mock_coordinator.entry.options = mock_coordinator.options
 
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     assert "18:001111" in pool_hgis
     assert "18:254172" not in pool_hgis
 
@@ -8281,7 +8281,7 @@ def test_extract_pool_hgis_with_root_owner_and_ownerless(
         },
     }
     mock_coordinator.entry.options = mock_coordinator.options
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     # Primary 18:001111 is included (for LWT detection)
     assert "18:001111" in pool_hgis
     # Accepted: 18:002222
@@ -8317,17 +8317,17 @@ async def test_async_sync_topology_with_discovery_manager(
     mock_coordinator._scan = mock_scan
     mock_dm = MagicMock()
     mock_coordinator.discovery_manager = mock_dm
-    mock_coordinator._zones = []
+    mock_coordinator.zones = []
 
     with (
         patch.object(mock_coordinator, "async_save_client_state"),
         patch.object(mock_coordinator, "_register_pool_hgis"),
         patch.object(mock_coordinator, "_check_rf_contradictions"),
         patch.object(
-            mock_coordinator, "_extract_schema_device_ids", return_value=set()
+            mock_coordinator, "extract_schema_device_ids", return_value=set()
         ),
         patch.object(
-            mock_coordinator, "_extract_foreign_device_ids", return_value=set()
+            mock_coordinator, "extract_foreign_device_ids", return_value=set()
         ),
     ):
         await mock_coordinator.async_sync_topology(MagicMock())
@@ -8569,7 +8569,7 @@ async def test_async_probe_serial_ports_marks_hgi_usb_capable(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
     with patch("glob.glob", return_value=["/dev/ttyACM0"]):
         await mock_coordinator._async_probe_serial_ports("/dev/ttyACM0", None)
     # async_update_entry should have been called with updated schema
@@ -8596,7 +8596,7 @@ async def test_async_probe_serial_ports_preserves_existing_preferred_type(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
     with patch("glob.glob", return_value=["/dev/ttyACM0"]):
         await mock_coordinator._async_probe_serial_ports("/dev/ttyACM0", None)
     call_args = (
@@ -8622,7 +8622,7 @@ async def test_async_probe_serial_ports_updates_comment_with_mqtt(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
     with patch("glob.glob", return_value=["/dev/ttyACM0"]):
         await mock_coordinator._async_probe_serial_ports("/dev/ttyACM0", None)
     call_args = (
@@ -8645,7 +8645,7 @@ async def test_async_probe_serial_ports_skips_foreign_hgi(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value=None)
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value=None)
     with patch("glob.glob", return_value=["/dev/ttyACM0"]):
         await mock_coordinator._async_probe_serial_ports("/dev/ttyACM0", None)
     # No changes → async_update_entry should not be called
@@ -8671,7 +8671,7 @@ async def test_async_probe_serial_ports_does_not_auto_populate_additional_ports(
         CONF_ADDITIONAL_PORTS: [],
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
     with patch("glob.glob", return_value=["/dev/ttyACM0", "/dev/ttyACM1"]):
         await mock_coordinator._async_probe_serial_ports("/dev/ttyACM0", None)
     # Verify additional_ports was NOT modified (no auto-add)
@@ -8701,7 +8701,7 @@ async def test_async_probe_serial_ports_no_auto_populate_when_already_configured
         CONF_ADDITIONAL_PORTS: ["/dev/ttyACM1"],
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
     with patch("glob.glob", return_value=["/dev/ttyACM0", "/dev/ttyACM1"]):
         await mock_coordinator._async_probe_serial_ports("/dev/ttyACM0", None)
     call_args = (
@@ -8739,7 +8739,7 @@ async def test_async_probe_serial_ports_skips_non_hgi_devices(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
     with patch("glob.glob", return_value=["/dev/ttyACM0"]):
         await mock_coordinator._async_probe_serial_ports("/dev/ttyACM0", None)
     call_args = (
@@ -8769,7 +8769,7 @@ async def test_register_pool_hgis_adds_serial_child_as_candidate(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
 
     # Simulate a pool transport with a discovered child HGI
     mock_transport = MagicMock()
@@ -8810,7 +8810,7 @@ async def test_register_pool_hgis_does_not_add_modbus_as_candidate(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
 
     # Simulate a pool transport — but with no HGI IDs (modbus doesn't
     # respond to !I, so no HGI ID is learned)
@@ -9181,7 +9181,7 @@ def test_primary_hgi_not_added_to_schema_at_startup(
 
     # _register_pool_hgis should NOT add the primary HGI to the schema
     schema = dict(mock_coordinator.options[CONF_SCHEMA])
-    primary_hgi = mock_coordinator._get_primary_hgi_id()
+    primary_hgi = mock_coordinator.get_primary_hgi_id()
     assert primary_hgi == "18:130236"
 
     # Simulate the _register_pool_hgis logic for the "not in schema" branch
@@ -9199,7 +9199,7 @@ def test_primary_hgi_not_added_to_schema_at_startup(
 def test_get_primary_hgi_id_from_schema(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id finds primary HGI from schema (wildcard MQTT)."""
+    """Test get_primary_hgi_id finds primary HGI from schema (wildcard MQTT)."""
     schema = {
         "_owner": "me",
         "18:001111": {
@@ -9221,14 +9221,14 @@ def test_get_primary_hgi_id_from_schema(
     }
     # entry.options must be a real dict, not a MagicMock
     mock_coordinator.entry.options = dict(mock_coordinator.options)
-    result = mock_coordinator._get_primary_hgi_id()
+    result = mock_coordinator.get_primary_hgi_id()
     assert result == "18:001111"
 
 
 def test_get_primary_hgi_id_skips_disabled(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id skips disabled HGIs."""
+    """Test get_primary_hgi_id skips disabled HGIs."""
     schema = {
         "_owner": "me",
         "18:001111": {
@@ -9246,14 +9246,14 @@ def test_get_primary_hgi_id_skips_disabled(
         CONF_SCHEMA: schema,
     }
     mock_coordinator.entry.options = dict(mock_coordinator.options)
-    result = mock_coordinator._get_primary_hgi_id()
+    result = mock_coordinator.get_primary_hgi_id()
     assert result == "18:002222"
 
 
 def test_get_primary_hgi_id_skips_removed(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id skips removed HGIs."""
+    """Test get_primary_hgi_id skips removed HGIs."""
     schema = {
         "_owner": "me",
         "18:001111": {
@@ -9271,7 +9271,7 @@ def test_get_primary_hgi_id_skips_removed(
         CONF_SCHEMA: schema,
     }
     mock_coordinator.entry.options = dict(mock_coordinator.options)
-    result = mock_coordinator._get_primary_hgi_id()
+    result = mock_coordinator.get_primary_hgi_id()
     assert result == "18:002222"
 
 
@@ -9411,7 +9411,7 @@ async def test_dual_usb_pool_both_children_discovered(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
 
     # Simulate two serial children both discovered via !I
     mock_transport = MagicMock()
@@ -9522,8 +9522,8 @@ async def test_empty_serial_port_list_no_crash(
         CONF_ADDITIONAL_PORTS: [],
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
-    mock_coordinator._suppress_reload = 0
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.suppress_reload = 0
 
     # No USB ports found at all
     with patch("glob.glob", return_value=[]):
@@ -9558,7 +9558,7 @@ async def test_stale_serial_port_graceful_handling(
         CONF_ADDITIONAL_PORTS: ["/dev/serial/by-id/usb-STALE-PORT"],
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
 
     # Simulate a pool transport where the stale port's child is
     # disconnected — pool_hgi_ids only has the primary
@@ -9644,7 +9644,7 @@ async def test_mixed_firmware_pool_esp32_and_hgi80(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
 
     # ESP32-S3 learned via !I, HGI80 via configured_hgi_id
     mock_transport = MagicMock()
@@ -9690,7 +9690,7 @@ async def test_triple_firmware_pool_all_types(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
 
     mock_transport = MagicMock()
     mock_transport.get_extra_info.return_value = [
@@ -9909,7 +9909,7 @@ async def test_hgi_lost_from_transport_schema_preserved(
         },
     }
     mock_coordinator.options = mock_coordinator.entry.options
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
 
     # Transport only reports 18:149488 (18:130236 disconnected)
     mock_transport = MagicMock()
@@ -10018,7 +10018,7 @@ def test_extract_pool_hgis_corrupt_entries(
         }
     }
 
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     assert "18:130236" not in pool_hgis
     assert "18:149488" not in pool_hgis
     assert "18:001111" in pool_hgis
@@ -10033,7 +10033,7 @@ def test_extract_pool_hgis_empty_schema_only_owner(
         CONF_SCHEMA: {SZ_OWNER: "me"},
     }
 
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     assert len(pool_hgis) == 0
 
 
@@ -10055,7 +10055,7 @@ def test_extract_pool_hgis_non_18_invalid(
         }
     }
 
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     assert "32:150000" not in pool_hgis
     assert "18:130236" in pool_hgis
 
@@ -10081,7 +10081,7 @@ def test_extract_pool_hgis_foreign_owner_excluded(
         }
     }
 
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     assert "18:130236" in pool_hgis
     assert "18:149488" not in pool_hgis
     assert "18:333333" in pool_hgis  # Candidate (no owner)
@@ -10120,8 +10120,8 @@ def test_mqtt_hgi_id_triggers_mqtt_pool_with_serial_primary(
     }
     mock_coordinator.options = mock_coordinator.entry.options
 
-    # _extract_pool_hgis_from_schema should return the MQTT HGI
-    pool_hgis = mock_coordinator._extract_pool_hgis_from_schema()
+    # extract_pool_hgis_from_schema should return the MQTT HGI
+    pool_hgis = mock_coordinator.extract_pool_hgis_from_schema()
     assert "18:130140" in pool_hgis
 
 
@@ -10131,7 +10131,7 @@ def test_mqtt_hgi_id_end_to_end_bridge_created(
     """End-to-end _create_client: mqtt_hgi_id + serial primary triggers pool.
 
     Verifies the full _create_client flow: _has_mqtt is True (because
-    mqtt_hgi_id is set), _extract_pool_hgis_from_schema returns the HGI,
+    mqtt_hgi_id is set), extract_pool_hgis_from_schema returns the HGI,
     and _create_hybrid_pool_transport_constructor is called with the
     HGI in mqtt_hgi_ids.
 
@@ -10421,8 +10421,8 @@ def test_exclude_all_serial_hgis_from_mqtt_pool(
     mock_gwy.device_registry = MagicMock()
     mock_gwy.device_registry.device_by_id = {}
 
-    # Call _discover_new_entities which contains the exclusion logic
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    # Call discover_new_entities which contains the exclusion logic
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     # Both serial HGIs should be excluded
     assert "18:130236" in mock_coordinator._excluded_serial_hgi_ids
@@ -10478,7 +10478,7 @@ def test_serial_rx_does_not_verify_unmapped_hgi_identity(
     gateway.device_registry.device_by_id = {}
     mock_coordinator.client = gateway
 
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     mock_bridge.exclude_hgi_id.assert_not_called()
     assert mock_coordinator._excluded_serial_hgi_ids == set()
@@ -10531,7 +10531,7 @@ def test_anonymous_serial_child_does_not_exclude_active_mqtt_hgi(
     gateway.device_registry.device_by_id = {}
     mock_coordinator.client = gateway
 
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     mock_bridge.exclude_hgi_id.assert_not_called()
     assert mock_coordinator._excluded_serial_hgi_ids == set()
@@ -10596,7 +10596,7 @@ def test_exclude_serial_hgi_updates_schema_comment_without_usb(
         side_effect=_persist_entry
     )
 
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     # Schema should be updated to include 'usb'
     updated_schema = mock_coordinator.entry.options[CONF_SCHEMA]
@@ -10651,7 +10651,7 @@ def test_exclude_serial_hgi_skips_already_excluded(
     mock_gwy.device_registry = MagicMock()
     mock_gwy.device_registry.device_by_id = {}
 
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     # exclude_hgi_id should NOT be called again for already-excluded HGI
     mock_bridge.exclude_hgi_id.assert_not_called()
@@ -10709,7 +10709,7 @@ def test_exclude_serial_hgi_skips_child_with_no_packets(
     mock_gwy.device_registry = MagicMock()
     mock_gwy.device_registry.device_by_id = {}
 
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     mock_bridge.exclude_hgi_id.assert_not_called()
     assert "18:130236" not in mock_coordinator._excluded_serial_hgi_ids
@@ -10755,7 +10755,7 @@ def test_unexclude_serial_hgi_when_serial_leg_gone(
     mock_gwy.device_registry = MagicMock()
     mock_gwy.device_registry.device_by_id = {}
 
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     mock_bridge.unexclude_hgi_id.assert_called_once_with("18:999999")
     assert "18:999999" not in mock_coordinator._excluded_serial_hgi_ids
@@ -10816,7 +10816,7 @@ def test_exclude_serial_hgi_schema_comment_usb_only(
         side_effect=_persist_entry
     )
 
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     updated_schema = mock_coordinator.entry.options[CONF_SCHEMA]
     assert updated_schema["18:130236"]["_comment"] == build_hgi_comment(
@@ -10869,7 +10869,7 @@ def test_exclude_serial_hgi_handles_transport_exception(
     mock_gwy.device_registry.device_by_id = {}
 
     # Should not raise — exception is caught
-    asyncio.run(mock_coordinator._discover_new_entities())  # type: ignore[arg-type]
+    asyncio.run(mock_coordinator.discover_new_entities())  # type: ignore[arg-type]
 
     # With the children uninspectable, no serial leg can be proven to
     # have delivered packets — the active HGI (which may be an
@@ -10899,7 +10899,7 @@ def test_get_accepted_hgi_ids_disabled_and_foreign(
             },
         }
     }
-    mock_coordinator._get_primary_hgi_id = MagicMock(return_value="18:001111")
+    mock_coordinator.get_primary_hgi_id = MagicMock(return_value="18:001111")
 
     accepted = mock_coordinator._get_accepted_hgi_ids()
     assert "18:130236" in accepted
@@ -11061,13 +11061,13 @@ def test_extract_device_ids_from_stripped_full_schema() -> None:
     assert "not_a_device_id" not in result
 
 
-# -- Coverage: _get_primary_hgi_id _removed_from_pool (lines 1733, 1740-1749) --
+# -- Coverage: get_primary_hgi_id _removed_from_pool (lines 1733, 1740-1749) --
 
 
 def test_get_primary_hgi_id_mqtt_ha_skips_removed_from_pool(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id skips HGIs with _removed_from_pool (mqtt_ha)."""
+    """Test get_primary_hgi_id skips HGIs with _removed_from_pool (mqtt_ha)."""
     mock_coordinator.options[SZ_SERIAL_PORT] = {SZ_PORT_NAME: "mqtt_ha"}
     mock_coordinator.options[CONF_MQTT_HGI_ID] = (
         DEFAULT_HGI_ID  # force fallback
@@ -11084,14 +11084,14 @@ def test_get_primary_hgi_id_mqtt_ha_skips_removed_from_pool(
             SZ_TR_OWNER: "me",
         },
     }
-    result = mock_coordinator._get_primary_hgi_id()
+    result = mock_coordinator.get_primary_hgi_id()
     assert result == "18:002222"
 
 
 def test_get_primary_hgi_id_mqtt_url_skips_removed_from_pool(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test _get_primary_hgi_id skips _removed_from_pool (mqtt:// wildcard)."""
+    """Test get_primary_hgi_id skips _removed_from_pool (mqtt:// wildcard)."""
     mock_coordinator.options[SZ_SERIAL_PORT] = {
         SZ_PORT_NAME: "mqtt://localhost:1883/RAMSES/GATEWAY"
     }
@@ -11113,7 +11113,7 @@ def test_get_primary_hgi_id_mqtt_url_skips_removed_from_pool(
             SZ_TR_OWNER: "me",
         },
     }
-    result = mock_coordinator._get_primary_hgi_id()
+    result = mock_coordinator.get_primary_hgi_id()
     assert result == "18:003333"
 
 
@@ -11160,7 +11160,7 @@ async def test_async_force_update_delegates(
 ) -> None:
     """Test async_force_update clears entity caches and refreshes."""
     mock_entity = MagicMock()
-    mock_coordinator._entities = {"test": mock_entity}
+    mock_coordinator.entities = {"test": mock_entity}
     mock_coordinator.async_refresh = AsyncMock()
     await mock_coordinator.async_force_update(MagicMock())
     mock_coordinator.async_refresh.assert_called_once()
@@ -11536,7 +11536,7 @@ async def test_discover_new_entities_owner_gate(
             "custom_components.ramses_cc.coordinator.async_dispatcher_send"
         ) as mock_dispatch,
     ):
-        await mock_coordinator._discover_new_entities()
+        await mock_coordinator.discover_new_entities()
 
     dispatched_ids = {
         d.id for c in cast(Any, mock_dispatch).call_args_list for d in c[0][2]

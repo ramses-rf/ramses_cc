@@ -625,7 +625,7 @@ async def test_setup_adds_buttons_for_known_devices(
     # Arrange
     entry = _make_entry(mock_coordinator)
     mock_add_entities = MagicMock()
-    mock_coordinator._devices = [mock_hgi]
+    mock_coordinator.devices = [mock_hgi]
 
     # Act
     with _patch_device_slug(), _patch_platform({}):
@@ -654,7 +654,7 @@ async def test_setup_without_devices_logs_no_entities(
     # Arrange
     entry = _make_entry(mock_coordinator)
     mock_add_entities = MagicMock()
-    mock_coordinator._devices = []
+    mock_coordinator.devices = []
 
     # Act
     with _patch_platform({}):

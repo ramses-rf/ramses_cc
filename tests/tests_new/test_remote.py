@@ -54,7 +54,7 @@ VALID_PACKET = "RQ --- 30:123456 18:111111 --:------ 22F1 003 000030"
 def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     """Return a mock coordinator with required internal structures."""
     coordinator = MagicMock()
-    coordinator._remotes = {REMOTE_ID: {"boost": VALID_PACKET}}
+    coordinator.remotes = {REMOTE_ID: {"boost": VALID_PACKET}}
 
     # for Learn command
     coordinator.learn_device_id = None
@@ -67,7 +67,7 @@ def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     mock_sem = MagicMock()
     mock_sem.__enter__ = MagicMock(return_value=None)
     mock_sem.__exit__ = MagicMock(return_value=None)
-    coordinator._sem = mock_sem
+    coordinator.learn_sem = mock_sem
 
     coordinator.client = MagicMock()
     coordinator.client.async_send_raw_command = AsyncMock()
@@ -85,7 +85,7 @@ def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     coordinator.get_all_fan_params = MagicMock()
 
     # Phase 3a: async schema command writes
-    coordinator._async_update_schema_commands = AsyncMock()
+    coordinator.async_update_schema_commands = AsyncMock()
 
     # Proactive: Mock service_handler just in case logic traverses it
     coordinator.service_handler = MagicMock()
@@ -799,10 +799,8 @@ async def test_remote_send_command_no_client(
 async def test_add_command_writes_to_schema(
     remote_entity: RamsesRemote, mock_coordinator: MagicMock
 ) -> None:
-    """add_command calls _async_update_schema_commands with updated commands."""
-    cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
-    ).reset_mock()
+    """add_command calls async_update_schema_commands with updated commands."""
+    cast(MagicMock, mock_coordinator.async_update_schema_commands).reset_mock()
 
     with patch("custom_components.ramses_cc.remote.parse_packet_string"):
         await remote_entity.async_add_command("my_boost", VALID_PACKET)
@@ -811,10 +809,10 @@ async def test_add_command_writes_to_schema(
     assert remote_entity._commands["my_boost"] == VALID_PACKET
     # Verify schema write was called with device ID + full commands dict
     cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).assert_awaited_once()
     call_args = cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).call_args
     assert call_args[0][0] == REMOTE_ID  # device_id
     assert call_args[0][1] == remote_entity._commands  # full commands dict
@@ -827,9 +825,7 @@ async def test_add_command_overwrite_writes_to_schema(
     remote_entity._commands = {"boost": VALID_PACKET}
 
     # Reset mock to clear any setup calls
-    cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
-    ).reset_mock()
+    cast(MagicMock, mock_coordinator.async_update_schema_commands).reset_mock()
 
     with patch("custom_components.ramses_cc.remote.parse_packet_string"):
         await remote_entity.async_add_command(
@@ -842,13 +838,13 @@ async def test_add_command_overwrite_writes_to_schema(
     # add_command calls delete first (if exists), then add — so 2 calls
     assert (
         cast(
-            MagicMock, mock_coordinator._async_update_schema_commands
+            MagicMock, mock_coordinator.async_update_schema_commands
         ).await_count
         == 2
     )
     # Last call should have the updated commands
     last_call = cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).call_args
     assert last_call[0][1] == remote_entity._commands
 
@@ -856,11 +852,9 @@ async def test_add_command_overwrite_writes_to_schema(
 async def test_delete_command_writes_to_schema(
     remote_entity: RamsesRemote, mock_coordinator: MagicMock
 ) -> None:
-    """delete_command calls _async_update_schema_commands with remaining commands."""
+    """delete_command calls async_update_schema_commands with remaining commands."""
     remote_entity._commands = {"boost": VALID_PACKET, "speed_1": VALID_PACKET}
-    cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
-    ).reset_mock()
+    cast(MagicMock, mock_coordinator.async_update_schema_commands).reset_mock()
 
     await remote_entity.async_delete_command(["boost"])
 
@@ -869,10 +863,10 @@ async def test_delete_command_writes_to_schema(
     assert "speed_1" in remote_entity._commands
     # Verify schema write was called with the remaining commands
     cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).assert_awaited_once()
     call_args = cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).call_args
     assert call_args[0][0] == REMOTE_ID
     assert call_args[0][1] == remote_entity._commands
@@ -883,21 +877,19 @@ async def test_delete_command_empty_dict_writes_to_schema(
 ) -> None:
     """Deleting the last command writes empty dict to schema (removes _commands)."""
     remote_entity._commands = {"boost": VALID_PACKET}
-    cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
-    ).reset_mock()
+    cast(MagicMock, mock_coordinator.async_update_schema_commands).reset_mock()
 
     await remote_entity.async_delete_command(["boost"])
 
     assert remote_entity._commands == {}
-    # _async_update_schema_commands should be called with empty dict
+    # async_update_schema_commands should be called with empty dict
     # (coordinator deletes _commands key when dict is empty)
     cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).assert_awaited_once()
     assert (
         cast(
-            MagicMock, mock_coordinator._async_update_schema_commands
+            MagicMock, mock_coordinator.async_update_schema_commands
         ).call_args[0][1]
         == {}
     )
@@ -1049,9 +1041,7 @@ async def test_learn_command_callback_writes_to_schema(
     hard to test in isolation due to asyncio.Event + state tracking).
     """
     remote_entity.hass = hass
-    cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
-    ).reset_mock()
+    cast(MagicMock, mock_coordinator.async_update_schema_commands).reset_mock()
 
     # Build the callback by starting learn_command and capturing it
     learning_session = asyncio.Event()
@@ -1068,7 +1058,7 @@ async def test_learn_command_callback_writes_to_schema(
         ):
             remote_entity._commands["learned_cmd"] = new_data["packet"]
             learning_session.set()
-            await remote_entity.coordinator._async_update_schema_commands(
+            await remote_entity.coordinator.async_update_schema_commands(
                 remote_entity._device.id, remote_entity._commands
             )
 
@@ -1094,10 +1084,10 @@ async def test_learn_command_callback_writes_to_schema(
     assert remote_entity._commands.get("learned_cmd") == "learned_packet_789"
     # Verify schema write was called
     cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).assert_awaited_once()
     call_args = cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).call_args
     assert call_args[0][0] == REMOTE_ID
     assert call_args[0][1]["learned_cmd"] == "learned_packet_789"
@@ -1110,9 +1100,7 @@ async def test_learn_command_callback_ignores_wrong_src(
 ) -> None:
     """learn_command callback does not write to schema when src doesn't match."""
     remote_entity.hass = hass
-    cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
-    ).reset_mock()
+    cast(MagicMock, mock_coordinator.async_update_schema_commands).reset_mock()
 
     learning_session = asyncio.Event()
 
@@ -1127,7 +1115,7 @@ async def test_learn_command_callback_ignores_wrong_src(
         ):
             remote_entity._commands["bad_cmd"] = new_data["packet"]
             learning_session.set()
-            await remote_entity.coordinator._async_update_schema_commands(
+            await remote_entity.coordinator.async_update_schema_commands(
                 remote_entity._device.id, remote_entity._commands
             )
 
@@ -1154,7 +1142,7 @@ async def test_learn_command_callback_ignores_wrong_src(
     assert not learning_session.is_set()
     # Verify schema write was NOT called
     cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).assert_not_awaited()
 
 
@@ -1165,9 +1153,7 @@ async def test_learn_command_callback_ignores_wrong_code(
 ) -> None:
     """learn_command callback ignores packets with unsupported codes."""
     remote_entity.hass = hass
-    cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
-    ).reset_mock()
+    cast(MagicMock, mock_coordinator.async_update_schema_commands).reset_mock()
 
     learning_session = asyncio.Event()
 
@@ -1182,7 +1168,7 @@ async def test_learn_command_callback_ignores_wrong_code(
         ):
             remote_entity._commands["bad_cmd"] = new_data["packet"]
             learning_session.set()
-            await remote_entity.coordinator._async_update_schema_commands(
+            await remote_entity.coordinator.async_update_schema_commands(
                 remote_entity._device.id, remote_entity._commands
             )
 
@@ -1208,7 +1194,7 @@ async def test_learn_command_callback_ignores_wrong_code(
     assert "bad_cmd" not in remote_entity._commands
     assert not learning_session.is_set()
     cast(
-        MagicMock, mock_coordinator._async_update_schema_commands
+        MagicMock, mock_coordinator.async_update_schema_commands
     ).assert_not_awaited()
 
 
@@ -1412,7 +1398,7 @@ def mock_fan_device() -> MagicMock:
 def fan_coordinator(hass: HomeAssistant) -> MagicMock:
     """Return a mock coordinator for FAN entity tests."""
     coordinator = MagicMock()
-    coordinator._remotes = {
+    coordinator.remotes = {
         FAN_ID: {
             "bypass_on": {"verb": "W", "code": "22F7", "payload": "0000EF"}
         },
@@ -1421,16 +1407,16 @@ def fan_coordinator(hass: HomeAssistant) -> MagicMock:
     coordinator.learn_device_id = None
     coordinator.fan_handler = MagicMock()
     coordinator.fan_handler._fan_bound_to_remote = {BOUND_REM_ID: FAN_ID}
-    coordinator._sem = MagicMock()
-    coordinator._sem.__enter__ = MagicMock(return_value=None)
-    coordinator._sem.__exit__ = MagicMock(return_value=None)
+    coordinator.learn_sem = MagicMock()
+    coordinator.learn_sem.__enter__ = MagicMock(return_value=None)
+    coordinator.learn_sem.__exit__ = MagicMock(return_value=None)
     coordinator.client = MagicMock()
     coordinator.client.async_send_raw_command = AsyncMock()
     coordinator.client.async_send_cmd = (
         coordinator.client.async_send_raw_command
     )
     coordinator.async_refresh = AsyncMock()
-    coordinator._async_update_schema_commands = AsyncMock()
+    coordinator.async_update_schema_commands = AsyncMock()
     coordinator.options = {
         "schema": {
             FAN_ID: {"_class": "FAN", "_bound": [BOUND_REM_ID]},
@@ -1478,7 +1464,7 @@ def test_fan_entity_loads_own_commands(
     mock_fan_device: MagicMock,
     hass: HomeAssistant,
 ) -> None:
-    """FAN entity loads its own _commands (dicts) from coordinator._remotes."""
+    """FAN entity loads its own _commands (dicts) from coordinator.remotes."""
     desc = RamsesRemoteEntityDescription(key="remote")
     entity = RamsesRemote(fan_coordinator, mock_fan_device, desc)
     entity.hass = hass
@@ -1574,10 +1560,10 @@ async def test_fan_add_command_parses_to_dict(
     # Use a valid packet for Command validation
     valid_packet = "RQ --- 32:153001 30:160000 --:------ 22F1 003 000030"
     await fan_remote_entity.async_add_command("calendar_on", valid_packet)
-    # Verify _async_update_schema_commands was called with dict format
-    fan_coordinator._async_update_schema_commands.assert_called_once()
+    # Verify async_update_schema_commands was called with dict format
+    fan_coordinator.async_update_schema_commands.assert_called_once()
     saved_commands = (
-        fan_coordinator._async_update_schema_commands.call_args.args[1]
+        fan_coordinator.async_update_schema_commands.call_args.args[1]
     )
     assert "calendar_on" in saved_commands
     assert _is_command_dict(saved_commands["calendar_on"])
@@ -1589,9 +1575,9 @@ async def test_rem_add_command_keeps_string(
 ) -> None:
     """REM entity add_command stores packet string as-is (backward compat)."""
     await remote_entity.async_add_command("test_cmd", VALID_PACKET)
-    mock_coordinator._async_update_schema_commands.assert_called_once()
+    mock_coordinator.async_update_schema_commands.assert_called_once()
     saved_commands = (
-        mock_coordinator._async_update_schema_commands.call_args.args[1]
+        mock_coordinator.async_update_schema_commands.call_args.args[1]
     )
     assert saved_commands["test_cmd"] == VALID_PACKET
     assert not _is_command_dict(saved_commands["test_cmd"])
@@ -1916,7 +1902,7 @@ async def test_send_command_builtin_not_persisted(
     await entity.async_send_command("high_15")
 
     assert "high_15" not in entity._commands
-    mock_coordinator._async_update_schema_commands.assert_not_called()
+    mock_coordinator.async_update_schema_commands.assert_not_called()
 
 
 async def test_send_command_empty_builtin_falls_back_to_set_fan_mode(
@@ -2039,7 +2025,7 @@ async def test_async_learn_command_rem_and_fan_success(
         ),
         patch.object(
             remote_entity.coordinator,
-            "_async_update_schema_commands",
+            "async_update_schema_commands",
             AsyncMock(),
         ),
     ):

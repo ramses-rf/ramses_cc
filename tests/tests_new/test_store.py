@@ -425,7 +425,7 @@ async def test_save_client_state_remotes(
 
     # Cast methods to MagicMock to access test attributes
     cast(MagicMock, mock_coordinator.client.get_state).return_value = ({}, {})
-    mock_coordinator._remotes = {REM_ID: {"boost": "packet_data"}}
+    mock_coordinator.remotes = {REM_ID: {"boost": "packet_data"}}
 
     # Reset mocks to clear any setup calls
     cast(MagicMock, mock_coordinator.store.async_save).reset_mock()
@@ -437,7 +437,7 @@ async def test_save_client_state_remotes(
     args = cast(MagicMock, mock_coordinator.store.async_save).call_args[0]
     saved_remotes = args[2]
 
-    assert saved_remotes == mock_coordinator._remotes
+    assert saved_remotes == mock_coordinator.remotes
 
 
 async def test_save_client_state_filters_removed_children_from_cache(
@@ -470,7 +470,7 @@ async def test_save_client_state_filters_removed_children_from_cache(
         **mock_coordinator.entry.options,
         CONF_SCHEMA: config_schema,
     }
-    mock_coordinator._removed_devices = {"01:123456_04", "01:123456_HW"}
+    mock_coordinator.removed_devices = {"01:123456_04", "01:123456_HW"}
     mock_save = AsyncMock()
     mock_coordinator.store.async_save = mock_save
     cast(MagicMock, mock_coordinator.client.get_state).return_value = (

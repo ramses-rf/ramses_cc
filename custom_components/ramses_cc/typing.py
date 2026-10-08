@@ -75,7 +75,7 @@ class FanParamDevice(Protocol):
 class PendingEntity(Protocol):
     """Protocol for entities supporting pending state management."""
 
-    _pending_timer: Any
+    pending_timer: Any
 
     def set_pending(self) -> None:
         """Mark the entity as having a pending state update.

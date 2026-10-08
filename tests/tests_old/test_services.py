@@ -332,18 +332,18 @@ async def _setup_via_entry_(
     coordinator: RamsesCoordinator = entry.runtime_data
 
     # Explicitly run discovery to populate entities from the cast packets
-    await coordinator._discover_new_entities()
+    await coordinator.discover_new_entities()
 
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
     try:
         assert (
-            len(coordinator._entities) == NUM_ENTS_AFTER
+            len(coordinator.entities) == NUM_ENTS_AFTER
         )  # proxy for success of above
     except AssertionError:
         assert (
-            len(coordinator._entities)
+            len(coordinator.entities)
             == NUM_ENTS_AFTER_ALT  # _setup_via_entry_
         )  # adjust when adding sensors etc
 

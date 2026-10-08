@@ -166,7 +166,7 @@ async def test_setup_entry_direct_entities(
         new_entity.entity_id = "number.new_unique"
         new_entity.unique_id = "new_unique"
         new_entity._device = MagicMock()
-        new_entity._request_parameter_value = AsyncMock()
+        new_entity.request_parameter_value = AsyncMock()
 
         add_devices_cb([new_entity])
         assert async_add_entities.called
@@ -224,7 +224,7 @@ async def test_setup_entry_device_processing(
         mock_entity.unique_id = "new_unique_id"
         mock_entity._device = MagicMock()
         mock_entity._device.id = "dev_id"
-        mock_entity._request_parameter_value = AsyncMock()
+        mock_entity.request_parameter_value = AsyncMock()
 
         existing_entity = MagicMock(spec=FakeParam)
         existing_entity.entity_id = "number.existing_param"
@@ -463,7 +463,7 @@ async def test_request_parameter_value(
 ) -> None:
     """Test requesting parameter values."""
     cast(Any, number_entity._device).get_fan_param.return_value = 0.8
-    await number_entity._request_parameter_value()
+    await number_entity.request_parameter_value()
     assert number_entity.native_value == 0.8
     assert cast(Any, number_entity._device).get_fan_param.call_count == 2
 
@@ -471,7 +471,7 @@ async def test_request_parameter_value(
     cast(Any, number_entity._device).get_fan_param.return_value = None
     cast(MagicMock, number_entity.hass.async_create_task).reset_mock()
 
-    await number_entity._request_parameter_value()
+    await number_entity.request_parameter_value()
     assert number_entity.native_value == 0.8
     assert number_entity._is_pending
     assert cast(MagicMock, number_entity.hass.async_create_task).called
@@ -485,7 +485,7 @@ async def test_request_parameter_value_init_dict(
     number_entity._param_native_value = {}
     cast(Any, number_entity._device).get_fan_param.return_value = None
 
-    await number_entity._request_parameter_value()
+    await number_entity.request_parameter_value()
     # Check that key was added
     assert "01" in number_entity._param_native_value
     assert number_entity._param_native_value["01"] is None
@@ -497,7 +497,7 @@ async def test_request_parameter_value_missing_attributes(
     """Test request parameter value early returns due to missing attrs."""
     # Test 1: No device
     cast(Any, number_entity)._device = None
-    await number_entity._request_parameter_value()
+    await number_entity.request_parameter_value()
     assert not cast(MagicMock, mock_coordinator.hass.async_create_task).called
 
     # Restore device
@@ -512,7 +512,7 @@ async def test_request_parameter_value_missing_attributes(
             return attr != "hass"
 
         mock_hasattr.side_effect = side_effect
-        await number_entity._request_parameter_value()
+        await number_entity.request_parameter_value()
         # Should return early
         assert not cast(
             MagicMock, mock_coordinator.hass.async_create_task
@@ -523,7 +523,7 @@ async def test_request_parameter_value_missing_attributes(
         number_entity.entity_description, ramses_rf_attr=""
     )
     number_entity.entity_description = desc
-    await number_entity._request_parameter_value()
+    await number_entity.request_parameter_value()
     assert not cast(MagicMock, mock_coordinator.hass.async_create_task).called
 
 
@@ -531,7 +531,7 @@ async def test_request_parameter_value_no_get_fan_param(
     mock_coordinator: MagicMock,
     mock_hvac_device: MagicMock,
 ) -> None:
-    """Test that _request_parameter_value returns early when device lacks get_fan_param.
+    """Test that request_parameter_value returns early when device lacks get_fan_param.
 
     Regression test for AttributeError on DeviceHvac before it is fingerprinted
     as a FAN subclass.
@@ -542,7 +542,7 @@ async def test_request_parameter_value_no_get_fan_param(
     entity.async_write_ha_state = MagicMock()
 
     # Should not raise AttributeError and should not schedule a pending task
-    await entity._request_parameter_value()
+    await entity.request_parameter_value()
 
     assert not cast(MagicMock, mock_coordinator.hass.async_create_task).called
     assert not entity._is_pending
@@ -554,7 +554,7 @@ async def test_request_parameter_value_no_get_fan_param_second_call(
 ) -> None:
     """Test that the second get_fan_param call (RQ dispatch) is also guarded.
 
-    The second call in _request_parameter_value triggers the actual RQ to the
+    The second call in request_parameter_value triggers the actual RQ to the
     device. It must be skipped when the device is still a generic DeviceHvac.
     """
     desc = RamsesNumberEntityDescription(key="param_01", ramses_rf_attr="01")
@@ -572,7 +572,7 @@ async def test_request_parameter_value_no_get_fan_param_second_call(
     entity.hass = mock_coordinator.hass
     entity.async_write_ha_state = MagicMock()
 
-    await entity._request_parameter_value()
+    await entity.request_parameter_value()
 
     # Both call sites executed: get_fan_param called twice
     assert fan_device.get_fan_param.call_count == 2
@@ -1067,7 +1067,7 @@ async def test_number_param_request_parameter_value_when_hass_is_none(
     entity.hass = None
 
     # Act & Assert
-    await entity._request_parameter_value()
+    await entity.request_parameter_value()
 
 
 @pytest.mark.asyncio
@@ -1082,14 +1082,14 @@ async def test_number_param_async_added_to_hass(
     entity = RamsesNumberParam(mock_coordinator, mock_fan_device, desc)
     entity.hass = mock_coordinator.hass
     entity.async_on_remove = MagicMock()
-    entity._request_parameter_value = AsyncMock()
+    entity.request_parameter_value = AsyncMock()
 
     # Act
     await entity.async_added_to_hass()
 
     # Assert
     assert entity.async_on_remove.called
-    assert entity._request_parameter_value.called
+    assert entity.request_parameter_value.called
 
 
 @pytest.mark.asyncio
@@ -1104,9 +1104,9 @@ async def test_setup_entry_mains_device_no_fan(
     ctl.type = "01"
     ctl.is_battery = False
     mock_coordinator.devices = [ctl]
-    mock_coordinator._parameter_entities_pending = set()
-    mock_coordinator._parameter_entities_loaded = set()
-    mock_coordinator._parameter_entities_created = set()
+    mock_coordinator.parameter_entities_pending = set()
+    mock_coordinator.parameter_entities_loaded = set()
+    mock_coordinator.parameter_entities_created = set()
 
     entry = MagicMock(entry_id="test_entry", runtime_data=mock_coordinator)
     async_add_entities = MagicMock()

@@ -39,7 +39,7 @@ def mock_coordinator(
     coordinator = MagicMock(spec=RamsesCoordinator)
     coordinator.hass = hass
     coordinator.entry = mock_config_entry
-    coordinator._device_info = {}
+    coordinator.device_info_cache = {}
     coordinator.client = MagicMock()
     # Bind actual _async_update_device method for testing
     coordinator._async_update_device = (  # type: ignore[method-assign]
@@ -76,7 +76,7 @@ async def test_zone_registered_as_child_of_tcs(
     await mock_coordinator._async_update_device(mock_zone)
 
     # Assert
-    cached_info = mock_coordinator._device_info.get("01:123456_01")
+    cached_info = mock_coordinator.device_info_cache.get("01:123456_01")
     assert cached_info is not None
     assert cached_info["identifiers"] == {(DOMAIN, "01:123456_01")}
     assert cached_info["name"] == "Living Room"
@@ -117,7 +117,7 @@ async def test_unnamed_zone_fallback_to_friendly_name(
     await mock_coordinator._async_update_device(mock_zone)
 
     # Assert
-    cached_info = mock_coordinator._device_info.get("01:123456_04")
+    cached_info = mock_coordinator.device_info_cache.get("01:123456_04")
     assert cached_info is not None
     assert cached_info["identifiers"] == {(DOMAIN, "01:123456_04")}
     assert cached_info["name"] == "Zone 4"
@@ -150,7 +150,7 @@ async def test_controller_device_registration_and_model(
     await mock_coordinator._async_update_device(mock_ctl)
 
     # Assert
-    ctl_info = mock_coordinator._device_info.get("01:088175")
+    ctl_info = mock_coordinator.device_info_cache.get("01:088175")
     assert ctl_info is not None
     assert ctl_info["name"] == "Controller 01:088175"
     assert ctl_info["model"] == "Controller"
@@ -196,7 +196,7 @@ async def test_ufh_circuit_registered_as_child_of_ufc(
     await mock_coordinator._async_update_device(mock_circuit)
 
     # Assert
-    cached_info = mock_coordinator._device_info.get("02:222222_00")
+    cached_info = mock_coordinator.device_info_cache.get("02:222222_00")
     assert cached_info is not None
     assert cached_info["identifiers"] == {(DOMAIN, "02:222222_00")}
     assert cached_info["name"] == "UFH Circuit 02:222222_00"
@@ -327,12 +327,12 @@ async def test_standalone_devices_remain_main_devices(
     await mock_coordinator._async_update_device(mock_rem)
 
     # Assert
-    trv_info = mock_coordinator._device_info.get("04:111111")
+    trv_info = mock_coordinator.device_info_cache.get("04:111111")
     assert trv_info is not None
     assert "parent_device_id" not in trv_info
     assert "via_device" not in trv_info
 
-    rem_info = mock_coordinator._device_info.get("37:222222")
+    rem_info = mock_coordinator.device_info_cache.get("37:222222")
     assert rem_info is not None
     assert "parent_device_id" not in rem_info
     assert "via_device" not in rem_info
@@ -441,7 +441,7 @@ async def test_child_device_already_cached_early_return(
 
     # First update caches the child device
     await mock_coordinator._async_update_device(mock_zone)
-    cached_info = mock_coordinator._device_info.get("01:112233_01")
+    cached_info = mock_coordinator.device_info_cache.get("01:112233_01")
     assert cached_info is not None
 
     with patch.object(
@@ -477,7 +477,7 @@ async def test_main_device_with_suggested_area(
     await mock_coordinator._async_update_device(mock_circuit)
 
     # Assert
-    dev_info = mock_coordinator._device_info.get("02:123456_99")
+    dev_info = mock_coordinator.device_info_cache.get("02:123456_99")
     assert dev_info is not None
     assert dev_info.get("suggested_area") == "Living Room"
 

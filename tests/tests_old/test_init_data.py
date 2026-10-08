@@ -150,7 +150,7 @@ async def _test_common(
     # Trigger discovery manually to process the casted packets ---
     # Because the integration relies on a 60-second polling interval for new device
     # discovery, we must explicitly trigger it in test time after injecting live traffic.
-    await coordinator._discover_new_entities()
+    await coordinator.discover_new_entities()
 
     dev = gwy.device_registry.system_by_id[cast(Any, "01:145038")]
 
@@ -160,24 +160,24 @@ async def _test_common(
     await hass.async_block_till_done()
 
     # Access via the correct unique_id format (no '-controller' suffix for base climate entities)
-    entity = coordinator._entities.get(dev.id)
+    entity = coordinator.entities.get(dev.id)
     if entity:
         # The test is inherently compatible with the lazy resolver returning `None` initially.
         assert entity.state in ("heat", "auto", "off", None)
 
     # Access via the explicit unique_id format defined in binary_sensor.py
-    entity_status = coordinator._entities.get(f"{dev.id}-status")
+    entity_status = coordinator.entities.get(f"{dev.id}-status")
     if entity_status:
         assert entity_status.state in ("on", "off", None)
 
     # Verify the new system info sensor (Hybrid Approach)
-    entity_sys_info = coordinator._entities.get(f"{dev.id}-sys_info")
+    entity_sys_info = coordinator.entities.get(f"{dev.id}-sys_info")
     if entity_sys_info:
         assert entity_sys_info.state in (dev.id, None)
 
     # Check that all expected entities are created
     entities: list[RamsesEntity] = sorted(
-        coordinator._entities.values(), key=lambda e: e.unique_id or ""
+        coordinator.entities.values(), key=lambda e: e.unique_id or ""
     )
 
     created_entities = [e.unique_id for e in entities]

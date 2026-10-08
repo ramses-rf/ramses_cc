@@ -103,11 +103,11 @@ def mock_coordinator(hass: HomeAssistant) -> MagicMock:
     coordinator.async_send_packet = AsyncMock()
     coordinator.async_set_fan_param = AsyncMock()
     coordinator.async_get_fan_param = AsyncMock()
-    coordinator._async_run_fan_param_sequence = AsyncMock()
+    coordinator.async_run_fan_param_sequence = AsyncMock()
     coordinator.async_remove_device = AsyncMock()
     coordinator.async_start = AsyncMock()
     coordinator.async_setup = AsyncMock()
-    coordinator._entities = {}
+    coordinator.entities = {}
     # Mock client for domain events
     coordinator.client = MagicMock()
     return coordinator
@@ -445,7 +445,7 @@ async def test_async_update_listener_suppressed_updates(
     entry = MagicMock()
     entry.entry_id = "test_suppressed_reload"
     entry.runtime_data = mock_coordinator
-    mock_coordinator._suppress_reload = 2  # noqa: SLF001
+    mock_coordinator.suppress_reload = 2  # noqa: SLF001
 
     with patch.object(
         hass.config_entries, "async_reload", AsyncMock()
@@ -454,7 +454,7 @@ async def test_async_update_listener_suppressed_updates(
         await async_update_listener(hass, entry)
         await async_update_listener(hass, entry)
         mock_reload.assert_not_called()
-        assert mock_coordinator._suppress_reload == 0  # noqa: SLF001
+        assert mock_coordinator.suppress_reload == 0  # noqa: SLF001
 
         # A further (unsuppressed) update must still reload the entry
         await async_update_listener(hass, entry)
@@ -589,7 +589,7 @@ async def test_init_service_wrappers(
         {"device_id": DEVICE_ID},
         blocking=True,
     )
-    assert mock_coordinator._async_run_fan_param_sequence.called
+    assert mock_coordinator.async_run_fan_param_sequence.called
 
     # 6. Check that Send Packet is NOT registered by default
     assert not hass.services.has_service(DOMAIN, "send_packet")

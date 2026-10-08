@@ -57,7 +57,7 @@ def make_mock_scan(devices: list[DiscoveredDevice] | None = None) -> MagicMock:
     scan = MagicMock()
     devs = devices or []
     scan.get_devices.return_value = devs
-    scan._devices = {d.device_id: d for d in devs}
+    scan.devices = {d.device_id: d for d in devs}
     scan.export_json.return_value = '{"devices": []}'
     scan.import_json = MagicMock()
     scan.start = MagicMock()
@@ -375,7 +375,7 @@ class TestGetDevices:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # Device is in the scan engine but has no metadata entry
-        assert "04:056053" not in manager._metadata  # noqa: SLF001
+        assert "04:056053" not in manager.metadata  # noqa: SLF001
 
         # Filtering by NEW must NOT return it — no metadata means we
         # can't know its real status.
@@ -398,7 +398,7 @@ class TestGetDevices:
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        assert "04:056053" not in manager._metadata  # noqa: SLF001
+        assert "04:056053" not in manager.metadata  # noqa: SLF001
 
         enabled = manager.get_devices(enabled=True)
         assert len(enabled) == 0
@@ -510,7 +510,7 @@ class TestNewDeviceDetection:
         manager.check_for_new_devices()
 
         # Device should NOT have metadata created (it's in the schema already)
-        assert "13:142019" not in manager._metadata
+        assert "13:142019" not in manager.metadata
 
     def test_non_schema_device_still_notified_as_new(self) -> None:
         """Device NOT in schema with no metadata must still be notified as NEW.
@@ -1635,7 +1635,7 @@ class TestHgiDiscoveryCandidate:
         )
         # Pre-populate metadata as ACCEPTED (e.g. user previously accepted
         # but later cleared _owner from the schema)
-        manager._metadata["18:149488"] = DeviceMetadata(
+        manager.metadata["18:149488"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED,
             enabled=True,
             owner=None,
@@ -1647,7 +1647,7 @@ class TestHgiDiscoveryCandidate:
 
         new_ids = manager.check_for_new_devices()
         assert "18:149488" in new_ids
-        assert manager._metadata["18:149488"].status == DiscoveryStatus.NEW
+        assert manager.metadata["18:149488"].status == DiscoveryStatus.NEW
 
     def test_non_hgi_schema_no_owner_not_flagged_by_hgi_loop(self) -> None:
         """Non-18: devices in _schema_no_owner_ids are skipped by HGI loop."""
@@ -1726,7 +1726,7 @@ class TestHgiDiscoveryCandidate:
             active_hgi_id="18:130236",
         )
         # Add metadata for an HGI not in the scan engine
-        manager._metadata["18:149488"] = DeviceMetadata(
+        manager.metadata["18:149488"] = DeviceMetadata(
             status=DiscoveryStatus.NEW,
         )
 
@@ -1747,7 +1747,7 @@ class TestHgiDiscoveryCandidate:
             active_hgi_id="18:130236",
         )
         # Add as NEW so accept_device can find it
-        manager._metadata["18:149488"] = DeviceMetadata(
+        manager.metadata["18:149488"] = DeviceMetadata(
             status=DiscoveryStatus.NEW,
         )
 
@@ -1802,7 +1802,7 @@ class TestCheckClassMismatches:
         count = manager.check_class_mismatches(schema)
         assert count == 0
         # No class_mismatch set on metadata
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is None or meta.class_mismatch is None
 
     def test_mismatch_detected(self) -> None:
@@ -1814,7 +1814,7 @@ class TestCheckClassMismatches:
         schema = {"04:056053": {"_class": "CTL"}}
         count = manager.check_class_mismatches(schema)
         assert count == 1
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.class_mismatch is not None
         assert "CTL" in meta.class_mismatch
@@ -1827,7 +1827,7 @@ class TestCheckClassMismatches:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # First: create a mismatch
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             class_mismatch="schema=CTL, discovery=TRV"
         )
 
@@ -1835,7 +1835,7 @@ class TestCheckClassMismatches:
         schema = {"04:056053": {"_class": "TRV"}}
         count = manager.check_class_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.class_mismatch is None
 
@@ -1877,14 +1877,14 @@ class TestCheckClassMismatches:
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["37:169161"] = DeviceMetadata(
+        manager.metadata["37:169161"] = DeviceMetadata(
             class_mismatch="schema=DIS, discovery=REM"
         )
 
         schema = {"37:169161": {"_class": "DIS"}}
         count = manager.check_class_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("37:169161")
+        meta = manager.metadata.get("37:169161")
         assert meta is not None
         assert meta.class_mismatch is None
 
@@ -1896,14 +1896,14 @@ class TestCheckClassMismatches:
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["37:169161"] = DeviceMetadata(
+        manager.metadata["37:169161"] = DeviceMetadata(
             class_mismatch="schema=DIS, rf_suggests=REM"
         )
 
         schema = {"37:169161": {"_class": "DIS"}}
         count = manager.check_class_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("37:169161")
+        meta = manager.metadata.get("37:169161")
         assert meta is not None
         assert meta.class_mismatch == "schema=DIS, rf_suggests=REM"
 
@@ -1985,10 +1985,10 @@ class TestGetMismatchedDevices:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # Set mismatch on dev1 only
-        manager._metadata["32:153289"] = DeviceMetadata(
+        manager.metadata["32:153289"] = DeviceMetadata(
             class_mismatch="schema=FAN, discovery=DIS"
         )
-        manager._metadata["04:056053"] = DeviceMetadata()
+        manager.metadata["04:056053"] = DeviceMetadata()
 
         result = manager.get_mismatched_devices()
         assert len(result) == 1
@@ -2010,10 +2010,10 @@ class TestGetMismatchedDevices:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # Set then clear mismatch
-        manager._metadata["32:153289"] = DeviceMetadata(
+        manager.metadata["32:153289"] = DeviceMetadata(
             class_mismatch="schema=FAN, discovery=DIS"
         )
-        manager._metadata["32:153289"].class_mismatch = None
+        manager.metadata["32:153289"].class_mismatch = None
 
         result = manager.get_mismatched_devices()
         assert result == []
@@ -2030,7 +2030,7 @@ class TestCheckBoundMismatches:
         schema = {"32:153289": {"_class": "FAN", "_bound": "01:145038"}}
         count = manager.check_bound_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is None or meta.bound_mismatch is None
 
     def test_bound_mismatch_detected(self) -> None:
@@ -2042,7 +2042,7 @@ class TestCheckBoundMismatches:
         schema = {"32:153289": {"_class": "FAN", "_bound": "22:999999"}}
         count = manager.check_bound_mismatches(schema)
         assert count == 1
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is not None
         assert meta.bound_mismatch is not None
         assert "22:999999" in meta.bound_mismatch
@@ -2053,14 +2053,14 @@ class TestCheckBoundMismatches:
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["32:153289"] = DeviceMetadata(
+        manager.metadata["32:153289"] = DeviceMetadata(
             bound_mismatch="schema=22:999999, discovery=01:145038"
         )
         # Now schema matches scan
         schema = {"32:153289": {"_class": "FAN", "_bound": "01:145038"}}
         count = manager.check_bound_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is not None
         assert meta.bound_mismatch is None
 
@@ -2107,7 +2107,7 @@ class TestCheckBoundMismatches:
         }
         count = manager.check_bound_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is None or meta.bound_mismatch is None
 
     def test_list_bound_mismatch_when_scan_not_in_list(self) -> None:
@@ -2125,7 +2125,7 @@ class TestCheckBoundMismatches:
         }
         count = manager.check_bound_mismatches(schema)
         assert count == 1
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is not None
         assert meta.bound_mismatch is not None
         assert "22:999999" in meta.bound_mismatch
@@ -2139,7 +2139,7 @@ class TestCheckBoundMismatches:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # Pre-set a mismatch
-        manager._metadata["32:153289"] = DeviceMetadata(
+        manager.metadata["32:153289"] = DeviceMetadata(
             bound_mismatch="schema=22:999999, 37:111111, discovery=01:145038"
         )
         # Now schema list includes the scan's bound_to
@@ -2151,7 +2151,7 @@ class TestCheckBoundMismatches:
         }
         count = manager.check_bound_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is not None
         assert meta.bound_mismatch is None
 
@@ -2184,7 +2184,7 @@ class TestCheckMissingClass:
         schema = {"32:153289": {}}  # no _class
         count = manager.check_missing_class(schema)
         assert count == 1
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is not None
         assert meta.missing_class is not None
         assert "FAN" in meta.missing_class
@@ -2197,7 +2197,7 @@ class TestCheckMissingClass:
         schema = {"32:153289": {"_class": "FAN"}}
         count = manager.check_missing_class(schema)
         assert count == 0
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is None or meta.missing_class is None
 
     def test_missing_class_cleared_when_added(self) -> None:
@@ -2206,14 +2206,14 @@ class TestCheckMissingClass:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # First: flag as missing
-        manager._metadata["32:153289"] = DeviceMetadata(
+        manager.metadata["32:153289"] = DeviceMetadata(
             missing_class="discovery=FAN"
         )
         # Now schema has _class
         schema = {"32:153289": {"_class": "FAN"}}
         count = manager.check_missing_class(schema)
         assert count == 0
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is not None
         assert meta.missing_class is None
 
@@ -2242,13 +2242,13 @@ class TestCheckMissingClass:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # User previously dismissed the missing_class suggestion
-        manager._metadata["32:153289"] = DeviceMetadata(
+        manager.metadata["32:153289"] = DeviceMetadata(
             missing_class_dismissed=True
         )
         schema = {"32:153289": {}}  # still no _class
         count = manager.check_missing_class(schema)
         assert count == 0
-        meta = manager._metadata.get("32:153289")
+        meta = manager.metadata.get("32:153289")
         assert meta is not None
         assert meta.missing_class is None  # not re-flagged
 
@@ -2279,7 +2279,7 @@ class TestCheckOrphanedDevices:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # Device in schema, accepted, but not in scan — should NOT flag
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED
         )
         schema = {"04:056053": {"_class": "TRV"}}
@@ -2291,7 +2291,7 @@ class TestCheckOrphanedDevices:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # NEW device not in scan — not orphaned
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             status=DiscoveryStatus.NEW
         )
         schema = {"04:056053": {"_class": "TRV"}}
@@ -2307,7 +2307,7 @@ class TestCheckOrphanedDevices:
         schema = {"04:056053": {"_class": "TRV"}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 1
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.orphaned is not None
 
@@ -2328,11 +2328,11 @@ class TestCheckOrphanedDevices:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # Was orphaned, now seen recently
-        manager._metadata["04:056053"] = DeviceMetadata(orphaned="old")
+        manager.metadata["04:056053"] = DeviceMetadata(orphaned="old")
         schema = {"04:056053": {"_class": "TRV"}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 0
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.orphaned is None
 
@@ -2348,7 +2348,7 @@ class TestCheckOrphanedDevices:
         schema = {"04:056053": {"_class": "TRV", "_suppress_not_seen": True}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 0
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.orphaned is None  # no notification flag
         # last_orphaned_log should be set (periodic INFO log)
@@ -2367,7 +2367,7 @@ class TestCheckOrphanedDevices:
         schema = {"04:056053": {"_class": "TRV", "_suppress_not_seen": True}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 0
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         first_log = meta.last_orphaned_log
         assert first_log is not None
@@ -2375,7 +2375,7 @@ class TestCheckOrphanedDevices:
         # Second check — should NOT log again (within threshold)
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 0
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta.last_orphaned_log == first_log  # unchanged
 
     def test_suppress_not_seen_cleared_when_seen_again(self) -> None:
@@ -2389,13 +2389,13 @@ class TestCheckOrphanedDevices:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # Device was suppressed-orphans, now seen again
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             orphaned="old", last_orphaned_log="2026-01-01T00:00:00"
         )
         schema = {"04:056053": {"_class": "TRV", "_suppress_not_seen": True}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 0
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.orphaned is None
         assert meta.last_orphaned_log is None  # cleared
@@ -2412,13 +2412,13 @@ class TestCheckOrphanedDevices:
 
         # Set last_orphaned_log to 10 days ago — should log again
         old_log = (dt.now() - td(days=10)).isoformat()
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             last_orphaned_log=old_log
         )
         schema = {"04:056053": {"_class": "TRV", "_suppress_not_seen": True}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 0
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.last_orphaned_log != old_log  # updated
         assert meta.orphaned is None  # still no notification
@@ -2436,7 +2436,7 @@ class TestCheckOrphanedDevices:
         schema = {"04:056053": {"_class": "TRV", "_suppress_not_seen": 14}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 0  # suppressed
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.orphaned is None  # no notification
 
@@ -2453,7 +2453,7 @@ class TestCheckOrphanedDevices:
         schema = {"04:056053": {"_class": "TRV", "_suppress_not_seen": 14}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 1  # suppress expired, re-notified
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.orphaned is not None  # notification flag set
         assert "suppress expired" in meta.orphaned
@@ -2473,7 +2473,7 @@ class TestCheckOrphanedDevices:
         schema = {"04:056053": {"_class": "TRV", "_suppress_not_seen": True}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 0  # suppressed forever
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.orphaned is None  # no notification
 
@@ -2504,7 +2504,7 @@ class TestCheckOrphanedDevices:
         schema = {"04:056053": {"_class": "TRV"}}
         count = manager.check_orphaned_devices(schema, threshold_days=7)
         assert count == 1
-        meta = manager._metadata.get("04:056053")
+        meta = manager.metadata.get("04:056053")
         assert meta is not None
         assert meta.orphaned is not None
 
@@ -2642,7 +2642,7 @@ class TestCheckCommunicationQuality:
         schema = {"04:056053": {"_class": "TRV"}}
         count = manager.check_communication_quality(schema, [device])
         assert count == 1
-        meta = manager._metadata["04:056053"]
+        meta = manager.metadata["04:056053"]
         assert meta.weak_signal is not None
         assert "RSSI" in meta.weak_signal
 
@@ -2661,11 +2661,11 @@ class TestCheckCommunicationQuality:
         weak_device = self._make_device("04:056053", "weak")
         schema = {"04:056053": {"_class": "TRV"}}
         manager.check_communication_quality(schema, [weak_device])
-        assert manager._metadata["04:056053"].weak_signal is not None
+        assert manager.metadata["04:056053"].weak_signal is not None
         # Now quality recovers
         good_device = self._make_device("04:056053", "normal")
         manager.check_communication_quality(schema, [good_device])
-        assert manager._metadata["04:056053"].weak_signal is None
+        assert manager.metadata["04:056053"].weak_signal is None
 
     def test_suppress_weak_signal(self) -> None:
         scan = make_mock_scan([])
@@ -2681,7 +2681,7 @@ class TestCheckCommunicationQuality:
         scan = make_mock_scan([])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
         # Pre-set dismissed flag
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             weak_signal_dismissed=True
         )
         device = self._make_device("04:056053", "weak")
@@ -2764,14 +2764,14 @@ class TestCheckCommunicationQuality:
         scan = make_mock_scan([])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
         # Pre-set dismissed flag
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             weak_signal_dismissed=True
         )
         # Quality recovers
         good_device = self._make_device("04:056053", "normal")
         schema = {"04:056053": {"_class": "TRV"}}
         manager.check_communication_quality(schema, [good_device])
-        assert manager._metadata["04:056053"].weak_signal_dismissed is False
+        assert manager.metadata["04:056053"].weak_signal_dismissed is False
 
         # Now device degrades again — should be flagged
         weak_device = self._make_device("04:056053", "weak")
@@ -2786,35 +2786,31 @@ class TestCheckCommunicationQuality:
         scan = make_mock_scan([])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
         # Pre-set LOST status
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             status=DiscoveryStatus.LOST, enabled=True
         )
         device = self._make_device("04:056053", "weak")
         schema = {"04:056053": {"_class": "TRV"}}
         manager.check_communication_quality(schema, [device])
-        assert (
-            manager._metadata["04:056053"].status == DiscoveryStatus.ACCEPTED
-        )
+        assert manager.metadata["04:056053"].status == DiscoveryStatus.ACCEPTED
 
     def test_good_device_clears_lost_status(self) -> None:
         """A device with strong RSSI is also being heard — clear LOST."""
         scan = make_mock_scan([])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             status=DiscoveryStatus.LOST, enabled=True
         )
         device = self._make_device("04:056053", "normal")
         schema = {"04:056053": {"_class": "TRV"}}
         manager.check_communication_quality(schema, [device])
-        assert (
-            manager._metadata["04:056053"].status == DiscoveryStatus.ACCEPTED
-        )
+        assert manager.metadata["04:056053"].status == DiscoveryStatus.ACCEPTED
 
     def test_no_rssi_does_not_clear_lost(self) -> None:
         """A device with no RSSI data (quality=None) stays LOST."""
         scan = make_mock_scan([])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             status=DiscoveryStatus.LOST, enabled=True
         )
         # Device with communication_quality=None (no RSSI tracker)
@@ -2823,7 +2819,7 @@ class TestCheckCommunicationQuality:
         device.communication_quality = None
         schema = {"04:056053": {"_class": "TRV"}}
         manager.check_communication_quality(schema, [device])
-        assert manager._metadata["04:056053"].status == DiscoveryStatus.LOST
+        assert manager.metadata["04:056053"].status == DiscoveryStatus.LOST
 
 
 class TestSyncWithSchema:
@@ -2845,7 +2841,7 @@ class TestSyncWithSchema:
 
         # First sync to populate metadata from scan (status=NEW by default)
         manager.sync_with_schema(set())
-        assert manager._metadata["37:154519"].status == DiscoveryStatus.NEW
+        assert manager.metadata["37:154519"].status == DiscoveryStatus.NEW
 
         # Now sync with schema that includes 37:154519 — should mark ACCEPTED
         manager.sync_with_schema({"37:154519", "32:153289"})
@@ -2903,10 +2899,9 @@ class TestSyncWithSchema:
 
         # 18:130236 should not be in metadata (skipped by sync_with_schema)
         # or if it is, its status should not be REMOVED
-        if "18:130236" in manager._metadata:
+        if "18:130236" in manager.metadata:
             assert (
-                manager._metadata["18:130236"].status
-                != DiscoveryStatus.REMOVED
+                manager.metadata["18:130236"].status != DiscoveryStatus.REMOVED
             )
 
     def test_schema_no_owner_ids_populated(self) -> None:
@@ -2989,8 +2984,8 @@ class TestSyncWithSchema:
 
         # First, mark the device as ACCEPTED
         manager.sync_with_schema(set())
-        manager._metadata["18:149488"].status = DiscoveryStatus.ACCEPTED
-        manager._metadata["18:149488"].enabled = True
+        manager.metadata["18:149488"].status = DiscoveryStatus.ACCEPTED
+        manager.metadata["18:149488"].enabled = True
 
         # Now sync with schema where the HGI has no _owner
         schema = {"18:149488": {"_class": "HGI"}}  # no _owner
@@ -2999,7 +2994,7 @@ class TestSyncWithSchema:
         # check_for_new_devices should re-flag it
         new_ids = manager.check_for_new_devices()
         assert "18:149488" in new_ids
-        assert manager._metadata["18:149488"].status == DiscoveryStatus.NEW
+        assert manager.metadata["18:149488"].status == DiscoveryStatus.NEW
 
     def test_check_for_new_devices_removed_device_seen_again(self) -> None:
         """REMOVED device that's still seen is re-marked as NEW."""
@@ -3009,13 +3004,13 @@ class TestSyncWithSchema:
 
         # Mark the device as REMOVED
         manager.sync_with_schema(set())
-        manager._metadata["04:056053"].status = DiscoveryStatus.REMOVED
-        manager._metadata["04:056053"].enabled = False
+        manager.metadata["04:056053"].status = DiscoveryStatus.REMOVED
+        manager.metadata["04:056053"].enabled = False
 
         # check_for_new_devices should re-mark it as NEW
         new_ids = manager.check_for_new_devices()
         assert "04:056053" in new_ids
-        assert manager._metadata["04:056053"].status == DiscoveryStatus.NEW
+        assert manager.metadata["04:056053"].status == DiscoveryStatus.NEW
 
 
 class TestGetOrphanedDevices:
@@ -3028,10 +3023,10 @@ class TestGetOrphanedDevices:
         scan = make_mock_scan([dev1, dev2])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             orphaned="last seen 2026-07-01 (>7 days)"
         )
-        manager._metadata["01:145038"] = DeviceMetadata()
+        manager.metadata["01:145038"] = DeviceMetadata()
 
         result = manager.get_orphaned_devices()
         assert len(result) == 1
@@ -3052,10 +3047,10 @@ class TestGetOrphanedDevices:
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             orphaned="last seen 2026-07-01 (>7 days)"
         )
-        manager._metadata["04:056053"].orphaned = None
+        manager.metadata["04:056053"].orphaned = None
 
         result = manager.get_orphaned_devices()
         assert result == []
@@ -3071,10 +3066,10 @@ class TestGetLostDevices:
         scan = make_mock_scan([dev1, dev2])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             status=DiscoveryStatus.LOST
         )
-        manager._metadata["01:145038"] = DeviceMetadata(
+        manager.metadata["01:145038"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED
         )
 
@@ -3088,7 +3083,7 @@ class TestGetLostDevices:
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED
         )
 
@@ -3101,7 +3096,7 @@ class TestGetLostDevices:
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["04:056053"] = DeviceMetadata(
+        manager.metadata["04:056053"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED
         )
 
@@ -3120,7 +3115,7 @@ class TestGetLostDevices:
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
-        manager._metadata["18:149488"] = DeviceMetadata(
+        manager.metadata["18:149488"] = DeviceMetadata(
             status=DiscoveryStatus.LOST
         )
 
@@ -3163,7 +3158,7 @@ class TestNameMismatch:
         count = manager.check_name_mismatches(schema, zones=zones)
 
         assert count == 1
-        meta = manager._metadata.get("01:150000_03")
+        meta = manager.metadata.get("01:150000_03")
         assert meta is not None
         assert meta.name_mismatch is not None
         assert "Lounge" in meta.name_mismatch
@@ -3185,7 +3180,7 @@ class TestNameMismatch:
         count = manager.check_name_mismatches(schema, zones=zones)
 
         assert count == 0
-        meta = manager._metadata.get("01:150000_03")
+        meta = manager.metadata.get("01:150000_03")
         assert meta is None or meta.name_mismatch is None
 
     def test_no_mismatch_when_no_runtime_name(self) -> None:
@@ -3237,7 +3232,7 @@ class TestNameMismatch:
         scan = make_mock_scan()
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
         # Pre-set a mismatch flag
-        manager._metadata["01:150000_03"] = DeviceMetadata(
+        manager.metadata["01:150000_03"] = DeviceMetadata(
             name_mismatch="schema=Lounge, controller=Kitchen"
         )
         schema = {
@@ -3252,7 +3247,7 @@ class TestNameMismatch:
         count = manager.check_name_mismatches(schema, zones=zones)
 
         assert count == 0
-        meta = manager._metadata.get("01:150000_03")
+        meta = manager.metadata.get("01:150000_03")
         assert meta is not None
         assert meta.name_mismatch is None
 
@@ -3276,9 +3271,9 @@ class TestNameMismatch:
         count = manager.check_name_mismatches(schema, zones=zones)
 
         assert count == 1
-        assert manager._metadata["01:150000_04"].name_mismatch is not None
-        assert manager._metadata.get("01:150000_03") is None or (
-            manager._metadata["01:150000_03"].name_mismatch is None
+        assert manager.metadata["01:150000_04"].name_mismatch is not None
+        assert manager.metadata.get("01:150000_03") is None or (
+            manager.metadata["01:150000_03"].name_mismatch is None
         )
 
     def test_name_mismatch_in_check_all_mismatches(self) -> None:
@@ -3321,10 +3316,10 @@ class TestNameMismatch:
         dev = make_discovered_device("01:150000_03", "CTL")
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
-        manager._metadata["01:150000_03"] = DeviceMetadata(
+        manager.metadata["01:150000_03"] = DeviceMetadata(
             name_mismatch="schema=Lounge, controller=Kitchen"
         )
-        manager._metadata["01:150000_04"] = DeviceMetadata()
+        manager.metadata["01:150000_04"] = DeviceMetadata()
 
         result = manager.get_name_mismatch_devices()
 
@@ -3420,17 +3415,17 @@ class TestNameMismatch:
 
         # First check — mismatch detected
         manager.check_name_mismatches(schema, zones=zones)
-        assert manager._metadata["01:150000_03"].name_mismatch is not None
+        assert manager.metadata["01:150000_03"].name_mismatch is not None
 
         # Simulate "skip" in review — flag is cleared
-        manager._metadata["01:150000_03"].name_mismatch = None
+        manager.metadata["01:150000_03"].name_mismatch = None
         # Also clear from warned set so the re-detection warns again
         manager._warned_name_mismatches.clear()
 
         # Second check — mismatch re-detected (no dismiss)
         count = manager.check_name_mismatches(schema, zones=zones)
         assert count == 1
-        assert manager._metadata["01:150000_03"].name_mismatch is not None
+        assert manager.metadata["01:150000_03"].name_mismatch is not None
 
     def test_active_hgi_id_and_scan_properties(self) -> None:
         """Test active_hgi_id getter/setter and get_scan_codes / get_scan_domain_ids."""
@@ -3510,7 +3505,7 @@ class TestNameMismatch:
 
         scan = make_mock_scan([])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
-        manager._metadata = {
+        manager.metadata = {
             "18:111111": meta_hgi,
             "04:222222": meta_foreign,
             "04:333333": meta_normal,
@@ -3522,15 +3517,11 @@ class TestNameMismatch:
         )
 
         # Active HGI is not marked REMOVED
-        assert (
-            manager._metadata["18:111111"].status == DiscoveryStatus.ACCEPTED
-        )
+        assert manager.metadata["18:111111"].status == DiscoveryStatus.ACCEPTED
         # Foreign device is marked REMOVED
-        assert manager._metadata["04:222222"].status == DiscoveryStatus.REMOVED
+        assert manager.metadata["04:222222"].status == DiscoveryStatus.REMOVED
         # Device in schema remains ACCEPTED
-        assert (
-            manager._metadata["04:333333"].status == DiscoveryStatus.ACCEPTED
-        )
+        assert manager.metadata["04:333333"].status == DiscoveryStatus.ACCEPTED
 
     def test_check_lost_devices_suppress_not_seen(self) -> None:
         """Test check_for_lost_devices respects _suppress_not_seen boolean and days integer."""
@@ -3554,7 +3545,7 @@ class TestNameMismatch:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         for dev_id in ("04:100001", "04:100002", "04:100003"):
-            manager._metadata[dev_id] = DeviceMetadata(
+            manager.metadata[dev_id] = DeviceMetadata(
                 status=DiscoveryStatus.ACCEPTED, enabled=True
             )
 
@@ -3578,7 +3569,7 @@ class TestNameMismatch:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # 1. Missing class
-        manager._metadata["04:123456"] = DeviceMetadata(
+        manager.metadata["04:123456"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED,
             missing_class="Suggest TRV",
         )
@@ -3591,17 +3582,17 @@ class TestNameMismatch:
             "04:123456", "Config says FAN but looks like TRV"
         )
         assert (
-            manager._metadata["04:123456"].class_mismatch
+            manager.metadata["04:123456"].class_mismatch
             == "Config says FAN but looks like TRV"
         )
         assert "04:123456" in manager._warned_mismatches
 
         # 3. Flag mismatch dismissed
-        manager._metadata["04:123456"].class_mismatch_dismissed = True
+        manager.metadata["04:123456"].class_mismatch_dismissed = True
         manager.flag_class_mismatch("04:123456", "Different description")
         # Description unchanged because dismissed
         assert (
-            manager._metadata["04:123456"].class_mismatch
+            manager.metadata["04:123456"].class_mismatch
             == "Config says FAN but looks like TRV"
         )
 
@@ -3612,25 +3603,25 @@ class TestNameMismatch:
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         # 1. An rf_suggests= flag is cleared
-        manager._metadata["04:123456"] = DeviceMetadata(
+        manager.metadata["04:123456"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED,
             class_mismatch="schema=FAN, rf_suggests=CO2",
         )
         manager.clear_rf_class_mismatch("04:123456")
-        assert manager._metadata["04:123456"].class_mismatch is None
+        assert manager.metadata["04:123456"].class_mismatch is None
 
         # 2. A discovery= flag is NOT cleared (owned by the scan engine)
-        manager._metadata[
+        manager.metadata[
             "04:123456"
         ].class_mismatch = "schema=REM, discovery=DIS"
         manager.clear_rf_class_mismatch("04:123456")
         assert (
-            manager._metadata["04:123456"].class_mismatch
+            manager.metadata["04:123456"].class_mismatch
             == "schema=REM, discovery=DIS"
         )
 
         # 3. No flag / unknown device — no-op, no crash
-        manager._metadata["04:123456"].class_mismatch = None
+        manager.metadata["04:123456"].class_mismatch = None
         manager.clear_rf_class_mismatch("04:123456")
         manager.clear_rf_class_mismatch("04:999999")
 
@@ -3642,11 +3633,11 @@ class TestNameMismatch:
         hass = make_mock_hass()
         manager = DiscoveryManager(hass, scan, auto_notify=True)
 
-        manager._metadata["04:111111"] = DeviceMetadata(
+        manager.metadata["04:111111"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED,
             orphaned="Not seen for 10 days",
         )
-        manager._metadata["04:222222"] = DeviceMetadata(
+        manager.metadata["04:222222"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED,
             weak_signal="RSSI -88 dBm",
         )
@@ -3758,7 +3749,7 @@ class TestSyncWithSchemaNoOwner:
         scan = make_mock_scan()
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
         # Device with _skipped in schema and NEW status
-        manager._metadata["37:001111"] = DeviceMetadata(
+        manager.metadata["37:001111"] = DeviceMetadata(
             status=DiscoveryStatus.NEW
         )
         manager.sync_with_schema(
@@ -3772,7 +3763,7 @@ class TestSyncWithSchemaNoOwner:
             },
         )
         # Should stay NEW, not be auto-accepted
-        assert manager._metadata["37:001111"].status == DiscoveryStatus.NEW
+        assert manager.metadata["37:001111"].status == DiscoveryStatus.NEW
 
     def test_sync_with_schema_skipped_resets_accepted(self) -> None:
         """sync_with_schema resets ACCEPTED → NEW for _skipped devices."""
@@ -3784,7 +3775,7 @@ class TestSyncWithSchemaNoOwner:
         scan = make_mock_scan()
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
         # Device was previously accepted but now has _skipped in schema
-        manager._metadata["37:001111"] = DeviceMetadata(
+        manager.metadata["37:001111"] = DeviceMetadata(
             status=DiscoveryStatus.ACCEPTED, enabled=True
         )
         manager.sync_with_schema(
@@ -3798,8 +3789,8 @@ class TestSyncWithSchemaNoOwner:
             },
         )
         # Should be reset to NEW for re-review
-        assert manager._metadata["37:001111"].status == DiscoveryStatus.NEW
-        assert manager._metadata["37:001111"].enabled is False
+        assert manager.metadata["37:001111"].status == DiscoveryStatus.NEW
+        assert manager.metadata["37:001111"].enabled is False
 
 
 class TestHgiNoOwnerKeepsNew:
@@ -3819,13 +3810,13 @@ class TestHgiNoOwnerKeepsNew:
 
         meta = DeviceMetadata()
         meta.status = DiscoveryStatus.NEW
-        manager._metadata["18:001111"] = meta
+        manager.metadata["18:001111"] = meta
         # Re-sync — the NEW status should be kept (not ACCEPTED)
         manager.sync_with_schema(
             schema_device_ids={"18:001111"},
             schema={"18:001111": {"_class": "HGI"}},  # no _owner
         )
-        assert manager._metadata["18:001111"].status == DiscoveryStatus.NEW
+        assert manager.metadata["18:001111"].status == DiscoveryStatus.NEW
 
 
 class TestHgiLostStatusCleared:
@@ -3846,15 +3837,13 @@ class TestHgiLostStatusCleared:
 
         meta = DeviceMetadata()
         meta.status = DiscoveryStatus.LOST
-        manager._metadata["18:001111"] = meta
+        manager.metadata["18:001111"] = meta
         # Re-sync — the LOST status should be cleared to ACCEPTED
         manager.sync_with_schema(
             schema_device_ids={"18:001111"},
             schema={"18:001111": {"_class": "HGI", "_owner": "me"}},
         )
-        assert (
-            manager._metadata["18:001111"].status == DiscoveryStatus.ACCEPTED
-        )
+        assert manager.metadata["18:001111"].status == DiscoveryStatus.ACCEPTED
 
 
 class TestForeignDeviceSkipped:
@@ -3870,7 +3859,7 @@ class TestForeignDeviceSkipped:
             foreign_device_ids={"04:056053"},
         )
         manager.check_for_new_devices()
-        assert "04:056053" not in manager._metadata
+        assert "04:056053" not in manager.metadata
 
 
 class TestClassMismatchDismissed:
@@ -3886,7 +3875,7 @@ class TestClassMismatchDismissed:
 
         meta = DeviceMetadata()
         meta.class_mismatch_dismissed = True
-        manager._metadata["04:056053"] = meta
+        manager.metadata["04:056053"] = meta
         # Schema has a different class
         schema = {"04:056053": {"_class": "BDR", "_owner": "me"}}
         count = manager.check_class_mismatches(schema)
@@ -3930,7 +3919,7 @@ class TestClassMismatchFaked:
         }
         count = manager.check_class_mismatches(schema)
         assert count == 0  # faked — not counted
-        meta = manager._metadata.get("37:168270")
+        meta = manager.metadata.get("37:168270")
         assert meta is None or meta.class_mismatch is None
 
     def test_faked_skip_clears_stale_discovery_flag(self) -> None:
@@ -3939,14 +3928,14 @@ class TestClassMismatchFaked:
         dev.confidence = "high"
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
-        manager._metadata["37:168270"] = DeviceMetadata(
+        manager.metadata["37:168270"] = DeviceMetadata(
             class_mismatch="schema=DIS, discovery=REM"
         )
 
         schema = {"37:168270": {"_class": "DIS", "_faked": True}}
         count = manager.check_class_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("37:168270")
+        meta = manager.metadata.get("37:168270")
         assert meta is not None
         assert meta.class_mismatch is None
 
@@ -3957,14 +3946,14 @@ class TestClassMismatchFaked:
         dev.confidence = "high"
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
-        manager._metadata["37:168270"] = DeviceMetadata(
+        manager.metadata["37:168270"] = DeviceMetadata(
             class_mismatch="schema=DIS, rf_suggests=REM"
         )
 
         schema = {"37:168270": {"_class": "DIS", "_faked": True}}
         count = manager.check_class_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("37:168270")
+        meta = manager.metadata.get("37:168270")
         assert meta is not None
         assert meta.class_mismatch == "schema=DIS, rf_suggests=REM"
 
@@ -3983,7 +3972,7 @@ class TestClassMismatchDisRemSubset:
         schema = {"37:168270": {"_class": "DIS", "_owner": "me"}}
         count = manager.check_class_mismatches(schema)
         assert count == 0  # REM is a subset of DIS — compatible
-        meta = manager._metadata.get("37:168270")
+        meta = manager.metadata.get("37:168270")
         assert meta is None or meta.class_mismatch is None
 
     def test_rem_discovery_clears_stale_flag(self) -> None:
@@ -3993,14 +3982,14 @@ class TestClassMismatchDisRemSubset:
         dev.confidence = "high"
         scan = make_mock_scan([dev])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
-        manager._metadata["37:168270"] = DeviceMetadata(
+        manager.metadata["37:168270"] = DeviceMetadata(
             class_mismatch="schema=DIS, discovery=REM"
         )
 
         schema = {"37:168270": {"_class": "DIS"}}
         count = manager.check_class_mismatches(schema)
         assert count == 0
-        meta = manager._metadata.get("37:168270")
+        meta = manager.metadata.get("37:168270")
         assert meta is not None
         assert meta.class_mismatch is None
 

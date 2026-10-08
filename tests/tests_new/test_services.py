@@ -111,7 +111,7 @@ def mock_coordinator(hass: HomeAssistant) -> RamsesCoordinator:
     # Initialize device_by_id as a dict for lookups
     mock_client.device_registry.device_by_id = {}
     coordinator.platforms = {}
-    coordinator._device_info = {}
+    coordinator.device_info_cache = {}
 
     entry.runtime_data = coordinator
 
@@ -797,7 +797,7 @@ async def test_get_device_and_from_id_bound_logic(
 async def test_run_fan_param_sequence_exception(
     mock_coordinator: RamsesCoordinator, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Test exception handling in _async_run_fan_param_sequence."""
+    """Test exception handling in async_run_fan_param_sequence."""
     # Force an exception inside the sequence loop
     # Patch the schema to a single item to make the test deterministic and fast
     with (
@@ -811,7 +811,7 @@ async def test_run_fan_param_sequence_exception(
         ),
         caplog.at_level(logging.ERROR),
     ):
-        await mock_coordinator.service_handler._async_run_fan_param_sequence(
+        await mock_coordinator.service_handler.async_run_fan_param_sequence(
             {"device_id": "30:111111"}
         )
 
@@ -994,9 +994,7 @@ async def test_run_fan_param_sequence_dict_fail(
         # mocking async_get_fan_param to avoid actual calls
         mock_coordinator.service_handler.async_get_fan_param = AsyncMock()
 
-        await mock_coordinator.service_handler._async_run_fan_param_sequence(
-            {}
-        )
+        await mock_coordinator.service_handler.async_run_fan_param_sequence({})
 
         # The function should return early due to invalid data, so async_get_fan_param
         # should NOT be called
@@ -1126,13 +1124,13 @@ async def test_async_sync_topology_enriches_schema(
     }
 
     mock_coordinator.options = {CONF_SCHEMA: config_schema}
-    mock_coordinator._skip_topology_sync = False  # noqa: SLF001
+    mock_coordinator.skip_topology_sync = False  # noqa: SLF001
     mock_coordinator.client = MagicMock()
     mock_coordinator.client.get_state = MagicMock(
         return_value=(learned_schema, {})
     )
-    mock_coordinator._entities = {}  # noqa: SLF001
-    mock_coordinator._remotes = {}  # noqa: SLF001
+    mock_coordinator.entities = {}  # noqa: SLF001
+    mock_coordinator.remotes = {}  # noqa: SLF001
     mock_coordinator.discovery_manager = None
     mock_coordinator.store = MagicMock()
     mock_coordinator.store.async_save = AsyncMock()
@@ -1281,7 +1279,7 @@ async def test_get_device_client_fallback(
 ) -> None:
     """Test get_device falls back to client.device_registry.device_by_id."""
     # Ensure internal devices list is empty to trigger fallback logic
-    mock_coordinator._devices = []
+    mock_coordinator.devices = []
     mock_dev = MagicMock()
     mock_dev.id = "30:999999"
 
@@ -1633,7 +1631,7 @@ async def test_update_device_simple_device(
 async def test_run_fan_param_sequence_errors(
     mock_coordinator: RamsesCoordinator, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Test exception handlers in _async_run_fan_param_sequence loop."""
+    """Test exception handlers in async_run_fan_param_sequence loop."""
     # Patch the schema to a single item to make the test deterministic and fast
     with (
         patch(
@@ -1652,7 +1650,7 @@ async def test_run_fan_param_sequence_errors(
             ]
         )
 
-        await mock_coordinator.service_handler._async_run_fan_param_sequence(
+        await mock_coordinator.service_handler.async_run_fan_param_sequence(
             {"device_id": "30:111111"}
         )
 
@@ -1727,7 +1725,7 @@ def test_get_device_returns_none(hass: HomeAssistant) -> None:
 
     # Ensure client is None (default behavior on init)
     coordinator.client = None
-    coordinator._devices = []
+    coordinator.devices = []
 
     # Test fallback logic returns None
     assert coordinator.get_device("01:123456") is None
@@ -1785,7 +1783,7 @@ async def test_update_device_relationships(hass: HomeAssistant) -> None:
         generic_device.model = None
 
         # Reset mock
-        coordinator._device_info = {}
+        coordinator.device_info_cache = {}
 
         await coordinator._async_update_device(generic_device)
 
@@ -1953,7 +1951,7 @@ async def test_get_fan_param_sets_pending(hass: HomeAssistant) -> None:
 async def test_run_fan_param_sequence_dict_failure(
     hass: HomeAssistant,
 ) -> None:
-    """Test _async_run_fan_param_sequence handles dict conversion failure."""
+    """Test async_run_fan_param_sequence handles dict conversion failure."""
     entry = MockConfigEntry(domain=DOMAIN, options={CONF_SCAN_INTERVAL: 60})
     coordinator = RamsesCoordinator(hass, entry)
 
@@ -1967,7 +1965,7 @@ async def test_run_fan_param_sequence_dict_failure(
         return_value=BadData()
     )
 
-    await coordinator.service_handler._async_run_fan_param_sequence({})
+    await coordinator.service_handler.async_run_fan_param_sequence({})
 
     # If it didn't raise, the exception was caught.
     # We can assume success if we reached here without crash.
@@ -2048,7 +2046,7 @@ async def test_update_device_already_registered(hass: HomeAssistant) -> None:
         assert dev_reg.async_get_or_create.call_count == 1
 
         # Check internal cache was updated
-        assert "13:123456" in coordinator._device_info
+        assert "13:123456" in coordinator.device_info_cache
 
         # Second call with identical state - should return early
         await coordinator._async_update_device(device)
@@ -2196,7 +2194,7 @@ async def test_get_fan_param_value_error_clears_pending(
 async def test_run_fan_param_sequence_normalization_error(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Test _async_run_fan_param_sequence handles exception during normalization."""
+    """Test async_run_fan_param_sequence handles exception during normalization."""
     entry = MockConfigEntry(domain=DOMAIN, options={CONF_SCAN_INTERVAL: 60})
     coordinator = RamsesCoordinator(hass, entry)
 
@@ -2209,7 +2207,7 @@ async def test_run_fan_param_sequence_normalization_error(
         ),
         caplog.at_level(logging.ERROR),
     ):
-        await coordinator.service_handler._async_run_fan_param_sequence({})
+        await coordinator.service_handler.async_run_fan_param_sequence({})
 
         # Verify the error was logged with the exact message format
         assert "Invalid service call data: Normalization failed" in caplog.text
@@ -2255,7 +2253,7 @@ async def test_set_fan_param_value_error_clears_pending(
 async def test_get_all_fan_params_creates_task(
     mock_coordinator: RamsesCoordinator,
 ) -> None:
-    """Test that get_all_fan_params schedules _async_run_fan_param_sequence as a task."""
+    """Test that get_all_fan_params schedules async_run_fan_param_sequence as a task."""
     call_data = {"device_id": "30:111111"}
 
     # Provide a side effect for async_create_background_task to explicitly
@@ -2276,7 +2274,7 @@ async def test_get_all_fan_params_creates_task(
         # Mocking with AsyncMock generates the coroutine cleanly
         patch.object(
             mock_coordinator.service_handler,
-            "_async_run_fan_param_sequence",
+            "async_run_fan_param_sequence",
             new_callable=AsyncMock,
         ) as mock_run,
     ):
@@ -2319,10 +2317,10 @@ async def test_services_client_not_initialized(
     with pytest.raises(HomeAssistantError, match="client is not initialized"):
         await mock_coordinator.service_handler.async_get_fan_param(MagicMock())
 
-    # 6. Test _async_run_fan_param_sequence
+    # 6. Test async_run_fan_param_sequence
     # This method catches exceptions internally, so it does NOT raise.
     # We assert that it runs without error and logs the underlying issues.
-    await mock_coordinator.service_handler._async_run_fan_param_sequence({})
+    await mock_coordinator.service_handler.async_run_fan_param_sequence({})
 
     # Check that the error was logged, confirming the exception handler was entered
     # The function returns early when device_id is missing, before checking client
@@ -2525,7 +2523,7 @@ async def test_update_fan_params_sequence(
     ):
         call_data = {"device_id": FAN_ID}
         # Call the method on service_handler, NOT directly on coordinator
-        await mock_coordinator.service_handler._async_run_fan_param_sequence(
+        await mock_coordinator.service_handler.async_run_fan_param_sequence(
             call_data
         )
 
@@ -4339,13 +4337,13 @@ async def test_async_probe_and_discover_probes_devices(
     mock_client.device_registry.device_by_id = {"01:123456": mock_dev}
     mock_client.hgi = None
 
-    mock_coordinator._discover_new_entities = AsyncMock()
+    mock_coordinator.discover_new_entities = AsyncMock()
 
     with patch("custom_components.ramses_cc.services.async_call_later"):
         await handler._async_probe_and_discover(["01:123456"], [])
 
     mock_dev.discovery.discover.assert_called_once()
-    mock_coordinator._discover_new_entities.assert_called_once()
+    mock_coordinator.discover_new_entities.assert_called_once()
 
 
 async def test_async_probe_and_discover_zero_cmds(
@@ -4361,13 +4359,13 @@ async def test_async_probe_and_discover_zero_cmds(
     mock_client.device_registry.device_by_id = {"04:123456": mock_dev}
     mock_client.hgi = None
 
-    mock_coordinator._discover_new_entities = AsyncMock()
+    mock_coordinator.discover_new_entities = AsyncMock()
 
     with patch("custom_components.ramses_cc.services.async_call_later"):
         await handler._async_probe_and_discover(["04:123456"], [])
 
     mock_dev.discovery.discover.assert_not_called()
-    mock_coordinator._discover_new_entities.assert_called_once()
+    mock_coordinator.discover_new_entities.assert_called_once()
 
 
 async def test_async_probe_and_discover_discover_fails(
@@ -4383,14 +4381,14 @@ async def test_async_probe_and_discover_discover_fails(
     mock_client.device_registry.device_by_id = {"01:123456": mock_dev}
     mock_client.hgi = None
 
-    mock_coordinator._discover_new_entities = AsyncMock()
+    mock_coordinator.discover_new_entities = AsyncMock()
 
     caplog.set_level(logging.DEBUG)
     with patch("custom_components.ramses_cc.services.async_call_later"):
         await handler._async_probe_and_discover(["01:123456"], [])
 
     assert "Discovery cycle failed" in caplog.text
-    mock_coordinator._discover_new_entities.assert_called_once()
+    mock_coordinator.discover_new_entities.assert_called_once()
 
 
 async def test_async_probe_and_discover_device_not_in_registry(
@@ -4403,11 +4401,11 @@ async def test_async_probe_and_discover_device_not_in_registry(
     mock_client.device_registry.device_by_id = {}  # device not present
     mock_client.hgi = None
 
-    mock_coordinator._discover_new_entities = AsyncMock()
+    mock_coordinator.discover_new_entities = AsyncMock()
 
     with patch("custom_components.ramses_cc.services.async_call_later"):
         await handler._async_probe_and_discover(["99:999999"], [])
-    mock_coordinator._discover_new_entities.assert_called_once()
+    mock_coordinator.discover_new_entities.assert_called_once()
 
 
 async def test_async_probe_and_discover_skips_hgi(
@@ -4425,7 +4423,7 @@ async def test_async_probe_and_discover_skips_hgi(
     mock_dev.discovery.discover = AsyncMock()
     mock_client.device_registry.device_by_id = {"18:006402": mock_dev}
 
-    mock_coordinator._discover_new_entities = AsyncMock()
+    mock_coordinator.discover_new_entities = AsyncMock()
 
     with patch("custom_components.ramses_cc.services.async_call_later"):
         await handler._async_probe_and_discover(["18:006402"], [])
@@ -4433,7 +4431,7 @@ async def test_async_probe_and_discover_skips_hgi(
 
 
 # ───────────────────────────────────────────────────────────────────────
-# Services: _async_run_fan_param_sequence edge cases (lines 371-386)
+# Services: async_run_fan_param_sequence edge cases (lines 371-386)
 # ───────────────────────────────────────────────────────────────────────
 
 
@@ -4449,7 +4447,7 @@ async def test_fan_param_sequence_skips_duplicate_running(
     handler._fan_param_sequences["32_153289"] = fake_task
 
     caplog.set_level(logging.DEBUG)
-    await handler._async_run_fan_param_sequence({"device_id": "32:153289"})
+    await handler.async_run_fan_param_sequence({"device_id": "32:153289"})
 
     assert "Skipping duplicate fan param sweep" in caplog.text
 
@@ -4469,7 +4467,7 @@ async def test_fan_param_sequence_clears_done_task(
     handler.async_get_fan_param = AsyncMock()
 
     with patch.object(handler.hass, "async_create_task"):
-        await handler._async_run_fan_param_sequence({"device_id": "32:153289"})
+        await handler.async_run_fan_param_sequence({"device_id": "32:153289"})
 
     # The old task should have been popped
     assert "32_153289" not in handler._fan_param_sequences or (
@@ -4484,7 +4482,7 @@ async def test_fan_param_sequence_no_device_id(
     handler = RamsesServiceHandler(mock_coordinator)
 
     caplog.set_level(logging.WARNING)
-    await handler._async_run_fan_param_sequence({})
+    await handler.async_run_fan_param_sequence({})
 
     assert "missing device_id" in caplog.text
 
@@ -4500,7 +4498,7 @@ async def test_fan_param_sequence_invalid_data(
     with patch.object(
         handler, "_normalize_service_call", side_effect=Exception("bad data")
     ):
-        await handler._async_run_fan_param_sequence({"device_id": "32:153289"})
+        await handler.async_run_fan_param_sequence({"device_id": "32:153289"})
 
     assert "Invalid service call data" in caplog.text
 
@@ -4968,7 +4966,7 @@ async def test_remove_device_demoted_hgi_allowed(
         await handler.async_remove_device(call)
 
     assert "18:130236" not in mock_coordinator.options[CONF_SCHEMA]
-    assert "18:130236" in mock_coordinator._removed_devices
+    assert "18:130236" in mock_coordinator.removed_devices
 
 
 async def test_remove_device_foreign_hgi_allowed(
@@ -4992,7 +4990,7 @@ async def test_remove_device_foreign_hgi_allowed(
         await handler.async_remove_device(call)
 
     assert "18:130236" not in mock_coordinator.options[CONF_SCHEMA]
-    assert "18:130236" in mock_coordinator._removed_devices
+    assert "18:130236" in mock_coordinator.removed_devices
 
 
 async def test_remove_device_disabled_hgi_allowed(
@@ -5020,7 +5018,7 @@ async def test_remove_device_disabled_hgi_allowed(
         await handler.async_remove_device(call)
 
     assert "18:130236" not in mock_coordinator.options[CONF_SCHEMA]
-    assert "18:130236" in mock_coordinator._removed_devices
+    assert "18:130236" in mock_coordinator.removed_devices
 
 
 async def test_remove_device_hgi_candidate_allowed(
@@ -5044,7 +5042,7 @@ async def test_remove_device_hgi_candidate_allowed(
         await handler.async_remove_device(call)
 
     assert "18:130236" not in mock_coordinator.options[CONF_SCHEMA]
-    assert "18:130236" in mock_coordinator._removed_devices
+    assert "18:130236" in mock_coordinator.removed_devices
 
 
 async def test_remove_device_hgi_registry_orphan(
@@ -5079,7 +5077,7 @@ async def test_remove_device_hgi_registry_orphan(
         )
         is None
     )
-    assert "18:130236" in mock_coordinator._removed_devices
+    assert "18:130236" in mock_coordinator.removed_devices
 
 
 async def test_remove_device_active_hgi_orphan_raises(
@@ -5512,7 +5510,7 @@ async def test_remove_device_registry_orphan(
         )
         is None
     )
-    assert "04:029030" in mock_coordinator._removed_devices
+    assert "04:029030" in mock_coordinator.removed_devices
 
 
 async def test_remove_device_zone_child_registry_orphan(
@@ -5548,7 +5546,7 @@ async def test_remove_device_zone_child_registry_orphan(
         )
         is None
     )
-    assert "01:216136_04" in mock_coordinator._removed_devices
+    assert "01:216136_04" in mock_coordinator.removed_devices
     schema = mock_coordinator.options[CONF_SCHEMA]
     # Zone 01 and the parent TCS are preserved; the stale comment is gone
     assert "01" in schema["01:216136"][SZ_ZONES]

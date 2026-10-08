@@ -46,7 +46,7 @@ def mock_coordinator(
     coordinator = RamsesCoordinator(hass, entry)
     coordinator.client = mock_gateway
     # Create fake devices list if needed, or we patch get_device
-    coordinator._device_info = {}
+    coordinator.device_info_cache = {}
 
     entry.runtime_data = coordinator
 

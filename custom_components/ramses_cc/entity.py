@@ -83,6 +83,11 @@ class RamsesEntity(CoordinatorEntity):
         self._last_drop_report: float = time.monotonic()
 
     @property
+    def device(self) -> RamsesRFEntity:
+        """Return the underlying ramses_rf device instance."""
+        return self._device
+
+    @property
     def device_info(self) -> DeviceInfo | ChildDeviceInfo | None:
         """Return device registry information for this entity.
 
@@ -90,7 +95,7 @@ class RamsesEntity(CoordinatorEntity):
         to ensure child devices link cleanly during entity registration.
         """
         coordinator_device_info = getattr(
-            self.coordinator, "_device_info", None
+            self.coordinator, "device_info_cache", None
         )
         if isinstance(coordinator_device_info, dict) and (
             dev_info := coordinator_device_info.get(str(self._device.id))
@@ -164,7 +169,7 @@ class RamsesEntity(CoordinatorEntity):
         # in Developer Tools without opening the config flow review step.
         discovery_mgr = getattr(self.coordinator, "discovery_manager", None)
         if discovery_mgr is not None:
-            meta = discovery_mgr._metadata.get(self._device.id)
+            meta = discovery_mgr.metadata.get(self._device.id)
             if meta is not None:
                 for flag_key, flag_val in (
                     ("class_mismatch", meta.class_mismatch),
@@ -186,7 +191,7 @@ class RamsesEntity(CoordinatorEntity):
         """
         await super().async_added_to_hass()
         if self.unique_id:
-            self.coordinator._entities[self.unique_id] = self
+            self.coordinator.entities[self.unique_id] = self
 
         # Listen for device-specific update signal
         device_signal = f"{SIGNAL_UPDATE}_{self._device.id}"

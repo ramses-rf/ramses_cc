@@ -1350,10 +1350,10 @@ async def test_hvac_set_fan_mode_custom_command_variations(
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
     # Inject parameterized custom command into the mocked coordinator.
-    # Phase 4: commands live in coordinator._remotes (populated from schema
+    # Phase 4: commands live in coordinator.remotes (populated from schema
     # _commands), not in options[known_list].
     mock_coordinator.options = {}
-    mock_coordinator._remotes = {"37:111111": {fan_mode: cmd_string}}
+    mock_coordinator.remotes = {"37:111111": {fan_mode: cmd_string}}
 
     hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
     hvac.async_write_ha_state = MagicMock()
@@ -1378,7 +1378,7 @@ async def test_hvac_set_fan_mode_custom_command_variations(
 async def test_hvac_set_fan_mode_reads_from_remotes(
     mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
-    """Test that async_set_fan_mode reads from coordinator._remotes (schema _commands)."""
+    """Test that async_set_fan_mode reads from coordinator.remotes (schema _commands)."""
     mock_device = MagicMock(spec=HvacVentilator)
     mock_device.id = "30:123456"
     mock_device.get_bound_rem.return_value = "37:111111"
@@ -1386,11 +1386,11 @@ async def test_hvac_set_fan_mode_reads_from_remotes(
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    # Set up _remotes (schema _commands) with a custom command for "low"
-    mock_coordinator._remotes = {
+    # Set up remotes (schema _commands) with a custom command for "low"
+    mock_coordinator.remotes = {
         "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"}
     }
-    # Phase 4: known_list fallback removed — _remotes is the only source.
+    # Phase 4: known_list fallback removed — remotes is the only source.
     mock_coordinator.options = {}
 
     hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
@@ -1398,10 +1398,10 @@ async def test_hvac_set_fan_mode_reads_from_remotes(
 
     await hvac.async_set_fan_mode("low")
 
-    # Should have sent the command from _remotes (schema _commands)
+    # Should have sent the command from remotes (schema _commands)
     mock_device._gateway.async_send_raw_command.assert_awaited_once()
     sent_cmd = mock_device._gateway.async_send_raw_command.call_args[0][0]
-    assert "000406" in str(sent_cmd), "Should use _remotes command"
+    assert "000406" in str(sent_cmd), "Should use remotes command"
     mock_device.set_fan_mode.assert_not_called()
 
 
@@ -1416,7 +1416,7 @@ async def test_hvac_set_fan_mode_rem_not_faked_raises(
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"}
     }
     mock_coordinator.options = {SZ_KNOWN_LIST: {}}
@@ -1448,7 +1448,7 @@ async def test_hvac_set_fan_mode_rem_faked_sends(
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"}
     }
     mock_coordinator.options = {SZ_KNOWN_LIST: {}}
@@ -1485,7 +1485,7 @@ async def test_hvac_set_fan_mode_rem_not_found_sends(
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"}
     }
     mock_coordinator.options = {SZ_KNOWN_LIST: {}}
@@ -1526,7 +1526,7 @@ async def test_hvac_set_fan_mode_unrecognized_format_raises(
     # FAN has a command with an unrecognized format (dict with a
     # code key so it classifies as 'mode' and appears in fan_modes,
     # but missing verb/payload so _is_command_dict returns False)
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "30:123456": {"laag": {"code": "22F1"}},
     }
     mock_coordinator.options = {SZ_KNOWN_LIST: {}}
@@ -1567,7 +1567,7 @@ async def test_set_fan_mode_with_fan_commands_override(
     mock_device.set_fan_mode = AsyncMock()
 
     # FAN has _commands as dict template (Phase 3b format)
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "30:123456": {
             "boost": {"verb": "W", "code": "22F1", "payload": "000706"}
         },
@@ -1605,7 +1605,7 @@ async def test_set_fan_mode_with_rem_commands_override(
     mock_device.set_fan_mode = AsyncMock()
 
     # FAN has no _commands; REM has packet string
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"},
     }
     mock_coordinator.options = {SZ_KNOWN_LIST: {}}
@@ -1642,7 +1642,7 @@ async def test_set_fan_mode_native_fallback(
     mock_device.set_fan_mode = AsyncMock()
 
     # No _commands anywhere
-    mock_coordinator._remotes = {}
+    mock_coordinator.remotes = {}
     mock_coordinator.options = {SZ_KNOWN_LIST: {}}
 
     hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
@@ -1669,7 +1669,7 @@ async def test_set_fan_mode_fan_commands_wins_over_rem_and_native(
     mock_device._gateway.async_send_raw_command = AsyncMock()
     mock_device.set_fan_mode = AsyncMock()
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         # FAN dict template (Phase 3b)
         "30:123456": {
             "low": {"verb": "W", "code": "22F1", "payload": "000406"}
@@ -1677,7 +1677,7 @@ async def test_set_fan_mode_fan_commands_wins_over_rem_and_native(
         # REM packet string (Phase 3a) — different payload
         "37:111111": {"low": "W 37:111111 30:123456 22F1 000999"},
     }
-    # Phase 4: known_list fallback removed — _remotes is the only source.
+    # Phase 4: known_list fallback removed — remotes is the only source.
     mock_coordinator.options = {}
 
     # REM is faked (so REM path would work if FAN didn't have the command)
@@ -1718,7 +1718,7 @@ async def test_set_fan_mode_with_fan_raw_string_commands_defensive_guard(
     mock_device.set_fan_mode = AsyncMock()
 
     # FAN has raw packet string directly under _commands (issue #995 scenario)
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "32:022222": {
             "laag": " I --- 29:123150 29:099029 --:------ 22F1 003 000206"
         },
@@ -1751,7 +1751,7 @@ def test_fan_modes_includes_custom_commands_from_remotes(
     mock_device.id = "30:123456"
     mock_device.get_bound_rem = MagicMock(return_value="37:111111")
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {
             "boost": "W 37:111111 30:123456 22F1 000406",
             "speed_1": "W 37:111111 30:123456 22F1 000407",
@@ -1783,7 +1783,7 @@ def test_fan_modes_no_bound_rem_returns_base_only(
     mock_device.id = "30:123456"
     mock_device.get_bound_rem = MagicMock(return_value=None)
 
-    mock_coordinator._remotes = {"37:111111": {"boost": "packet"}}
+    mock_coordinator.remotes = {"37:111111": {"boost": "packet"}}
 
     hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
     hvac._bound_rem = None
@@ -1797,12 +1797,12 @@ def test_fan_modes_no_bound_rem_returns_base_only(
 def test_fan_modes_empty_remotes_returns_base_only(
     mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
-    """fan_modes returns base modes when _remotes has no commands for bound REM."""
+    """fan_modes returns base modes when remotes has no commands for bound REM."""
     mock_device = MagicMock(spec=HvacVentilator)
     mock_device.id = "30:123456"
     mock_device.get_bound_rem = MagicMock(return_value="37:111111")
 
-    mock_coordinator._remotes = {}
+    mock_coordinator.remotes = {}
 
     hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
     hvac._bound_rem = "37:111111"
@@ -1822,7 +1822,7 @@ def test_fan_modes_no_duplicates_when_command_matches_base_mode(
     mock_device.get_bound_rem = MagicMock(return_value="37:111111")
 
     # "low" is both a base mode and a custom command
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"low": "W 37:111111 30:123456 22F1 000406"},
     }
 
@@ -1842,7 +1842,7 @@ def test_fan_modes_excludes_non_mode_commands(
     mock_device.id = "32:153289"
     mock_device.get_bound_rem = MagicMock(return_value=None)
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "32:153289": {
             # 22F1 — should appear in fan_modes
             "high": {"code": "22F1", "payload": "000307", "verb": "I"},
@@ -1891,7 +1891,7 @@ def test_fan_modes_excludes_non_mode_packet_strings(
     mock_device.id = "32:153289"
     mock_device.get_bound_rem = MagicMock(return_value="37:111111")
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {
             # 22F1 packet string — should appear
             "boost": "W 37:111111 32:153289 22F1 000406",
@@ -1917,7 +1917,7 @@ def test_command_type_explicit_tag_overrides_inference(
     mock_device.id = "32:153289"
     mock_device.get_bound_rem = MagicMock(return_value=None)
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "32:153289": {
             # 22F1 but tagged as 'config' — should NOT appear in fan_modes
             "weird_config": {
@@ -1959,7 +1959,7 @@ def test_fan_modes_strategy_mode_override_with_different_code(
         return_value=OrconStrategy()
     )
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "32:153289": {
             # "high" is an Orcon strategy mode name, but the user
             # overrode it with a 2411 command — still a mode override
@@ -2008,8 +2008,8 @@ async def test_set_fan_mode_standard_mode_not_intercepted(
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    # _remotes has a custom command, but NOT for "low"
-    mock_coordinator._remotes = {
+    # remotes has a custom command, but NOT for "low"
+    mock_coordinator.remotes = {
         "37:111111": {"boost": "W 37:111111 30:123456 22F1 000406"}
     }
 
@@ -2035,7 +2035,7 @@ async def test_set_fan_mode_custom_command_sends_via_gateway(
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"boost": "W 37:111111 30:123456 22F1 000406"}
     }
 
@@ -2054,7 +2054,7 @@ async def test_set_fan_mode_custom_command_sends_via_gateway(
 async def test_set_fan_mode_custom_command_from_remotes(
     mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
-    """_remotes (schema _commands) is the source for custom commands (Phase 4)."""
+    """remotes (schema _commands) is the source for custom commands (Phase 4)."""
     mock_device = MagicMock(spec=HvacVentilator)
     mock_device.id = "30:123456"
     mock_device.get_bound_rem = MagicMock(return_value="37:111111")
@@ -2063,10 +2063,10 @@ async def test_set_fan_mode_custom_command_from_remotes(
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"boost": "W 37:111111 30:123456 22F1 000AAA"}
     }
-    # Phase 4: known_list fallback removed — _remotes is the only source.
+    # Phase 4: known_list fallback removed — remotes is the only source.
     mock_coordinator.options = {}
 
     hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
@@ -2076,7 +2076,7 @@ async def test_set_fan_mode_custom_command_from_remotes(
 
     mock_device._gateway.async_send_raw_command.assert_awaited_once()
     sent_cmd = mock_device._gateway.async_send_raw_command.call_args[0][0]
-    assert "000AAA" in str(sent_cmd), "Should use _remotes command"
+    assert "000AAA" in str(sent_cmd), "Should use remotes command"
 
 
 async def test_set_fan_mode_validation_uses_dynamic_fan_modes(
@@ -2091,7 +2091,7 @@ async def test_set_fan_mode_validation_uses_dynamic_fan_modes(
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"my_custom_mode": "W 37:111111 30:123456 22F1 000406"}
     }
 
@@ -2099,7 +2099,7 @@ async def test_set_fan_mode_validation_uses_dynamic_fan_modes(
     hvac.async_write_ha_state = MagicMock()
 
     # "my_custom_mode" is NOT in the static _attr_fan_modes, but IS in the
-    # dynamic fan_modes property (extended from _remotes). This should NOT
+    # dynamic fan_modes property (extended from remotes). This should NOT
     # raise ServiceValidationError.
     await hvac.async_set_fan_mode("my_custom_mode")
 
@@ -2110,19 +2110,19 @@ async def test_set_fan_mode_validation_uses_dynamic_fan_modes(
 async def test_set_fan_mode_unknown_custom_mode_raises_validation_error(
     mock_coordinator: MagicMock, mock_description: MagicMock
 ) -> None:
-    """A mode not in base fan_modes and not in _remotes raises validation error."""
+    """A mode not in base fan_modes and not in remotes raises validation error."""
     mock_device = MagicMock(spec=HvacVentilator)
     mock_device.id = "30:123456"
     mock_device.get_bound_rem = MagicMock(return_value="37:111111")
     mock_device.set_fan_mode = AsyncMock()
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {"boost": "W 37:111111 30:123456 22F1 000406"}
     }
 
     hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
 
-    # "turbo" is not a base mode and not in _remotes
+    # "turbo" is not a base mode and not in remotes
     with pytest.raises(ServiceValidationError, match="invalid_fan_mode"):
         await hvac.async_set_fan_mode("turbo")
 
@@ -2436,7 +2436,7 @@ async def test_hvac_custom_command_parse_failure(
     mock_device._gateway = MagicMock()
     mock_device.gateway = mock_device._gateway
     mock_device._gateway.async_send_raw_command = AsyncMock()
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "30:123456": {
             "custom_fan": {"verb": " I", "code": "22F1", "payload": "00"}
         }
@@ -2815,7 +2815,7 @@ async def test_set_fan_mode_fan_template_sends_without_optimistic(
     mock_device.set_fan_mode = AsyncMock()
     mock_device.fan_info = MagicMock(return_value=None)
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "30:123456": {
             "high": {"verb": "I", "code": "22F1", "payload": "000304"}
         },
@@ -2853,7 +2853,7 @@ async def test_set_fan_mode_rem_packet_sends_without_optimistic(
     mock_device.set_fan_mode = AsyncMock()
     mock_device.fan_info = MagicMock(return_value=None)
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {
             "low": "I 37:111111 30:123456 --:------ 22F1 003 000104"
         },
@@ -3028,7 +3028,7 @@ async def test_fan_modes_filters_out_non_22f1_commands(
     mock_device.fan_info = MagicMock(return_value=None)
 
     # FAN _commands with a mix of 22F1, 22F3, 22F7, 2411, 10D0
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "30:123456": {
             "high": {"verb": "I", "code": "22F1", "payload": "000304"},
             "low": {"verb": "I", "code": "22F1", "payload": "000104"},
@@ -3082,7 +3082,7 @@ async def test_fan_modes_filters_rem_packet_strings(
     mock_device.get_bound_rem.return_value = "37:111111"
     mock_device.fan_info = MagicMock(return_value=None)
 
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "37:111111": {
             "auto": "I 37:111111 30:123456 --:------ 22F1 003 000404",
             "timer_10": "I 37:111111 30:123456 --:------ 22F3 007 00020A03040000",
@@ -3122,7 +3122,7 @@ async def test_fan_modes_includes_22f1_only_from_mixed_rem(
     mock_device.fan_info = MagicMock(return_value=None)
 
     # Real-world schema from issue 1116
-    mock_coordinator._remotes = {
+    mock_coordinator.remotes = {
         "32:136873": {
             "auto": {"verb": "I", "code": "22F1", "payload": "000404"},
             "away": {"verb": "I", "code": "22F1", "payload": "000004"},

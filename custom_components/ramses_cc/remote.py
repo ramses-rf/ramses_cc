@@ -306,7 +306,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
         self._attr_is_on = True
         # Load commands: FAN gets its own + bound REM's; REM gets its own.
         # _split_commands separates metadata (_comment) from actual commands.
-        raw_commands = coordinator._remotes.get(device.id, {})
+        raw_commands = coordinator.remotes.get(device.id, {})
         self._commands, meta = _split_commands(raw_commands)
         self._command_comment: str | None = meta.get("_comment")
         if isinstance(device, HvacVentilator):
@@ -314,7 +314,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             # _merge_commands keeps FAN metadata, ignores REM metadata.
             bound_rem = device.get_bound_rem()
             if bound_rem:
-                rem_commands = coordinator._remotes.get(str(bound_rem), {})
+                rem_commands = coordinator.remotes.get(str(bound_rem), {})
                 if rem_commands:
                     merged = _merge_commands(raw_commands, rem_commands)
                     self._commands, meta = _split_commands(merged)
@@ -465,7 +465,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             if self._command_comment
             else {}
         )
-        await self.coordinator._async_update_schema_commands(
+        await self.coordinator.async_update_schema_commands(
             self._device.id, _with_metadata(self._commands, meta)
         )
 
@@ -549,7 +549,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
                     if self._command_comment
                     else {}
                 )
-                await self.coordinator._async_update_schema_commands(
+                await self.coordinator.async_update_schema_commands(
                     self._device.id, _with_metadata(self._commands, meta)
                 )
             else:
@@ -560,8 +560,8 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
                     valid_srcs,
                 )
 
-        with self.coordinator._sem:
-            _LOGGER.debug("LEARN _sem set, setting up listener")
+        with self.coordinator.learn_sem:
+            _LOGGER.debug("LEARN learn_sem set, setting up listener")
             self.coordinator.learn_device_id = self._device.id
             remove_listener = async_track_state_change_event(
                 self.hass, "event.ramses_cc_learn_event", _async_on_change
@@ -900,7 +900,7 @@ class RamsesRemote(RamsesEntity, RemoteEntity):
             if self._command_comment
             else {}
         )
-        await self.coordinator._async_update_schema_commands(
+        await self.coordinator.async_update_schema_commands(
             self._device.id, _with_metadata(self._commands, meta)
         )
 

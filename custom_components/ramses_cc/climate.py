@@ -1410,7 +1410,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                     ):
                         base_modes.append(cmd_name)
 
-        remotes = getattr(self.coordinator, "_remotes", {}) or {}
+        remotes = getattr(self.coordinator, "remotes", {}) or {}
 
         # Phase 3b: FAN's own _commands (dict templates)
         # _split_commands strips metadata (_comment, future Builder keys)
@@ -1513,7 +1513,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
             # Priority (highest first):
             #   a. FAN's schema _commands (Phase 3b — dict templates)
             #   b. Bound REM's schema _commands (Phase 3a — packet strings)
-            remotes = getattr(self.coordinator, "_remotes", {}) or {}
+            remotes = getattr(self.coordinator, "remotes", {}) or {}
             if not isinstance(remotes, dict):
                 remotes = {}
 

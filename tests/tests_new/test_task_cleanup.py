@@ -88,18 +88,18 @@ async def test_clear_pending_task_cancelled_on_entity_removal(
     write state to a dead entity.
     """
     # Start a pending timeout task
-    number_entity._pending_timer = asyncio.create_task(
+    number_entity.pending_timer = asyncio.create_task(
         number_entity._clear_pending_after_timeout(30)
     )
 
-    assert number_entity._pending_timer is not None
-    assert not number_entity._pending_timer.done()
+    assert number_entity.pending_timer is not None
+    assert not number_entity.pending_timer.done()
 
     # Simulate entity removal from HA
     await number_entity.async_will_remove_from_hass()
 
     # The task should be cancelled
-    assert number_entity._pending_timer is None
+    assert number_entity.pending_timer is None
 
 
 async def test_clear_pending_task_cancelled_before_new_one(
@@ -111,10 +111,10 @@ async def test_clear_pending_task_cancelled_before_new_one(
     accumulate when a parameter was requested multiple times.
     """
     # Start first pending timeout task
-    number_entity._pending_timer = asyncio.create_task(
+    number_entity.pending_timer = asyncio.create_task(
         number_entity._clear_pending_after_timeout(30)
     )
-    first_task = number_entity._pending_timer
+    first_task = number_entity.pending_timer
 
     # Simulate requesting a new parameter (which should cancel the old task)
     # We patch the device interaction to avoid needing a real gateway
@@ -123,11 +123,11 @@ async def test_clear_pending_task_cancelled_before_new_one(
         if hasattr(number_entity._device, "get_fan_param"):
             number_entity._device.get_fan_param("01")
 
-        # Cancel previous and start new (mirrors the code in _request_parameter_value)
-        if number_entity._pending_timer is not None:
-            if not number_entity._pending_timer.done():
-                number_entity._pending_timer.cancel()
-        number_entity._pending_timer = asyncio.create_task(
+        # Cancel previous and start new (mirrors the code in request_parameter_value)
+        if number_entity.pending_timer is not None:
+            if not number_entity.pending_timer.done():
+                number_entity.pending_timer.cancel()
+        number_entity.pending_timer = asyncio.create_task(
             number_entity._clear_pending_after_timeout(30)
         )
 
@@ -135,19 +135,19 @@ async def test_clear_pending_task_cancelled_before_new_one(
     await asyncio.sleep(0)
     assert first_task.cancelled() or first_task.done()
     # New task should be active
-    assert number_entity._pending_timer is not None
-    assert not number_entity._pending_timer.done()
+    assert number_entity.pending_timer is not None
+    assert not number_entity.pending_timer.done()
 
     # Cleanup
-    number_entity._pending_timer.cancel()
+    number_entity.pending_timer.cancel()
     with contextlib.suppress(asyncio.CancelledError):
-        await number_entity._pending_timer
+        await number_entity.pending_timer
 
 
 async def test_schedule_clear_pending_tracks_task_on_entity(
     mock_coordinator: MagicMock,
 ) -> None:
-    """_schedule_clear_pending stores the task on the entity's _pending_timer.
+    """_schedule_clear_pending stores the task on the entity's pending_timer.
 
     This proves the fix for the 11 untracked async_create_task calls in
     services.py that created _clear_pending_after_timeout tasks without
@@ -157,7 +157,7 @@ async def test_schedule_clear_pending_tracks_task_on_entity(
 
     # Create a mock entity with the required interface
     entity = MagicMock()
-    entity._pending_timer = None
+    entity.pending_timer = None
 
     async def _clear_pending(timeout: int) -> None:
         await asyncio.sleep(timeout)
@@ -168,14 +168,14 @@ async def test_schedule_clear_pending_tracks_task_on_entity(
     handler._schedule_clear_pending(entity, 30)
 
     # The task should be stored on the entity
-    assert entity._pending_timer is not None
-    assert isinstance(entity._pending_timer, asyncio.Task)
-    assert not entity._pending_timer.done()
+    assert entity.pending_timer is not None
+    assert isinstance(entity.pending_timer, asyncio.Task)
+    assert not entity.pending_timer.done()
 
     # Cleanup
-    entity._pending_timer.cancel()
+    entity.pending_timer.cancel()
     with contextlib.suppress(asyncio.CancelledError):
-        await entity._pending_timer
+        await entity.pending_timer
 
 
 async def test_schedule_clear_pending_cancels_previous_task(
@@ -189,14 +189,14 @@ async def test_schedule_clear_pending_cancels_previous_task(
     handler = RamsesServiceHandler(mock_coordinator)
 
     entity = MagicMock()
-    entity._pending_timer = asyncio.create_task(asyncio.sleep(100))
+    entity.pending_timer = asyncio.create_task(asyncio.sleep(100))
 
     async def _clear_pending(timeout: int) -> None:
         await asyncio.sleep(timeout)
 
     entity._clear_pending_after_timeout = _clear_pending
 
-    prev_task = entity._pending_timer
+    prev_task = entity.pending_timer
 
     # Schedule a new clear pending task (should cancel the previous)
     handler._schedule_clear_pending(entity, 30)
@@ -205,13 +205,13 @@ async def test_schedule_clear_pending_cancels_previous_task(
     await asyncio.sleep(0)
     assert prev_task.cancelled() or prev_task.done()
     # New task should be stored
-    assert entity._pending_timer is not None
-    assert entity._pending_timer is not prev_task
+    assert entity.pending_timer is not None
+    assert entity.pending_timer is not prev_task
 
     # Cleanup
-    entity._pending_timer.cancel()
+    entity.pending_timer.cancel()
     with contextlib.suppress(asyncio.CancelledError):
-        await entity._pending_timer
+        await entity.pending_timer
 
 
 async def test_service_handler_cleanup_cancels_probe_task(
@@ -317,7 +317,7 @@ async def test_schedule_clear_pending_tracks_task_in_handler(
     handler = RamsesServiceHandler(mock_coordinator)
 
     entity = MagicMock()
-    entity._pending_timer = None
+    entity.pending_timer = None
 
     async def _clear_pending(timeout: int) -> None:
         await asyncio.sleep(timeout)
@@ -328,12 +328,12 @@ async def test_schedule_clear_pending_tracks_task_in_handler(
 
     # Task should be tracked in the handler
     assert len(handler._pending_timers) == 1
-    assert handler._pending_timers[0] is entity._pending_timer
+    assert handler._pending_timers[0] is entity.pending_timer
 
     # Cleanup
-    entity._pending_timer.cancel()
+    entity.pending_timer.cancel()
     with contextlib.suppress(asyncio.CancelledError):
-        await entity._pending_timer
+        await entity.pending_timer
 
 
 async def test_register_pending_timer_tracks_task(

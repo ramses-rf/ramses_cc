@@ -194,7 +194,7 @@ SZ_SCHEMA_BACKUP: Final = "schema_backup"
 
 # User-authored schema traits (_ prefixed keys, stripped before ramses_rf).
 # These live inside device entries in the schema and are preserved by
-# sync_learned_topology, but stripped by _strip_schema_extensions and
+# sync_learned_topology, but stripped by strip_schema_extensions and
 # strip_traits_for_validation before the schema reaches ramses_rf.
 SZ_TR_DISABLED: Final = "_disabled"  # bool: exclude from entity creation
 SZ_TR_SKIPPED: Final = (

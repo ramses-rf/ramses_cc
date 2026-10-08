@@ -361,7 +361,7 @@ async def async_setup_entry(
     # the callback above.
     entities: list[RamsesButtonBase] = [
         button
-        for device in coordinator._devices
+        for device in coordinator.devices
         if isinstance(device, RamsesRFEntity)
         for button in factory.button_entities(device)
     ]

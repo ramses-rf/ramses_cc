@@ -41,7 +41,7 @@ class MockPendingEntity:
     """Mock implementing PendingEntity protocol."""
 
     def __init__(self) -> None:
-        self._pending_timer = None
+        self.pending_timer = None
 
     def set_pending(self) -> None:
         pass
