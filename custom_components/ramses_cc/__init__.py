@@ -210,9 +210,7 @@ async def _async_cleanup_yaml_known_list(
         )
 
     # 2. Persistent notification telling the user to clean up
-    from homeassistant.components.persistent_notification import (
-        async_create as async_create_notification,
-    )
+    from .notifications import async_notify
 
     lines = [
         "The `ramses_cc` configuration has been migrated to the config",
@@ -235,11 +233,11 @@ async def _async_cleanup_yaml_known_list(
             f"A backup was saved to: `{backup_path}`",
         ]
 
-    async_create_notification(
+    async_notify(
         hass,
+        "yaml_known_list_cleanup",
+        title="Remove ramses_cc block from configuration.yaml",
         message="\n".join(lines),
-        title="RAMSES CC: Remove ramses_cc block from configuration.yaml",
-        notification_id=f"{DOMAIN}_yaml_known_list_cleanup",
     )
     _LOGGER.warning(
         "Legacy ramses_cc configuration found in configuration.yaml. "

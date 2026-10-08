@@ -22,10 +22,6 @@ from threading import Semaphore
 from typing import TYPE_CHECKING, Any, Final, TypeVar, cast
 
 import probatio as prob
-from homeassistant.components.persistent_notification import (
-    async_create as async_create_notification,
-    async_dismiss as async_dismiss_notification,
-)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
@@ -153,6 +149,10 @@ from .helpers import (
 )
 from .mqtt_bridge import RamsesMqttBridge
 from .mqtt_pool_bridge import RamsesMqttPoolBridge
+from .notifications import (
+    async_dismiss as async_dismiss_notification,
+    async_notify as async_create_notification,
+)
 from .schemas import (
     _SCHEMA_EXTENSION_KEYS,
     _strip_and_orchestrate,
@@ -1006,19 +1006,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     # user doesn't click a notification that leads to
                     # an empty review form (the devices haven't been
                     # re-discovered by the scan yet).
-                    from homeassistant.components.persistent_notification import (
-                        async_dismiss as _async_dismiss_notification,
+                    async_dismiss_notification(self.hass, "discovery")
+                    async_dismiss_notification(
+                        self.hass, "discovery_mismatches"
                     )
-
-                    _async_dismiss_notification(
-                        self.hass, f"{DOMAIN}_discovery"
-                    )
-                    _async_dismiss_notification(
-                        self.hass, f"{DOMAIN}_discovery_mismatches"
-                    )
-                    _async_dismiss_notification(
-                        self.hass, f"{DOMAIN}_discovery_lost"
-                    )
+                    async_dismiss_notification(self.hass, "discovery_lost")
 
         # 2. Schema Handling
         _LOGGER.debug("CONFIG_SCHEMA: %s", config_schema)  # noqa: E501  # marker: after-migration
@@ -4788,7 +4780,8 @@ class RamsesCoordinator(DataUpdateCoordinator):
             )
             async_create_notification(
                 self.hass,
-                title="RAMSES CC: Gateway offline",
+                "gateway_offline",
+                title="Gateway offline",
                 message=(
                     f"The gateway has not received RF packets for "
                     f"{timeout_mins}+ minutes.\n\n"
@@ -4802,11 +4795,10 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     "The notification will clear automatically when "
                     "packets resume."
                 ),
-                notification_id="ramses_cc_gateway_offline",
             )
         elif is_active and self._gateway_offline_notified:
             self._gateway_offline_notified = False
-            async_dismiss_notification(self.hass, "ramses_cc_gateway_offline")
+            async_dismiss_notification(self.hass, "gateway_offline")
             _LOGGER.info("Gateway back online: packets received again")
 
     async def _async_discovery_task(self, _now: dt | None = None) -> None:
@@ -5246,7 +5238,6 @@ class RamsesCoordinator(DataUpdateCoordinator):
 
         :param schema: The config-entry schema dict.
         """
-        notification_id = f"{DOMAIN}_schema_orphans"
         if self.entry.entry_id is None:
             return
         dev_reg = dr.async_get(self.hass)
@@ -5272,12 +5263,13 @@ class RamsesCoordinator(DataUpdateCoordinator):
         if not orphaned:
             if self._schema_orphans_notified:
                 self._schema_orphans_notified = False
-                async_dismiss_notification(self.hass, notification_id)
+                async_dismiss_notification(self.hass, "schema_orphans")
             return
         self._schema_orphans_notified = True
         async_create_notification(
             self.hass,
-            title="Ramses RF: devices no longer in schema",
+            "schema_orphans",
+            title="Devices no longer in schema",
             message=(
                 "The following devices were removed from the schema but "
                 "still have entities in Home Assistant:\n\n"
@@ -5288,7 +5280,6 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 "service — children such as remotes and zones under a "
                 "removed parent are listed separately."
             ),
-            notification_id=notification_id,
         )
 
     async def _async_probe_devices_after_failover(self) -> None:

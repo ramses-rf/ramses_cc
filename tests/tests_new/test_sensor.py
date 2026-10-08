@@ -30,6 +30,7 @@ from custom_components.ramses_cc.const import (
 )
 from custom_components.ramses_cc.sensor import (
     SENSOR_DESCRIPTIONS,
+    RamsesFilterSensor,
     RamsesLastMessageSensor,
     RamsesSensor,
     RamsesSensorEntityDescription,
@@ -1145,3 +1146,66 @@ async def test_last_msg_registry_reenabled_when_option_on(
         registry.async_get(user_disabled.entity_id).disabled_by
         == er.RegistryEntryDisabler.USER
     )
+
+
+class TestRamsesFilterSensor:
+    """Filter-change notification for the filter-remaining sensor."""
+
+    def _make_sensor(
+        self, days: int | None, pct: int | None
+    ) -> RamsesFilterSensor:
+        device = MagicMock()
+        device.id = "32:153289"
+        device.hvac_state = MagicMock()
+        device.hvac_state.filter_remaining_days = days
+        device.hvac_state.filter_remaining_percent = pct
+
+        coordinator = MagicMock()
+        coordinator.hass = MagicMock()
+        desc = MagicMock(spec=RamsesSensorEntityDescription)
+        desc.key = "filter_remaining"
+        return RamsesFilterSensor(coordinator, device, desc)
+
+    def test_notifies_when_days_exhausted(self) -> None:
+        """days <= 0 raises the notification."""
+        sensor = self._make_sensor(days=0, pct=0)
+        with patch(
+            "custom_components.ramses_cc.sensor.async_set_notification"
+        ) as mock_set:
+            sensor._check_filter_due()
+
+        mock_set.assert_called_once()
+        args, kwargs = mock_set.call_args
+        assert args[1] == "filter_change_32_153289"
+        assert args[2] is True
+        assert "32:153289" in kwargs["message"]
+
+    def test_notifies_when_percent_exhausted(self) -> None:
+        """percent <= 0 also raises the notification."""
+        sensor = self._make_sensor(days=None, pct=0)
+        with patch(
+            "custom_components.ramses_cc.sensor.async_set_notification"
+        ) as mock_set:
+            sensor._check_filter_due()
+
+        assert mock_set.call_args.args[2] is True
+
+    def test_clears_when_countdown_reset(self) -> None:
+        """A fresh countdown clears the notification."""
+        sensor = self._make_sensor(days=90, pct=100)
+        with patch(
+            "custom_components.ramses_cc.sensor.async_set_notification"
+        ) as mock_set:
+            sensor._check_filter_due()
+
+        assert mock_set.call_args.args[2] is False
+
+    def test_no_state_no_notification_change(self) -> None:
+        """Unknown state does not toggle the notification."""
+        sensor = self._make_sensor(days=None, pct=None)
+        with patch(
+            "custom_components.ramses_cc.sensor.async_set_notification"
+        ) as mock_set:
+            sensor._check_filter_due()
+
+        assert mock_set.call_args.args[2] is False

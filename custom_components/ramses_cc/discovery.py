@@ -34,10 +34,6 @@ from datetime import datetime as dt, timedelta as td
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final
 
-from homeassistant.components.persistent_notification import (
-    async_create as async_create_notification,
-    async_dismiss as async_dismiss_notification,
-)
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
@@ -45,7 +41,6 @@ from ramses_tx.address import is_hgi_id
 
 from .const import (
     DEFAULT_HGI_ID,
-    DOMAIN,
     SZ_DEVICE_COMMENTS,
     SZ_TR_BOUND,
     SZ_TR_CLASS,
@@ -54,6 +49,10 @@ from .const import (
     SZ_TR_NAME,
     SZ_TR_OWNER,
     SZ_TR_SKIPPED,
+)
+from .notifications import (
+    async_dismiss as async_dismiss_notification,
+    async_notify as async_create_notification,
 )
 
 if TYPE_CHECKING:
@@ -291,11 +290,6 @@ class DiscoveryManager:
         self._warned_mismatches: set[str] = set()
         # Separate set for name mismatches (zone IDs, not device IDs).
         self._warned_name_mismatches: set[str] = set()
-
-        # Notification ID for the "new devices" notification
-        self._notification_id = f"{DOMAIN}_discovery"
-        # Notification ID for the "schema mismatches" notification
-        self._mismatch_notification_id = f"{DOMAIN}_discovery_mismatches"
 
         self._scan.start()
         _LOGGER.info("DiscoveryManager: started (passive scan running)")
@@ -1791,9 +1785,7 @@ class DiscoveryManager:
             self._send_mismatch_notification(counts)
         else:
             # All clear — dismiss any existing mismatch notification
-            async_dismiss_notification(
-                self._hass, self._mismatch_notification_id
-            )
+            async_dismiss_notification(self._hass, "discovery_mismatches")
 
         return counts
 
@@ -1884,9 +1876,9 @@ class DiscoveryManager:
 
         async_create_notification(
             self._hass,
+            "discovery_mismatches",
+            title="Schema mismatches detected",
             message="\n".join(lines),
-            title="RAMSES CC: Schema mismatches detected",
-            notification_id=self._mismatch_notification_id,
         )
 
     def export_state(self) -> dict[str, Any]:
@@ -2876,8 +2868,8 @@ class DiscoveryManager:
     def stop(self) -> None:
         """Stop the scan engine and dismiss notifications."""
         self._scan.stop()
-        async_dismiss_notification(self._hass, self._notification_id)
-        async_dismiss_notification(self._hass, self._mismatch_notification_id)
+        async_dismiss_notification(self._hass, "discovery")
+        async_dismiss_notification(self._hass, "discovery_mismatches")
         _LOGGER.info("DiscoveryManager: stopped")
 
     def _send_notification(self, new_ids: list[str]) -> None:
@@ -2925,9 +2917,9 @@ class DiscoveryManager:
 
         async_create_notification(
             self._hass,
+            "discovery",
+            title="New devices discovered",
             message="\n".join(lines),
-            title="RAMSES CC: New devices discovered",
-            notification_id=self._notification_id,
         )
 
     def _send_lost_notification(self, lost_ids: list[str]) -> None:
@@ -2948,7 +2940,7 @@ class DiscoveryManager:
 
         async_create_notification(
             self._hass,
+            "discovery_lost",
+            title="Lost devices",
             message="\n".join(lines),
-            title="RAMSES CC: Lost devices",
-            notification_id=f"{DOMAIN}_discovery_lost",
         )

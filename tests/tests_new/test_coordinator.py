@@ -1176,9 +1176,7 @@ async def test_gateway_health_notification_when_offline(
         await mock_coordinator._check_gateway_health()
         cast(Any, mock_notify).assert_called_once()
         call_kwargs = cast(Any, mock_notify).call_args
-        assert call_kwargs.kwargs["notification_id"] == (
-            "ramses_cc_gateway_offline"
-        )
+        assert call_kwargs.args[1] == "gateway_offline"
         assert "Gateway offline" in call_kwargs.kwargs["title"]
         assert mock_coordinator._gateway_offline_notified is True
 
@@ -1219,7 +1217,7 @@ async def test_gateway_health_dismisses_when_recovered(
     ) as mock_dismiss:
         await mock_coordinator._check_gateway_health()
         cast(Any, mock_dismiss).assert_called_once_with(
-            mock_coordinator.hass, "ramses_cc_gateway_offline"
+            mock_coordinator.hass, "gateway_offline"
         )
         assert mock_coordinator._gateway_offline_notified is False
 
@@ -11580,15 +11578,15 @@ async def test_report_schema_orphans(
         mock_coordinator._report_schema_orphans(schema)
 
         mock_notify.assert_called_once()
-        kwargs = cast(Any, mock_notify).call_args.kwargs
-        assert "04:123456" in kwargs["message"]
-        assert "- `01:123456`" not in kwargs["message"]
-        assert kwargs["notification_id"] == f"{DOMAIN}_schema_orphans"
+        call_args = cast(Any, mock_notify).call_args
+        assert "04:123456" in call_args.kwargs["message"]
+        assert "- `01:123456`" not in call_args.kwargs["message"]
+        assert call_args.args[1] == "schema_orphans"
 
         # Orphan resolved (re-added to schema) → notification dismissed.
         mock_coordinator._report_schema_orphans(
             {**schema, "04:123456": {SZ_TR_OWNER: "me"}}
         )
         mock_dismiss.assert_called_once_with(
-            mock_coordinator.hass, f"{DOMAIN}_schema_orphans"
+            mock_coordinator.hass, "schema_orphans"
         )
