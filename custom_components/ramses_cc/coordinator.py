@@ -51,7 +51,6 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.devices import (
-    _CLASS_BY_SLUG,
     Controller,
     Device,
     DeviceHvac,
@@ -60,6 +59,14 @@ from ramses_rf.devices import (
     UfhCircuit,
     UfhController,
 )
+
+try:
+    from ramses_rf.devices import (  # type: ignore[attr-defined]
+        CLASS_BY_SLUG,
+    )
+except ImportError:  # ramses_rf <= 0.60.10, public name added after
+    from ramses_rf.devices import _CLASS_BY_SLUG as CLASS_BY_SLUG  # noqa: F401
+
 from ramses_rf.entity import Entity as RamsesRFEntity
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.schemas import (
@@ -232,15 +239,15 @@ def _normalize_class_slug(value: str) -> str:
     if not value or not isinstance(value, str):
         return value
     # Already a valid DevType slug?
-    if value in _CLASS_BY_SLUG:
+    if value in CLASS_BY_SLUG:
         return value
     # Try uppercase (fan -> FAN)
-    if value.upper() in _CLASS_BY_SLUG:
+    if value.upper() in CLASS_BY_SLUG:
         return value.upper()
     # Try entity slug -> DevType slug (ventilator -> FAN)
     try:
         slug = str(DEV_TYPE_MAP.slug(value))
-        if slug in _CLASS_BY_SLUG:
+        if slug in CLASS_BY_SLUG:
             return slug
     except KeyError:
         pass
@@ -1771,7 +1778,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         so the caller can decide whether to save the (invalid) schema or
         skip the save to avoid corrupting the config entry.
 
-        Also checks ``_class`` values against ramses_rf's ``_CLASS_BY_SLUG``
+        Also checks ``_class`` values against ramses_rf's ``CLASS_BY_SLUG``
         and warns if any are not valid DevType slugs (e.g. 'ventilator'
         instead of 'FAN').  Invalid ``_class`` values are not rejected
         (ramses_rf falls back to the default class), but the warning helps
@@ -1787,7 +1794,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             if not isinstance(entry, dict) or not isinstance(dev_id, str):
                 continue
             cls = entry.get(SZ_TR_CLASS)
-            if isinstance(cls, str) and cls and cls not in _CLASS_BY_SLUG:
+            if isinstance(cls, str) and cls and cls not in CLASS_BY_SLUG:
                 _LOGGER.warning(
                     "Schema entry for %s has _class='%s' which is not a "
                     "valid DevType slug. Valid slugs: %s. "
@@ -1795,7 +1802,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     "Please update the schema to use a valid slug.",
                     dev_id,
                     cls,
-                    ", ".join(sorted(str(s) for s in _CLASS_BY_SLUG)),
+                    ", ".join(sorted(str(s) for s in CLASS_BY_SLUG)),
                 )
 
         try:
