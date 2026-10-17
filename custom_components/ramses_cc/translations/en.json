@@ -46,11 +46,13 @@
                 "title": "Serial port config",
                 "data": {
                     "port_name": "Serial device path",
-                    "serial_port": "Advanced serial port config"
+                    "serial_port": "Advanced serial port config",
+                    "zigbee_legacy_ack": "Use legacy Zigbee acknowledgements"
                 },
                 "data_description": {
                     "port_name": "Examples: '/dev/cu.modem2', 'COM6' (Windows) or 'mqtt://user:pwd@homeassistant.local:1883'",
-                    "serial_port": "Not required for typical use, except nanoCUL to set 'baudrate: 57600'"
+                    "serial_port": "Not required for typical use, except nanoCUL to set 'baudrate: 57600'",
+                    "zigbee_legacy_ack": "Override automatic firmware detection and use text acknowledgements."
                 }
             },
             "config": {
@@ -179,11 +181,13 @@
                 "title": "Serial port config",
                 "data": {
                     "port_name": "Serial device path",
-                    "serial_port": "Advanced serial port config"
+                    "serial_port": "Advanced serial port config",
+                    "zigbee_legacy_ack": "Use legacy Zigbee acknowledgements"
                 },
                 "data_description": {
                     "port_name": "Examples: '/dev/cu.modem2', 'COM6' (Windows) or 'mqtt://user:pwd@homeassistant.local:1883'",
-                    "serial_port": "Not required for typical use, except nanoCUL to set 'baudrate: 57600'."
+                    "serial_port": "Not required for typical use, except nanoCUL to set 'baudrate: 57600'.",
+                    "zigbee_legacy_ack": "Override automatic firmware detection and use text acknowledgements."
                 }
             },
             "config": {
@@ -297,6 +301,16 @@
                 "data": {
                     "hgi_id": "HGI device ID (18:NNNNNN)",
                     "topic_prefix": "MQTT topic prefix (optional)"
+                }
+            },
+            "manage_pool_zigbee": {
+                "title": "Zigbee bridge",
+                "data": {
+                    "device": "Device",
+                    "zigbee_legacy_ack": "Use legacy Zigbee acknowledgements"
+                },
+                "data_description": {
+                    "zigbee_legacy_ack": "Override automatic firmware detection and use text acknowledgements."
                 }
             }
         }

@@ -46,11 +46,13 @@
                 "title": "Seriële-poortinstellingen",
                 "data": {
                     "port_name": "Pad naar serieel apparaat",
-                    "serial_port": "Geavanceerde instellingen seriële poort"
+                    "serial_port": "Geavanceerde instellingen seriële poort",
+                    "zigbee_legacy_ack": "Oude Zigbee-bevestigingen gebruiken"
                 },
                 "data_description": {
                     "port_name": "Bijv. '/dev/cu.modem2', 'COM6' (Windows) of 'mqtt://user:pwd@homeassistant.local:1883'",
-                    "serial_port": "Voor standaardgebruik niet vereist, behalve voor nanoCUL: 'baudrate: 57600'"
+                    "serial_port": "Voor standaardgebruik niet vereist, behalve voor nanoCUL: 'baudrate: 57600'",
+                    "zigbee_legacy_ack": "Automatische firmwaredetectie overschrijven en tekstbevestigingen gebruiken."
                 }
             },
             "config": {
@@ -178,11 +180,13 @@
                 "title": "Seriële-poortconfiguratie",
                 "data": {
                     "port_name": "Pad naar serieel apparaat",
-                    "serial_port": "Geavanceerde seriële-poortconfiguratie"
+                    "serial_port": "Geavanceerde seriële-poortconfiguratie",
+                    "zigbee_legacy_ack": "Oude Zigbee-bevestigingen gebruiken"
                 },
                 "data_description": {
                     "port_name": "Bijv. '/dev/cu.modem2', 'COM6' of 'mqtt://user:pwd@homeassistant.local:1883'",
-                    "serial_port": "Voor standaardgebruik niet vereist, behalve voor nanoCUL: 'baudrate: 57600'"
+                    "serial_port": "Voor standaardgebruik niet vereist, behalve voor nanoCUL: 'baudrate: 57600'",
+                    "zigbee_legacy_ack": "Automatische firmwaredetectie overschrijven en tekstbevestigingen gebruiken."
                 }
             },
             "config": {
@@ -295,6 +299,16 @@
                 "data": {
                     "hgi_id": "HGI-apparaat-ID (18:NNNNNN)",
                     "topic_prefix": "MQTT-onderwerpprefix (optioneel)"
+                }
+            },
+            "manage_pool_zigbee": {
+                "title": "Zigbee-bridge",
+                "data": {
+                    "device": "Apparaat",
+                    "zigbee_legacy_ack": "Oude Zigbee-bevestigingen gebruiken"
+                },
+                "data_description": {
+                    "zigbee_legacy_ack": "Automatische firmwaredetectie overschrijven en tekstbevestigingen gebruiken."
                 }
             }
         }

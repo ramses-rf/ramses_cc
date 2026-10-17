@@ -8,7 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Final, cast
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import probatio as prob
 from homeassistant.components import mqtt, usb
@@ -97,6 +97,7 @@ from .const import (
 )
 from .ha_compat import _REAL_VOL, vol_schema
 from .schemas import migrate_known_list_traits, order_schema
+from .zigbee import build_zigbee_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ CONF_HA_MQTT_PATH: Final = "ha_mqtt"
 CONF_HA_MQTT_NOT_READY: Final = "ha_mqtt_not_ready"
 CONF_HA_MQTT_MISSING: Final = "ha_mqtt_missing"
 CONF_ZIGBEE_DEVICE: Final = "zigbee"
+CONF_ZIGBEE_LEGACY_ACK: Final = "zigbee_legacy_ack"
 
 # HGI device ID regex: 18:NNNNNN (class 18, 6 decimal digits).
 # Uses DEVICE_ID_REGEX.HGI from ramses_tx (single source of truth).
@@ -487,10 +489,10 @@ class BaseRamsesFlow:
         try:
             dev_reg = dr.async_get(self.hass)
             matches = [
-                dev_entry
-                for dev_entry in dev_reg.async_get_devices(identifiers=DOMAIN)
-                if "ramses_esp32c6"
-                in (dev_reg.async_get(dev_entry).model or "").lower()
+                dev_entry.id
+                for dev_entry in dev_reg.devices.values()
+                if "ramses_esp32c6" in (dev_entry.model or "").lower()
+                and any(domain == "zha" for domain, _ in dev_entry.identifiers)
             ]
             if len(matches) == 1:
                 raw_name = (
@@ -720,9 +722,7 @@ class BaseRamsesFlow:
                         last_step=False,
                     )
 
-                zigbee_url = (
-                    f"zigbee://{ieee}/0xfc00/0x0000/10/0xfc01/0x0000/10"
-                )
+                zigbee_url = build_zigbee_url(self.hass, ieee)
                 _LOGGER.info(
                     "Constructed Zigbee URL from device %s: %s",
                     device_id,
@@ -733,10 +733,10 @@ class BaseRamsesFlow:
 
             # No submission yet — find matching devices.
             matches = [
-                dev_entry
-                for dev_entry in dev_reg.async_get_devices(identifiers=DOMAIN)
-                if "ramses_esp32c6"
-                in (dev_reg.async_get(dev_entry).model or "").lower()
+                dev_entry.id
+                for dev_entry in dev_reg.devices.values()
+                if "ramses_esp32c6" in (dev_entry.model or "").lower()
+                and any(domain == "zha" for domain, _ in dev_entry.identifiers)
             ]
 
             if len(matches) == 0:
@@ -771,9 +771,7 @@ class BaseRamsesFlow:
                         last_step=False,
                     )
 
-                zigbee_url = (
-                    f"zigbee://{ieee}/0xfc00/0x0000/10/0xfc01/0x0000/10"
-                )
+                zigbee_url = build_zigbee_url(self.hass, ieee)
                 _LOGGER.info(
                     "Auto-constructed Zigbee URL from device %s: %s",
                     dev_reg.async_get(candidate).id,
@@ -853,6 +851,18 @@ class BaseRamsesFlow:
 
                 if not errors:
                     port_name = config.get(SZ_PORT_NAME)
+                    if (
+                        not self._manual_serial_port
+                        and isinstance(port_name, str)
+                        and port_name.startswith("zigbee://")
+                        and CONF_ZIGBEE_LEGACY_ACK in user_input
+                    ):
+                        port_name = build_zigbee_url(
+                            self.hass,
+                            urlparse(port_name).netloc,
+                            force_legacy=user_input[CONF_ZIGBEE_LEGACY_ACK],
+                        )
+                        config[SZ_PORT_NAME] = port_name
                     conn_err = await self._async_validate_port_connection(
                         str(port_name or "")
                     )
@@ -883,6 +893,23 @@ class BaseRamsesFlow:
             }
 
         data_schema: dict[prob.Marker, Any] = {}
+        selected_port = self.options[SZ_SERIAL_PORT].get(SZ_PORT_NAME)
+        if (
+            not self._manual_serial_port
+            and isinstance(selected_port, str)
+            and selected_port.startswith("zigbee://")
+        ):
+            force_legacy = (
+                user_input.get(CONF_ZIGBEE_LEGACY_ACK, False)
+                if user_input
+                else (
+                    parse_qs(urlparse(selected_port).query).get("ack")
+                    == ["legacy"]
+                )
+            )
+            data_schema[
+                prob.Optional(CONF_ZIGBEE_LEGACY_ACK, default=force_legacy)
+            ] = selector.BooleanSelector()
         if self._manual_serial_port:
             _suggested_port = suggested_values.get(SZ_PORT_NAME)
             data_schema |= {
@@ -3402,15 +3429,24 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                     if device_entry:
                         ieee = _extract_ieee_from_device(device_entry)
                         if ieee:
-                            zigbee_url = (
-                                f"zigbee://{ieee}"
-                                "/0xfc00/0x0000/10/0xfc01/0x0000/10"
+                            zigbee_url = build_zigbee_url(
+                                self.hass,
+                                ieee,
+                                force_legacy=user_input.get(
+                                    CONF_ZIGBEE_LEGACY_ACK, False
+                                ),
                             )
                             additional = self.options.get(
                                 CONF_ADDITIONAL_PORTS, []
                             )
-                            if zigbee_url not in additional:
-                                additional = additional + [zigbee_url]
+                            additional = [
+                                port
+                                for port in additional
+                                if not (
+                                    port.startswith("zigbee://")
+                                    and urlparse(port).netloc == ieee
+                                )
+                            ] + [zigbee_url]
                             self.options[CONF_ADDITIONAL_PORTS] = additional
 
                             # Register the derived HGI ID in the schema
@@ -3475,6 +3511,9 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                         model="Ramses_esp32c6",
                     )
                 ),
+                prob.Optional(
+                    CONF_ZIGBEE_LEGACY_ACK, default=False
+                ): selector.BooleanSelector(),
             }
 
             return self.async_show_form(
