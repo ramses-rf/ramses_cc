@@ -8907,3 +8907,132 @@ async def test_async_step_schema_syncs_user_zone_edits_and_purges_scan_state(
     assert device_entries["22:123456"]["zone_index"] == "0B"
     # 04:111111 was in zone 00 (in schema_zones) but is no longer in active_zone_assignments
     assert device_entries["04:111111"]["zone_index"] is None
+
+
+async def test_async_step_schema_syncs_root_zones_and_corrupt_scan_state(
+    hass: HomeAssistant,
+) -> None:
+    """Verify root zones sync to scan_state and corrupt JSON is caught.
+
+    :param hass: HomeAssistant test instance.
+    :returns: None.
+    :rtype: None
+    """
+    # Arrange
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            CONF_SCHEMA: {
+                SZ_OWNER: "me",
+                "22:987654": {SZ_TR_OWNER: "me"},
+            },
+            CONF_RAMSES_RF: {},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    from custom_components.ramses_cc.discovery import (
+        SZ_DISCOVERY,
+        SZ_DISCOVERY_DEVICES,
+    )
+
+    store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+    initial_scan_data = {
+        "devices": [
+            {
+                "device_id": "22:987654",
+                "zone_index": "00",
+            },
+            {
+                "device_id": "04:987654",
+                "zone_index": "00",
+            },
+            "not_a_device_dict",
+        ]
+    }
+    await store.async_save(
+        {
+            SZ_DISCOVERY: {
+                SZ_DISCOVERY_DEVICES: {},
+                "scan_state": json.dumps(initial_scan_data),
+            }
+        }
+    )
+
+    # Act - user configures root-level SZ_ZONES
+    updated_schema = {
+        SZ_OWNER: "me",
+        SZ_ZONES: {
+            "invalid_zone": "not_a_dict",
+            "0C": {
+                SZ_SENSOR: "22:987654",
+                SZ_ACTUATORS: ["04:987654", 12345],
+            },
+        },
+        "22:987654": {SZ_TR_OWNER: "me"},
+        "04:987654": {SZ_TR_OWNER: "me"},
+    }
+
+    result = await hass.config_entries.options.async_init(
+        config_entry.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "schema"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+
+    with patch("custom_components.ramses_cc.config_flow.SCH_GLOBAL_SCHEMAS"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCHEMA: updated_schema,
+                "owner_name": "me",
+            },
+        )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+
+    # Assert
+    stored_data = await store.async_load()
+    assert stored_data is not None
+    discovery_data = stored_data.get(SZ_DISCOVERY, {})
+    scan_state_string = discovery_data.get("scan_state", "")
+    assert scan_state_string
+    updated_scan_data = json.loads(scan_state_string)
+    device_entries = {
+        device_entry["device_id"]: device_entry
+        for device_entry in updated_scan_data.get("devices", [])
+        if isinstance(device_entry, dict)
+    }
+    assert device_entries["22:987654"]["zone_index"] == "0C"
+    assert device_entries["04:987654"]["zone_index"] == "0C"
+
+    # Test corrupt scan_state fallback
+    await store.async_save(
+        {
+            SZ_DISCOVERY: {
+                SZ_DISCOVERY_DEVICES: {},
+                "scan_state": "invalid_json_payload",
+            }
+        }
+    )
+    result = await hass.config_entries.options.async_init(
+        config_entry.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "schema"}
+    )
+    with patch("custom_components.ramses_cc.config_flow.SCH_GLOBAL_SCHEMAS"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCHEMA: updated_schema,
+                "owner_name": "me",
+            },
+        )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    stored_data = await store.async_load()
+    assert stored_data is not None
+    assert (
+        stored_data.get(SZ_DISCOVERY, {}).get("scan_state")
+        == "invalid_json_payload"
+    )
