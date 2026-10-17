@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,6 +22,7 @@ from custom_components.ramses_cc.const import (
     SZ_TR_OWNER,
     SZ_TR_UNBOUND,
 )
+from custom_components.ramses_cc.discovery import DiscoveryManager
 from custom_components.ramses_cc.schemas import (
     SCH_ADVANCED_FEATURES,
     _is_device_placed_elsewhere_in_learned,
@@ -5085,3 +5086,144 @@ def test_eligible_devices_chained_expansion() -> None:
         "37:000041": {SZ_TR_BOUND: "32:000032"},
     }
     assert eligible_devices(schema) == {"32:000032", "37:000037", "37:000041"}
+
+
+def test_sync_learned_topology_preserves_user_configured_actuators() -> None:
+    """Verify learned actuators are not synced if user explicitly set actuators.
+
+    :returns: None.
+    :rtype: None
+    """
+    # Arrange
+    config: dict[str, Any] = {
+        "main_tcs": "01:123456",
+        "01:123456": {
+            SZ_ZONES: {
+                "00": {
+                    SZ_SENSOR: "01:123456",
+                    SZ_ACTUATORS: [],
+                }
+            }
+        },
+    }
+    learned: dict[str, Any] = {
+        "main_tcs": "01:123456",
+        "01:123456": {
+            SZ_ZONES: {
+                "00": {
+                    SZ_SENSOR: "01:123456",
+                    SZ_ACTUATORS: ["04:111111"],
+                }
+            }
+        },
+    }
+
+    # Act
+    result = sync_learned_topology(config, learned)
+
+    # Assert - actuators should remain empty list because user configured them
+    assert (
+        result is None
+        or result["01:123456"][SZ_ZONES]["00"][SZ_ACTUATORS] == []
+    )
+
+
+def test_sync_learned_topology_preserves_user_configured_sensor_when_moving_zones() -> (
+    None
+):
+    """Verify user configured zone sensor is not wiped by stale comment zones.
+
+    :returns: None.
+    :rtype: None
+    """
+    # Arrange
+    config: dict[str, Any] = {
+        SZ_OWNER: "me",
+        "main_tcs": "01:123456",
+        "01:123456": {
+            SZ_ZONES: {
+                "00": {
+                    SZ_ACTUATORS: [],
+                },
+                "0B": {
+                    SZ_SENSOR: "22:123456",
+                },
+            },
+        },
+        "22:123456": {SZ_TR_OWNER: "me"},
+        SZ_DEVICE_COMMENTS: {
+            "22:123456": "HR92 / TRV (zone 00, bound to 01:123456) [auto]",
+        },
+    }
+    learned: dict[str, Any] = {
+        "main_tcs": "01:123456",
+        "01:123456": {
+            SZ_ZONES: {
+                "00": {
+                    SZ_ACTUATORS: [],
+                },
+                "0B": {},
+            },
+        },
+    }
+
+    # Act
+    result = sync_learned_topology(config, learned)
+
+    # Assert - 22:123456 must remain the sensor in zone 0B and not be cleared
+    effective_schema = result if result is not None else config
+    assert (
+        effective_schema["01:123456"][SZ_ZONES]["0B"].get(SZ_SENSOR)
+        == "22:123456"
+    )
+
+
+def test_refresh_device_comments_respects_user_configured_zone_assignments() -> (
+    None
+):
+    """Verify refresh_device_comments uses config_schema zone assignments over scan engine.
+
+    :returns: None.
+    :rtype: None
+    """
+    # Arrange
+    dev_thermostat = MagicMock()
+    dev_thermostat.device_id = "22:123456"
+    dev_thermostat.likely_type = "THM"
+    dev_thermostat.zone_index = "00"  # Stale in scan engine
+    dev_thermostat.bound_to = "01:123456"
+    dev_thermostat.is_authoritative_domain = False
+    dev_thermostat.confidence = "high"
+    dev_thermostat.domain_id = None
+    dev_thermostat.codes_seen = []
+    dev_thermostat.is_battery = False
+    dev_thermostat.rssi = -65.0
+
+    scan = MagicMock()
+    scan.get_devices.return_value = [dev_thermostat]
+
+    hass = MagicMock()
+    manager = DiscoveryManager(hass, scan, auto_notify=False)
+
+    config_schema: dict[str, Any] = {
+        "01:123456": {
+            SZ_ZONES: {
+                "0B": {
+                    SZ_SENSOR: "22:123456",
+                }
+            }
+        }
+    }
+    existing_comments: dict[str, str] = {
+        "22:123456": "THM (zone 00, bound to 01:123456) [auto]",
+    }
+
+    # Act
+    updated_comments = manager.refresh_device_comments(
+        existing_comments, config_schema=config_schema
+    )
+
+    # Assert
+    assert "22:123456" in updated_comments
+    assert "zone 0B" in updated_comments["22:123456"]
+    assert "zone 00" not in updated_comments["22:123456"]

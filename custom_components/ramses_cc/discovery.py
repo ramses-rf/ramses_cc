@@ -38,7 +38,12 @@ from typing import TYPE_CHECKING, Any, Final
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from ramses_rf.const import DevType
+from ramses_rf.const import (
+    SZ_ACTUATORS,
+    SZ_SENSOR,
+    SZ_ZONES,
+    DevType,
+)
 from ramses_tx.address import is_hgi_id
 
 from .const import (
@@ -413,6 +418,50 @@ class DiscoveryManager:
                     if isinstance(valve, str):
                         hotwater_valves.add(valve)
 
+        # Build a mapping of device IDs to configured zone indices from
+        # the config schema. User-configured zone assignments must take
+        # precedence over stale scan engine dev.zone_index values.
+        configured_device_zones: dict[str, str] = {}
+        if config_schema:
+            for ctl_entry in config_schema.values():
+                if not isinstance(ctl_entry, dict):
+                    continue
+                ctl_zones = ctl_entry.get(SZ_ZONES)
+                if isinstance(ctl_zones, dict):
+                    for zone_index_key, zone_data in ctl_zones.items():
+                        if not isinstance(zone_data, dict):
+                            continue
+                        zone_index_string = str(zone_index_key)
+                        sensor_id = zone_data.get(SZ_SENSOR)
+                        if isinstance(sensor_id, str):
+                            configured_device_zones[sensor_id] = (
+                                zone_index_string
+                            )
+                        actuators = zone_data.get(SZ_ACTUATORS)
+                        if isinstance(actuators, list):
+                            for actuator_id in actuators:
+                                if isinstance(actuator_id, str):
+                                    configured_device_zones[actuator_id] = (
+                                        zone_index_string
+                                    )
+
+            root_zones = config_schema.get(SZ_ZONES)
+            if isinstance(root_zones, dict):
+                for zone_index_key, zone_data in root_zones.items():
+                    if not isinstance(zone_data, dict):
+                        continue
+                    zone_index_string = str(zone_index_key)
+                    sensor_id = zone_data.get(SZ_SENSOR)
+                    if isinstance(sensor_id, str):
+                        configured_device_zones[sensor_id] = zone_index_string
+                    actuators = zone_data.get(SZ_ACTUATORS)
+                    if isinstance(actuators, list):
+                        for actuator_id in actuators:
+                            if isinstance(actuator_id, str):
+                                configured_device_zones[actuator_id] = (
+                                    zone_index_string
+                                )
+
         for dev_id, dev in engine_devices.items():
             # Devices the user discarded or removed must not get their
             # comment regenerated — this runs every save cycle and would
@@ -446,8 +495,11 @@ class DiscoveryManager:
             # For non-HGI devices, always ensure a comment exists.
             # Previously only updated comments for devices with zone_index
             # or bound_to, leaving new devices without comments.
+            effective_zone_index = configured_device_zones.get(
+                dev_id, dev.zone_index
+            )
             comment = result.get(dev_id, "")
-            if not dev.zone_index and not dev.bound_to:
+            if not effective_zone_index and not dev.bound_to:
                 # No binding info — still create a basic comment if missing
                 # or if it lacks the auto-generated suffix.
                 # Exceptions that force a rebuild:
@@ -473,7 +525,10 @@ class DiscoveryManager:
                     changed = True
                 continue
             # Check if comment already has the correct zone/bound info
-            has_zone = dev.zone_index and f"zone {dev.zone_index}" in comment
+            has_zone = (
+                effective_zone_index
+                and f"zone {effective_zone_index}" in comment
+            )
             # "belongs to" for FAN (32:), "bound to" for heat TCS
             bound_phrase = (
                 f"belongs to {dev.bound_to}"
@@ -489,7 +544,7 @@ class DiscoveryManager:
                 dev,
                 likely_type,
                 dev.bound_to,
-                dev.zone_index,
+                effective_zone_index,
                 schema_role=schema_role,
             )
             if new_comment != comment:
