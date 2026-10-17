@@ -5,6 +5,7 @@ options menu (OptionsFlow).
 """
 
 import copy
+import json
 from collections.abc import Callable, Iterator
 from datetime import timedelta as td
 from importlib.metadata import version
@@ -24,6 +25,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.storage import Store
 from pytest_homeassistant_custom_component.common import (  # type: ignore[import-untyped]
     MockConfigEntry,
 )
@@ -53,6 +55,8 @@ from custom_components.ramses_cc.const import (
     CONF_WAIT_ONLINE_TIMEOUT,
     DEFAULT_HGI_ID,
     DOMAIN,
+    STORAGE_KEY,
+    STORAGE_VERSION,
     SZ_CLIENT_STATE,
     SZ_DEVICE_COMMENTS,
     SZ_OWNER,
@@ -61,7 +65,9 @@ from custom_components.ramses_cc.const import (
     SZ_TR_COMMANDS,
     SZ_TR_NAME,
     SZ_TR_OWNER,
+    ensure_hgi_comment_warning,
 )
+from ramses_rf.const import SZ_ACTUATORS, SZ_SENSOR, SZ_ZONES
 from ramses_tx.schemas import (
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST,
@@ -8762,3 +8768,271 @@ async def test_pool_accept_discovery_candidates_field(
     assert result.get("type") == FlowResultType.CREATE_ENTRY
     saved_schema = config_entry.options.get(CONF_SCHEMA, {})
     assert saved_schema["18:009999"].get(SZ_TR_OWNER) == "me"
+
+
+def test_ensure_hgi_comment_warning_idempotent_and_collapsing() -> None:
+    """Verify ensure_hgi_comment_warning collapses duplicated warning suffixes.
+
+    :returns: None.
+    :rtype: None
+    """
+    # Arrange
+    base_comment = "Supports: usb, mqtt"
+    warning_suffix = (
+        " (don't edit here — adapt with the Pool Management config)"
+    )
+    single_warning = f"{base_comment}{warning_suffix}"
+    duplicate_warning = f"{single_warning}{warning_suffix}"
+    triplicate_warning = f"{duplicate_warning}   {warning_suffix}"
+
+    # Act & Assert
+    assert (
+        ensure_hgi_comment_warning("")
+        == "(don't edit here — adapt with the Pool Management config)"
+    )
+    assert ensure_hgi_comment_warning(base_comment) == single_warning
+    assert ensure_hgi_comment_warning(single_warning) == single_warning
+    assert ensure_hgi_comment_warning(duplicate_warning) == single_warning
+    assert ensure_hgi_comment_warning(triplicate_warning) == single_warning
+
+
+async def test_async_step_schema_syncs_user_zone_edits_and_purges_scan_state(
+    hass: HomeAssistant,
+) -> None:
+    """Verify user zone edits update scan_state and purge removed zone bindings.
+
+    :param hass: HomeAssistant test instance.
+    :returns: None.
+    :rtype: None
+    """
+    # Arrange
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            CONF_SCHEMA: {
+                SZ_OWNER: "me",
+                "01:123456": {
+                    SZ_ZONES: {
+                        "00": {
+                            SZ_ACTUATORS: ["22:123456"],
+                        },
+                        "0B": {
+                            SZ_SENSOR: "01:123456",
+                        },
+                    },
+                },
+                "22:123456": {SZ_TR_OWNER: "me"},
+            },
+            CONF_RAMSES_RF: {},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    from custom_components.ramses_cc.discovery import (
+        SZ_DISCOVERY,
+        SZ_DISCOVERY_DEVICES,
+    )
+
+    store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+    initial_scan_data = {
+        "devices": [
+            {
+                "device_id": "22:123456",
+                "zone_index": "00",
+                "bound_to": "01:123456",
+            },
+            {
+                "device_id": "04:111111",
+                "zone_index": "00",
+                "bound_to": "01:123456",
+            },
+        ]
+    }
+    await store.async_save(
+        {
+            SZ_DISCOVERY: {
+                SZ_DISCOVERY_DEVICES: {},
+                "scan_state": json.dumps(initial_scan_data),
+            }
+        }
+    )
+
+    # Act - user edits schema moving 22:123456 from Zone 00 actuators to Zone 0B sensor
+    # and removes 04:111111 from Zone 00
+    updated_schema = {
+        SZ_OWNER: "me",
+        "01:123456": {
+            SZ_ZONES: {
+                "00": {
+                    SZ_ACTUATORS: [],
+                },
+                "0B": {
+                    SZ_SENSOR: "22:123456",
+                },
+            },
+        },
+        "22:123456": {SZ_TR_OWNER: "me"},
+        "04:111111": {SZ_TR_OWNER: "me"},
+    }
+
+    result = await hass.config_entries.options.async_init(
+        config_entry.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "schema"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCHEMA: updated_schema,
+            "owner_name": "me",
+        },
+    )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+
+    # Assert
+    stored_data = await store.async_load()
+    assert stored_data is not None
+    discovery_data = stored_data.get(SZ_DISCOVERY, {})
+    scan_state_string = discovery_data.get("scan_state", "")
+    assert scan_state_string
+    updated_scan_data = json.loads(scan_state_string)
+    device_entries = {
+        device_entry["device_id"]: device_entry
+        for device_entry in updated_scan_data.get("devices", [])
+    }
+    # 22:123456 moved to zone 0B
+    assert device_entries["22:123456"]["zone_index"] == "0B"
+    # 04:111111 was in zone 00 (in schema_zones) but is no longer in active_zone_assignments
+    assert device_entries["04:111111"]["zone_index"] is None
+
+
+async def test_async_step_schema_syncs_root_zones_and_corrupt_scan_state(
+    hass: HomeAssistant,
+) -> None:
+    """Verify root zones sync to scan_state and corrupt JSON is caught.
+
+    :param hass: HomeAssistant test instance.
+    :returns: None.
+    :rtype: None
+    """
+    # Arrange
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            CONF_SCHEMA: {
+                SZ_OWNER: "me",
+                "22:987654": {SZ_TR_OWNER: "me"},
+            },
+            CONF_RAMSES_RF: {},
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    from custom_components.ramses_cc.discovery import (
+        SZ_DISCOVERY,
+        SZ_DISCOVERY_DEVICES,
+    )
+
+    store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+    initial_scan_data = {
+        "devices": [
+            {
+                "device_id": "22:987654",
+                "zone_index": "00",
+            },
+            {
+                "device_id": "04:987654",
+                "zone_index": "00",
+            },
+            "not_a_device_dict",
+        ]
+    }
+    await store.async_save(
+        {
+            SZ_DISCOVERY: {
+                SZ_DISCOVERY_DEVICES: {},
+                "scan_state": json.dumps(initial_scan_data),
+            }
+        }
+    )
+
+    # Act - user configures root-level SZ_ZONES
+    updated_schema = {
+        SZ_OWNER: "me",
+        SZ_ZONES: {
+            "invalid_zone": "not_a_dict",
+            "0C": {
+                SZ_SENSOR: "22:987654",
+                SZ_ACTUATORS: ["04:987654", 12345],
+            },
+        },
+        "22:987654": {SZ_TR_OWNER: "me"},
+        "04:987654": {SZ_TR_OWNER: "me"},
+    }
+
+    result = await hass.config_entries.options.async_init(
+        config_entry.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "schema"}
+    )
+    assert result.get("type") == FlowResultType.FORM
+
+    with patch("custom_components.ramses_cc.config_flow.SCH_GLOBAL_SCHEMAS"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCHEMA: updated_schema,
+                "owner_name": "me",
+            },
+        )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+
+    # Assert
+    stored_data = await store.async_load()
+    assert stored_data is not None
+    discovery_data = stored_data.get(SZ_DISCOVERY, {})
+    scan_state_string = discovery_data.get("scan_state", "")
+    assert scan_state_string
+    updated_scan_data = json.loads(scan_state_string)
+    device_entries = {
+        device_entry["device_id"]: device_entry
+        for device_entry in updated_scan_data.get("devices", [])
+        if isinstance(device_entry, dict)
+    }
+    assert device_entries["22:987654"]["zone_index"] == "0C"
+    assert device_entries["04:987654"]["zone_index"] == "0C"
+
+    # Test corrupt scan_state fallback
+    await store.async_save(
+        {
+            SZ_DISCOVERY: {
+                SZ_DISCOVERY_DEVICES: {},
+                "scan_state": "invalid_json_payload",
+            }
+        }
+    )
+    result = await hass.config_entries.options.async_init(
+        config_entry.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "schema"}
+    )
+    with patch("custom_components.ramses_cc.config_flow.SCH_GLOBAL_SCHEMAS"):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCHEMA: updated_schema,
+                "owner_name": "me",
+            },
+        )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+    stored_data = await store.async_load()
+    assert stored_data is not None
+    assert (
+        stored_data.get(SZ_DISCOVERY, {}).get("scan_state")
+        == "invalid_json_payload"
+    )

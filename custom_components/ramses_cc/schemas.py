@@ -2298,20 +2298,21 @@ def sync_learned_topology(
                         config_zone[SZ_SENSOR] = learned_sensor
                         changed = True
                     # Sync actuators (union, don't overwrite) — but skip
-                    # actuators that were explicitly removed by the user
-                    # or marked foreign (issue 1238)
-                    learned_actuators = learned_zone.get("actuators", [])
-                    if learned_actuators:
-                        existing = set(config_zone.get("actuators", []))
+                    # if the user explicitly configured actuators for this
+                    # zone, or actuators explicitly removed or foreign (issue 1238).
+                    user_configured_actuators = SZ_ACTUATORS in config_zone
+                    learned_actuators = learned_zone.get(SZ_ACTUATORS, [])
+                    if learned_actuators and not user_configured_actuators:
+                        existing = set(config_zone.get(SZ_ACTUATORS, []))
                         new_actuators = [
-                            a
-                            for a in learned_actuators
-                            if a not in existing
-                            and a not in _removed
-                            and a not in foreign_ids
+                            actuator_id
+                            for actuator_id in learned_actuators
+                            if actuator_id not in existing
+                            and actuator_id not in _removed
+                            and actuator_id not in foreign_ids
                         ]
                         if new_actuators:
-                            config_zone["actuators"] = sorted(
+                            config_zone[SZ_ACTUATORS] = sorted(
                                 existing | set(new_actuators)
                             )
                             changed = True
@@ -2721,14 +2722,21 @@ def sync_learned_topology(
                 ):
                     continue
                 # Remove from actuators
-                other_acts = other_zone.get("actuators")
-                if isinstance(other_acts, list) and device_id in other_acts:
-                    other_acts.remove(device_id)
-                    if not other_acts:
-                        del other_zone["actuators"]
+                other_actuators = other_zone.get(SZ_ACTUATORS)
+                if (
+                    isinstance(other_actuators, list)
+                    and device_id in other_actuators
+                ):
+                    other_actuators.remove(device_id)
+                    if not other_actuators:
+                        del other_zone[SZ_ACTUATORS]
                     changed = True
-                # Clear sensor if it's the device we're moving
-                if other_zone.get(SZ_SENSOR) == device_id:
+                # Clear sensor if it's the device we're moving, unless the
+                # sensor was explicitly configured by the user.
+                if (
+                    other_zone.get(SZ_SENSOR) == device_id
+                    and device_id not in configured_device_ids
+                ):
                     other_zone[SZ_SENSOR] = None
                     changed = True
 
@@ -2737,11 +2745,11 @@ def sync_learned_topology(
                 changed = True
             else:
                 # Zone already has a sensor, or device is an actuator type
-                if "actuators" not in zone:
-                    zone["actuators"] = []
-                if device_id not in zone["actuators"]:
-                    zone["actuators"].append(device_id)
-                    zone["actuators"] = sorted(zone["actuators"])
+                if SZ_ACTUATORS not in zone:
+                    zone[SZ_ACTUATORS] = []
+                if device_id not in zone[SZ_ACTUATORS]:
+                    zone[SZ_ACTUATORS].append(device_id)
+                    zone[SZ_ACTUATORS] = sorted(zone[SZ_ACTUATORS])
                     changed = True
 
     # 1g-post. Place DHW sensors (07:) from device_comments into

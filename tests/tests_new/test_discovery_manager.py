@@ -3469,7 +3469,7 @@ class TestNameMismatch:
         assert scan_domains["18:123456"] == ("FC", True)
 
     def test_refresh_device_comments(self) -> None:
-        """Test refresh_device_comments for HGI, bound devices, hotwater valves, and HVAC parents."""
+        """Test refresh_device_comments for HGI, bound devices, and parents."""
         dev_hgi = make_discovered_device("18:001122", "HGI")
         dev_trv = make_discovered_device("04:112233", "TRV")
         dev_trv.zone_index = "01"
@@ -3477,17 +3477,34 @@ class TestNameMismatch:
         dev_fan = make_discovered_device("32:112233", "FAN")
         dev_rem = make_discovered_device("37:112233", "REM")
         dev_rem.bound_to = "32:112233"
+        dev_skip_existing = make_discovered_device("37:444444", "REM")
+        dev_skip_bound = make_discovered_device("37:555555", "REM")
+        dev_skip_bound.bound_to = "32:112233"
 
-        scan = make_mock_scan([dev_hgi, dev_trv, dev_fan, dev_rem])
+        scan = make_mock_scan(
+            [
+                dev_hgi,
+                dev_trv,
+                dev_fan,
+                dev_rem,
+                dev_skip_existing,
+                dev_skip_bound,
+            ]
+        )
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
 
         config_schema = {
             "01:111111": {"stored_hotwater": {"hotwater_valve": "13:999888"}},
             "32:112233": {},
             "29:445566": {"_class": "SEN", "_bound": "32:112233"},
+            "37:444444": {"_bound": "32:112233"},
+            "37:555555": {"_bound": "32:112233"},
+            "37:666666": {"_bound": "invalid_bound"},
         }
 
-        existing_comments: dict[str, str] = {}
+        existing_comments: dict[str, str] = {
+            "37:444444": f"REM belongs to 32:112233 {manager._COMMENT_SUFFIX}",
+        }
         updated = manager.refresh_device_comments(
             existing_comments, config_schema=config_schema
         )
@@ -3755,12 +3772,15 @@ class TestSyncWithSchemaNoOwner:
         assert "01:145038" not in manager._schema_no_owner_ids
 
     def test_sync_with_schema_no_owner_skips_non_dict(self) -> None:
-        """sync_with_schema skips non-dict entries."""
+        """sync_with_schema skips non-dict entries and invalid IDs."""
         scan = make_mock_scan()
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
         manager.sync_with_schema(
             schema_device_ids=set(),
-            schema={"not_a_device": "bad_value"},
+            schema={
+                "not_a_device": "bad_value",
+                "invalid_device_key": {"_class": "CTL"},
+            },
         )
         assert manager._schema_no_owner_ids == set()
 
