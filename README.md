@@ -23,7 +23,7 @@ The simplest way to know if it will work with your CH/DHW system is to identify 
 
 It uses the [ramses_rf](https://github.com/ramses-rf/ramses_rf) client library to decode the RAMSES-II protocol used by these devices. Note that other systems may also use this protocol. YMMV!
 
-The library requires a USB-to-RF device, either a Honeywell HGI80 (rare, expensive) or a USB/MQTT dongle running [ramses_esp](https://github.com/IndaloTech/ramses_esp) or [evofw3](https://github.com/ghoti57/evofw3), such as the one from [here](https://indalo-tech.onlineweb.shop/) or your own ESP32-S3-WROOM-1 N16R8 with a CC1100 transponder.
+The library requires a USB-to-RF device, either a Honeywell HGI80 (rare, expensive) or a USB/MQTT dongle running [ramses_esp](https://github.com/IndaloTech/ramses_esp) or [evofw3](https://github.com/ghoti57/evofw3), such as the one from [here](https://indalotech.co.uk/products/ramses_esp)) or your own ESP32-S3-WROOM-1 N16R8 with a CC1100 transponder.
 
 Our [Code of Conduct](CODE_OF_CONDUCT.md) applies to all use of this repository and the code it creates.
 Follow the [AI_POLICY](AI_POLICY.md) for any use of LLMs for both coding and communicating.
