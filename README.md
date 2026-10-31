@@ -4,8 +4,6 @@
 ![pytest](https://github.com/ramses-rf/ramses_cc/actions/workflows/check-test.yml/badge.svg?master)
 [![Coverage](https://github.com/ramses-rf/ramses_cc/actions/workflows/check-cov.yml/badge.svg?event=push)](https://github.com/ramses-rf/ramses_cc/actions/workflows/check-cov.yml)
 
-* Requires HA Core 2026.9.0 or later.
-
 ## Overview
 **ramses_cc** is a Home Assistant custom integration that works with RAMSES II-based RF 868 Mhz systems for (heating) **CH/DHW** (e.g. Honeywell Evohome) and (ventilation) **HVAC** (e.g. Itho Spider, Orcon).
 
@@ -39,7 +37,7 @@ Follow the [AI_POLICY](AI_POLICY.md) for any use of LLMs for both coding and com
 1. In HA, under Settings > Marketplace, search for **RAMSES RF** and click install.
 2. When an update is published, Marketplace will pop up a notification and allow one-click updates.
 
-### Before HA 2026.11.0: Via HACS
+### Before HA 2026.11.0
 
 1. Install the HACS integration in Home Assistant.
 2. Add `ramses_cc` as a custom repository in HACS.
