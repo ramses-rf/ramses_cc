@@ -27,4 +27,4 @@
 # used for testing (incl. HA, pytest*, syrupy, voluptuous, etc.)
 # - pytest
     # coverage >= ... included in next item
-    pytest_homeassistant_custom_component == 0.13.373  # pin here or GH workflows may use betas, stay < 1 week
+    pytest_homeassistant_custom_component == 0.13.375  # pin here or GH workflows may use betas, stay < 1 week
