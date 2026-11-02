@@ -42,7 +42,7 @@ jobs:
         if: steps.download.outcome == 'success'
         # can only run on pr_target repository originally, now runs
         # safely via artifact decoupling
-        uses: MishaKav/pytest-coverage-comment@v1.12.3
+        uses: MishaKav/pytest-coverage-comment@v1.13.0
         with:
           pytest-xml-coverage-path: ./coverage.xml
           issue-number: ${{ env.PR_NUMBER }}
