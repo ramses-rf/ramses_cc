@@ -35,7 +35,7 @@ class RamsesCcStore(Store[dict[str, Any]]):
     STORAGE_VERSION stays at 1 — the store format hasn't changed.
     The Phase 3a command migration (remotes → schema _commands) is
     handled at runtime by the coordinator's ``_sync_remotes_to_schema``,
-    not by a storage version bump.  The Phase 4 known_list removal is
+    not by a storage version bump.  The known_list removal is
     handled by the config entry migration (``async_migrate_entry`` in
     ``__init__.py``), not by the store — known_list was never stored
     in .storage, it lived in the config entry options.
@@ -106,7 +106,7 @@ class RamsesStore:
         discovery state during reload before the scan engine has started.
 
         :param schema: The current device schema
-        :param packets: The cached packet log (supports legacy strings
+        :param packets: The cached packet log (supports pre-0.60 strings
             and JSON DTOs)
         :param remotes: The known remotes and their commands
         :param discovery: The discovery scan state (metadata + engine state)

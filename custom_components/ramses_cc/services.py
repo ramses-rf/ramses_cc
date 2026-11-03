@@ -1308,7 +1308,7 @@ class RamsesServiceHandler:
             CONF_SCHEMA, {}
         )
 
-        # Phase 4: known_list derived from schema — use schema device IDs only
+        # known_list derived from schema — use schema device IDs only
         all_device_ids: set[str] = self._extract_device_ids_from_schema(
             config_schema
         )
@@ -1362,7 +1362,7 @@ class RamsesServiceHandler:
                 )
                 continue
             else:
-                # Force-create the device.  PR 927+ removed the legacy
+                # Force-create the device.  PR 927+ removed the pre-0.60
                 # DiscoveryService (dev.discovery), so we can't access
                 # dev.discovery.cmds here.  PollingManager handles polling
                 # now — just log that the device was created.
@@ -1433,7 +1433,7 @@ class RamsesServiceHandler:
         # NOTE: devices with zero discovery cmds (TRV, DHW sensor, THM, etc.)
         # will be created but not actively probed — they are verified only
         # when they send traffic or the CTL's 000C response reveals them.
-        # PR 927+ removed the legacy DiscoveryService (dev.discovery), so
+        # PR 927+ removed the pre-0.60 DiscoveryService (dev.discovery), so
         # the old per-device probing is no longer available.  PollingManager
         # handles polling now — skip the probing loop entirely.
         probed = 0
@@ -1444,7 +1444,7 @@ class RamsesServiceHandler:
                 continue
             if client.hgi and device_id == client.hgi.id:
                 continue
-            # Legacy DiscoveryService was removed in PR 927.  If it still
+            # Pre-0.60 DiscoveryService was removed in PR 927.  If it still
             # exists (older ramses_rf), use it; otherwise skip probing.
             disc = getattr(dev, "discovery", None)
             if disc is None:
@@ -1470,7 +1470,7 @@ class RamsesServiceHandler:
             len(zero_cmds_skip or []),
         )
 
-        # TODO: Phase 3 — when ramses_rf exposes TopologyChangedEvent via an
+        # TODO: — when ramses_rf exposes TopologyChangedEvent via an
         # external callback API, listen to it here to trigger entity creation
         # reactively instead of polling discover_new_entities() on a timer.
         # The minimal API would be:
@@ -1643,7 +1643,7 @@ class RamsesServiceHandler:
         duplicate entries and overwriting existing zone sensors.
 
         The known_list is auto-derived from the schema at client creation
-        time (Phase 4: schema is the sole source).  Trait overrides (e.g.
+        time schema is the sole source).  Trait overrides (e.g.
         owner/alias) are stored as _ traits in the schema.  Also updates
         the running ramses_rf client's include lists so that
         enforce_known_list allows packet processing and device creation.
@@ -1748,7 +1748,7 @@ class RamsesServiceHandler:
 
         current_options[CONF_SCHEMA] = merged
 
-        # Phase 4: known_list is no longer stored in config entry options.
+        # known_list is no longer stored in config entry options.
         # Trait overrides (alias, class, etc.) live in the schema as _ traits.
         # If an owner/alias was provided, store it as _alias in the schema.
         if owner:
@@ -1790,7 +1790,7 @@ class RamsesServiceHandler:
         - ramses_rf's engine/device_filter include lists
         - ramses_rf's device registry (so ``_is_known`` returns False)
 
-        Phase 4: known_list is derived from schema, so removing from schema
+        known_list is derived from schema, so removing from schema
         is sufficient.
 
         The config entry is updated via ``async_update_entry`` which
@@ -1809,7 +1809,7 @@ class RamsesServiceHandler:
         cleaned.pop(device_id, None)
         current_options[CONF_SCHEMA] = cleaned
 
-        # Phase 4: known_list is no longer stored in config entry options.
+        # known_list is no longer stored in config entry options.
         # Removing from schema is sufficient — known_list is derived from it.
 
         # 4. Remove from ramses_rf's include lists so enforce_known_list
@@ -2202,7 +2202,7 @@ class RamsesServiceHandler:
 
         options[CONF_SCHEMA] = cleaned
 
-        # Phase 4: known_list is no longer stored in config entry options.
+        # known_list is no longer stored in config entry options.
         # Removing from schema is sufficient.
 
         # Track the removed device so sync_learned_topology doesn't re-add it

@@ -141,7 +141,7 @@ PLATFORMS = [Platform.EVENT]
 async def _async_cleanup_yaml_known_list(
     hass: HomeAssistant, domain_config: dict[str, Any]
 ) -> None:
-    """Warn about legacy ramses_cc configuration in configuration.yaml.
+    """Warn about pre-0.60 ramses_cc configuration in configuration.yaml.
 
     The entire ``ramses_cc:`` YAML configuration has been migrated to the
     config flow (Settings > Devices & Services > Ramses RF).  The YAML
@@ -156,7 +156,7 @@ async def _async_cleanup_yaml_known_list(
        entire ``ramses_cc:`` block manually
 
     The notification fires for *any* ``ramses_cc:`` block, not just when
-    legacy keys (known_list/block_list/enforce_known_list) are present
+    pre-0.60 keys (known_list/block_list/enforce_known_list) are present
     (issues 1140, 1149).
     """
     known_list = domain_config.get("known_list")
@@ -262,7 +262,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             )
         )
 
-    # Phase 4 cleanup: warn about legacy known_list in configuration.yaml.
+    # cleanup: warn about pre-0.60 known_list in configuration.yaml.
     # The known_list was migrated to the config entry schema (v2→v3
     # migration for existing entries, or async_step_import for first-time
     # YAML setups).  After that, the YAML known_list is redundant.
@@ -332,7 +332,7 @@ async def async_setup_entry(
             entry.entry_id,
         )
 
-    # Phase 4 idempotent cleanup: strip stale known_list / enforce_known_list
+    # idempotent cleanup: strip stale known_list / enforce_known_list
     # from options if an older profile_loader wrote them after migration.
     # The schema is the sole source of truth — known_list is derived from it.
     _cleanup_stale_known_list(hass, entry)
@@ -404,10 +404,10 @@ async def async_setup_entry(
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate legacy configuration options to the current version 3.
+    """Migrate pre-0.60 configuration options to the current version 3.
 
     v1→v2: Clean up packet_log and ramses_rf dicts (remove deprecated keys).
-    v2→v3: Phase 4 — merge known_list traits into schema, drop known_list
+    v2→v3: — merge known_list traits into schema, drop known_list
            and enforce_known_list from options (schema is now the sole source).
 
     :param hass: The Home Assistant instance.
@@ -427,7 +427,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             packet_log = {**new_options["packet_log"]}
             # Remove deprecated key mentioned in issue #592
             packet_log.pop("file_name", None)
-            # Translate legacy rotate_backups to modern key
+            # Translate pre-0.60 rotate_backups to modern key
             if "rotate_backups" in packet_log:
                 packet_log["packet_log_retention_days"] = packet_log.pop(
                     "rotate_backups"
@@ -435,7 +435,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             new_options["packet_log"] = packet_log
 
-        # 2. Clean up ramses_rf dictionary (legacy database storage flags)
+        # 2. Clean up ramses_rf dictionary (pre-0.60 database storage flags)
         if isinstance(new_options.get("ramses_rf"), dict):
             ramses_rf = {**new_options["ramses_rf"]}
             # Remove deprecated database keys
@@ -477,8 +477,8 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         new_options = {**entry.options}
 
-        # Phase 4: merge known_list traits into schema, then drop known_list.
-        # The known_list was the legacy trait store (alias, class, faked,
+        # merge known_list traits into schema, then drop known_list.
+        # The known_list was the pre-0.60 trait store (alias, class, faked,
         # bound, scheme).  The schema now carries these as _ prefixed keys
         # (_alias, _class, _faked, _bound, _scheme).
         #
@@ -547,7 +547,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 def _cleanup_stale_known_list(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Strip stale known_list / enforce_known_list from options if present.
 
-    Phase 4: the schema is the sole source of truth.  An older profile_loader
+    the schema is the sole source of truth.  An older profile_loader
     may have written known_list/enforce_known_list to options after the v2→v3
     migration ran.  This idempotent cleanup merges any known_list traits into
     the schema and removes both keys.

@@ -776,12 +776,12 @@ class RamsesCoordinator(DataUpdateCoordinator):
         compatibility with varying packet string formats and JSON DTOs.
         """
         msg_code_filter = ["313F"]
-        # Phase 4: known_list is derived from schema, no longer stored in
+        # known_list is derived from schema, no longer stored in
         # config entry options.  Use the schema-derived known_list for
         # packet filtering.
         config_schema = self.options.get(CONF_SCHEMA, {})
         known_list = self.derive_known_list_from_schema(config_schema)
-        enforce_known_list = True  # Phase 4: always-on
+        enforce_known_list = True  # always-on
 
         # Ensure the primary HGI is in the known_list even if it's not
         # in the schema yet (e.g. clean schema, discovery candidate
@@ -858,7 +858,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 if enforce_known_list:
                     found_devices = []
                     # Check raw L3 addresses (addr1/2/3) first — these are
-                    # the legacy PacketDTO keys that ramses_rf's get_state()
+                    # the pre-0.60 PacketDTO keys that ramses_rf's get_state()
                     # provides for known_list enforcement (PR 782).
                     # Fall back to logical src/dst for ramses_rf versions
                     # that only have PR 780 (no addr1/2/3 keys yet).
@@ -882,7 +882,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     if not any(dev in known_list for dev in found_devices):
                         continue
 
-            # Fallback for users migrating from legacy string-based caches
+            # Fallback for users migrating from pre-0.60 string-based caches
             else:
                 # 2. Filter out unwanted message codes
                 # String containment is safer against changes than packet[41:45]
@@ -915,7 +915,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # Precedence (highest wins):
         #   1. Schema _commands (SSOT — user edits, learn_command writes here)
         #   2. .storage[remotes] (cache — learn_command writes here first)
-        # Phase 4: known_list[dev][commands] legacy fallback removed —
+        # known_list[dev][commands] pre-0.60 fallback removed —
         # the v2→v3 config entry migration merges these into schema.
         self.remotes = storage.get(SZ_REMOTES, {})
 
@@ -975,11 +975,11 @@ class RamsesCoordinator(DataUpdateCoordinator):
         client_state: dict[str, Any] = storage.get(SZ_CLIENT_STATE, {})
 
         # 1b. Migration: when passive scan is enabled, check if known_list
-        # has devices not in schema and migrate them.  For legacy setups
+        # has devices not in schema and migrate them.  For pre-0.60 setups
         # (passive scan off), the derivation logic already handles
         # known_list-only devices, so no migration is needed.
         #
-        # This is a ONE-TIME legacy migration, tracked via the
+        # This is a ONE-TIME pre-0.60 migration, tracked via the
         # CONF_SSOT_MIGRATED flag in the config entry options.  After the
         # migration (or after a schema wipe, which implies the user is on
         # the SSOT model), known_list entries not in the schema are just
@@ -991,7 +991,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # When the schema is empty (no real device entries), the user has
         # intentionally wiped it — clear stale discovery state so devices
         # are re-discoverable as NEW.
-        # Phase 4: known_list is no longer stored in the config entry
+        # known_list is no longer stored in the config entry
         # (removed by v2→v3 migration).  The schema is the sole source.
         config_schema = self.options.get(CONF_SCHEMA, {})
         advanced = self.entry.options.get(CONF_ADVANCED_FEATURES, {})
@@ -1242,7 +1242,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         """Mark the one-time SSOT migration as done in the config entry.
 
         Sets ``CONF_SSOT_MIGRATED=True`` in ``advanced_features`` so the
-        legacy known_list→orphans migration never runs again.  From now
+        pre-0.60 known_list→orphans migration never runs again.  From now
         on, known_list entries that aren't in the schema are treated as
         trait overrides (class, alias, faked, bound, commands) for
         devices that will be (re-)discovered by the passive scan.
@@ -1999,7 +1999,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         the scan engine can discover them, but they cannot send
         commands until the user accepts them (sets _owner).
 
-        Phase 2: HGIs with ``_preferred_type: "usb"`` are included in
+        HGIs with ``_preferred_type: "usb"`` are included in
         the MQTT bridge so their MQTT capability can be detected via
         LWT.  The pool's deduplication filter handles any duplicate
         packets that arrive from both USB and MQTT transports.
@@ -2026,7 +2026,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # schema-derived children and the pool status entities would
         # never be created (issue 1185).
 
-        # Phase 3: HGI IDs that belong to Zigbee pool members must not
+        # HGI IDs that belong to Zigbee pool members must not
         # be added to the MQTT bridge — a Zigbee-mode device has no
         # MQTT capability to detect, and adding it would create a
         # phantom duplicate child.  Detect them via the HGI ID derived
@@ -2069,7 +2069,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # the safe fallback rather than leaving it transport-less.
             if dev_id in zigbee_hgis:
                 continue  # Zigbee-only member — no MQTT bridge child
-            # Phase 2: USB-preferred HGIs are included in the MQTT
+            # USB-preferred HGIs are included in the MQTT
             # bridge's LWT tracking so their MQTT capability can be
             # detected (the ESP publishes on both USB and MQTT).
             # The pool's deduplication filter handles any duplicate
@@ -2717,7 +2717,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         in services.py) and returns a known_list dict where each device ID
         maps to a traits dict with _ traits extracted from the schema entry.
 
-        Phase 4: the schema is the sole source of truth.  There are no user
+        the schema is the sole source of truth.  There are no user
         overrides from the config entry — all traits live in the schema as
         _ prefixed keys (_class, _alias, _faked, _bound, _scheme).
 
@@ -2844,7 +2844,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         """Copy learned commands from ``remotes`` into schema ``_commands``.
 
         This is the Phase 3a SSOT migration for commands: the ``remotes``
-        dict (from ``.storage``) is the legacy command store, the schema
+        dict (from ``.storage``) is the pre-0.60 command store, the schema
         ``_commands`` trait is the new one.  Once commands are in the
         schema, the ``remotes`` entries become a cache/fallback.
 
@@ -3120,7 +3120,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         """Create and configure a new RAMSES client instance."""
         raw_config = self.options.get(CONF_RAMSES_RF, {}).copy()
 
-        # Phase 4: enforce_known_list is always-on.  The config option was
+        # enforce_known_list is always-on.  The config option was
         # removed (issue 677 fix held since 0.57.6).  This prevents ramses_rf
         # from auto-creating devices from traffic — the only path to entity
         # creation is through the schema (and accept_discovered_device when
@@ -3142,7 +3142,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         engine_kwargs["app_context"] = self.hass
 
         # ── Schema as single source of truth ──────────────────────────
-        # Phase 4: known_list is derived solely from the schema — no user
+        # known_list is derived solely from the schema — no user
         # overrides from config entry (removed in v2→v3 migration).
         derived_known_list = self.derive_known_list_from_schema(schema)
         # Track _disabled device IDs so discover_new_entities can skip them.
@@ -3290,9 +3290,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
         _is_mqtt_ha_port = (
             isinstance(_port_name_raw, str) and _port_name_raw == "mqtt_ha"
         )
-        # A mqtt:// URL is a legacy paho-style config.  Inside HA, we
+        # A mqtt:// URL is a pre-0.60 paho-style config.  Inside HA, we
         # always use the HA MQTT integration (homeassistant.components.mqtt)
-        # — no direct paho clients (issue 1119, plan §Phase 1).  If an HA
+        # — no direct paho clients (issue 1119, plan § .  If an HA
         # MQTT integration is configured, treat mqtt:// URLs as HA MQTT
         # and extract the topic/HGI ID from the URL path.
         _is_mqtt_url = isinstance(
@@ -3418,7 +3418,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # In the _is_mqtt_ha branch it's set from CONF_MQTT_HGI_ID.
             assert hgi_id is not None
 
-            # Phase 3: check for Zigbee additional ports.  When present,
+            # check for Zigbee additional ports.  When present,
             # use the hybrid pool constructor (MQTT callback + Zigbee
             # transport-driven children) instead of the MQTT-only bridge.
             _additional_ports_mqtt: list[str] = self.options.get(
@@ -3479,7 +3479,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # can discover unknown HGIs via the discovery callback.
             schema_pool_hgis = self.extract_pool_hgis_from_schema()
 
-            # Phase 2: when the primary is serial (not MQTT), the
+            # when the primary is serial (not MQTT), the
             # primary HGI ID is NOT an MQTT pool member — it's the
             # serial primary.  Only add schema pool HGIs to the MQTT
             # bridge's configured list.  The serial primary is
@@ -3526,7 +3526,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             self._port_name = str(_port_name_raw or "mqtt")
             self._is_serial_active = False  # MQTT bridge, not serial
 
-            # Phase 2: if the primary port is serial but we took the
+            # if the primary port is serial but we took the
             # MQTT bridge path, mark accepted HGIs as USB-capable.
             # Delay slightly to ensure the config entry store is ready.
             if isinstance(_port_name_raw, str) and (
@@ -3566,7 +3566,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         self._is_serial_active = True  # Serial transport is actually used
         engine_kwargs["port_config"] = port_config
 
-        # Phase 2: when mqtt_use_ha is True and primary is serial, we
+        # when mqtt_use_ha is True and primary is serial, we
         # fell through from the MQTT bridge path.  Set the engine
         # hgi_id so the protocol layer can patch outbound packets
         # correctly (18:000730 <-> real HGI ID).
@@ -3578,7 +3578,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 redact_url(port_name),
             )
 
-        # Phase 2: schedule serial probe to mark accepted HGIs as
+        # schedule serial probe to mark accepted HGIs as
         # USB-capable and set _preferred_type for the primary HGI.
         # This runs in both the serial-only and hybrid paths.
         # Delay slightly to ensure the config entry store is ready.
@@ -3609,12 +3609,12 @@ class RamsesCoordinator(DataUpdateCoordinator):
             CONF_ADDITIONAL_PORTS, []
         )
 
-        # Phase 2: hybrid pool support (serial + MQTT via HA-native bridge).
+        # hybrid pool support (serial + MQTT via HA-native bridge).
         # Serial additional ports are transport-driven (serialx).
         # MQTT additional ports are callback-driven via the HA-native
         # RamsesMqttPoolBridge (homeassistant.components.mqtt) — never
         # paho inside HA (issue 1119).
-        # Phase 3: Zigbee additional ports are transport-driven (ZigbeeTransport
+        # Zigbee additional ports are transport-driven (ZigbeeTransport
         # via ZHA/zigpy). They are included in serial_additional because they
         # go through pooled_transport_factory as transport-driven children.
         serial_additional: list[str] = [
@@ -3689,7 +3689,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             self.extract_pool_hgis_from_schema() if _has_mqtt else []
         )
 
-        # Phase 3: Zigbee additional ports are now supported.
+        # Zigbee additional ports are now supported.
         # ZigbeeTransport uses ZHA's Python APIs directly (zha_gateway,
         # zigpy clusters) and requires the ZHA integration to be set up
         # in the same HA instance.  No MQTT broker is needed for Zigbee.
@@ -3989,7 +3989,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
             # Gap A: per-child config overrides for serial children.
             # Serial children use ID_COMMAND signature policy with a 3s
             # startup grace to handle DTR reset on FTDI/nanoCUL/ESP32
-            # devices (Phase 2, issue 1119).  ID_COMMAND sends ``!I\r``
+            # devices , issue 1119).  ID_COMMAND sends ``!I\r``
             # over serial to discover the HGI ID directly from EEPROM —
             # no RF needed, so it works in multi-HGI pools where RF
             # learning is ambiguous (RF is a shared medium, so every
@@ -4581,9 +4581,9 @@ class RamsesCoordinator(DataUpdateCoordinator):
             )
             _LOGGER.debug("sync_learned_topology: enriched=%s", enriched)
             if enriched is not None:
-                # Backup before SSOT Phase 2 trait migration (known_list)
+                # Backup before SSOT trait migration (known_list)
                 # Only needed if user still has a known_list with traits
-                # Phase 4: traits already in schema via v2→v3 migration.
+                # traits already in schema via v2→v3 migration.
                 # Sync learned commands from .storage[remotes] into schema
                 # _commands (Phase 3a SSOT migration for commands).
                 # Backup first if we have remotes not yet migrated.
@@ -4597,7 +4597,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     if has_unmigrated:
                         await self.store.async_save_backup(
                             enriched,
-                            {},  # known_list removed in Phase 4
+                            {},  # known_list removed in
                             reason="ssot_phase3a",
                         )
                     enriched = self._sync_remotes_to_schema(
@@ -5230,7 +5230,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         except Exception:  # noqa: BLE001
             pass
 
-        # Phase 2: if the serial primary discovered its HGI ID and
+        # if the serial primary discovered its HGI ID and
         # that HGI is also in the MQTT pool, exclude it from the MQTT
         # bridge to avoid duplicate packet ingestion (hybrid pool).
         # Only do this when the serial transport is actually active —
@@ -5374,7 +5374,7 @@ class RamsesCoordinator(DataUpdateCoordinator):
         # accepted parents' lists and children bound to an eligible
         # parent.  Discovery candidates (entry without _owner) and
         # foreign devices (_owner != root) stay entity-less until
-        # accepted.  When no usable schema is present, keep legacy
+        # accepted.  When no usable schema is present, keep pre-0.60
         # behaviour (ungated) rather than blocking all entity creation.
         _schema = self.options.get(CONF_SCHEMA)
         eligible: set[str] | None = (
