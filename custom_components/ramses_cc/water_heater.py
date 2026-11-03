@@ -121,6 +121,8 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
         | WaterHeaterEntityFeature.TARGET_TEMPERATURE
     )
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    # deprecated name kept as an alias for HA < 2026.11 (issue 1394)
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(
         self,
@@ -166,12 +168,17 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
         return self._last_known_operation
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the current temperature."""
         temp = resolve_async_attr(self, self._device, "temperature")
         if temp is not None:
             self._last_known_temperature = float(temp)
         return self._last_known_temperature
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Deprecated alias for HA < 2026.11 (issue 1394)."""
+        return self.native_current_temperature
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -205,12 +212,17 @@ class RamsesWaterHeater(RamsesEntity, WaterHeaterEntity):
         return self._last_known_away
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the temperature we try to reach."""
         temp = resolve_async_attr(self, self._device, "setpoint")
         if temp is not None:
             self._last_known_target_temp = float(temp)
         return self._last_known_target_temp
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Deprecated alias for HA < 2026.11 (issue 1394)."""
+        return self.native_target_temperature
 
     async def async_set_operation_mode(self, operation_mode: str) -> None:
         """Set the operating mode of the water heater.
