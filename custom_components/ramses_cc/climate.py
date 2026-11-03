@@ -347,6 +347,8 @@ class RamsesController(RamsesEntity, ClimateEntity):
         | ClimateEntityFeature.TURN_OFF
     )
     _attr_temperature_unit: str = UnitOfTemperature.CELSIUS
+    # deprecated name kept as an alias for HA < 2026.11 (issue 1394)
+    _attr_native_temperature_unit: str = UnitOfTemperature.CELSIUS
 
     # remove when HA 2025.1
     _enable_turn_on_off_backwards_compatibility: bool = False
@@ -369,7 +371,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
         self._last_known_targ_temp: float | None = None
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the average current temperature of the heating Zones.
 
         Controllers do not have a current temp, but one is expected by HA.
@@ -407,6 +409,11 @@ class RamsesController(RamsesEntity, ClimateEntity):
             )
 
         return self._last_known_curr_temp
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Deprecated alias for HA < 2026.11 (issue 1394)."""
+        return self.native_current_temperature
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -496,7 +503,7 @@ class RamsesController(RamsesEntity, ClimateEntity):
         return PRESET_TCS_TO_HA.get(system_mode[SZ_SYSTEM_MODE])
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the temperature we try to reach.
 
         :return: The target temperature.
@@ -514,6 +521,11 @@ class RamsesController(RamsesEntity, ClimateEntity):
         if temps:
             self._last_known_targ_temp = max(temps)
         return self._last_known_targ_temp
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Deprecated alias for HA < 2026.11 (issue 1394)."""
+        return self.native_target_temperature
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set an operating mode for a Controller.
@@ -678,6 +690,8 @@ class RamsesZone(RamsesEntity, ClimateEntity):
     )
     _attr_target_temperature_step: float = PRECISION_HALVES
     _attr_temperature_unit: str = UnitOfTemperature.CELSIUS
+    # deprecated name kept as an alias for HA < 2026.11 (issue 1394)
+    _attr_native_temperature_unit: str = UnitOfTemperature.CELSIUS
 
     def __init__(
         self,
@@ -697,7 +711,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         self._last_known_targ_temp: float | None = None
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the current temperature.
 
         :return: The current temperature.
@@ -706,6 +720,11 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         if temp is not None:
             self._last_known_curr_temp = float(temp)
         return self._last_known_curr_temp
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Deprecated alias for HA < 2026.11 (issue 1394)."""
+        return self.native_current_temperature
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -894,7 +913,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         return PRESET_ZONE_TO_HA.get(mode[SZ_MODE])
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the temperature we try to reach.
 
         :return: The target temperature.
@@ -905,6 +924,11 @@ class RamsesZone(RamsesEntity, ClimateEntity):
         if temp is not None and not isinstance(temp, bool):
             self._last_known_targ_temp = float(temp)
         return self._last_known_targ_temp
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Deprecated alias for HA < 2026.11 (issue 1394)."""
+        return self.native_target_temperature
 
     # Overrides of standard HA climate actions
 
@@ -980,7 +1004,7 @@ class RamsesZone(RamsesEntity, ClimateEntity):
             await self.async_set_zone_mode(
                 mode=PRESET_HA_TO_ZONE[preset_mode],
                 setpoint=(
-                    self.target_temperature
+                    self.native_target_temperature
                     if preset_mode != PRESET_NONE
                     else None
                 ),
@@ -1276,6 +1300,8 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         ClimateEntityFeature.FAN_MODE
     )
     _attr_temperature_unit: str = UnitOfTemperature.CELSIUS
+    # deprecated name kept as an alias for HA < 2026.11 (issue 1394)
+    _attr_native_temperature_unit: str = UnitOfTemperature.CELSIUS
 
     def __init__(
         self,
@@ -1336,7 +1362,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         return self._last_known_curr_hum
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the current temperature.
 
         :return: The temperature.
@@ -1345,6 +1371,11 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         if indoor_temp is not None:
             self._last_known_curr_temp = float(indoor_temp)
         return self._last_known_curr_temp
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Deprecated alias for HA < 2026.11 (issue 1394)."""
+        return self.native_current_temperature
 
     def _get_cached_fan_info(self) -> str | None:
         """Get and cache the latest fan info."""

@@ -1135,7 +1135,7 @@ async def test_zone_immediate_update_on_commands(
 
     # 3. Set Preset Mode (calls set_mode)
     # Note: Requires target_temperature logic, so we ensure it's not None
-    with patch.object(RamsesZone, "target_temperature", new=20.0):
+    with patch.object(RamsesZone, "native_target_temperature", new=20.0):
         await zone.async_set_preset_mode(PRESET_TEMPORARY)
     mock_device.set_mode.assert_awaited()
     zone.async_write_ha_state.assert_called()
