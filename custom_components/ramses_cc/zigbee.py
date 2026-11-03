@@ -77,7 +77,7 @@ def build_zigbee_url(
     :param hass: Home Assistant instance owning the ZHA device registry.
     :param ieee: IEEE address selected through the device picker.
     :param force_legacy: Explicitly retain text acknowledgements.
-    :return: A legacy URL or a URL selecting native APS acknowledgements.
+    :return: A pre-0.60 URL or a URL selecting native APS acknowledgements.
     """
     url = f"zigbee://{ieee}/0xfc00/0x0000/10/0xfc01/0x0000/10"
     if force_legacy:

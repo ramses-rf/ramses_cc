@@ -237,7 +237,7 @@ def _packet_log_candidates(
 ) -> list[Path]:
     """Return the packet log path candidates, in priority order.
 
-    ``packet_log_path`` is a folder (a legacy full file path ending in
+    ``packet_log_path`` is a folder (a pre-0.60 full file path ending in
     ``.log`` is also accepted); ``packet_log_prefix`` is the file
     prefix (default ``packet_log``).  Falls back to the HA config dir.
     The ``is_file()`` check runs inside the executor job, off the

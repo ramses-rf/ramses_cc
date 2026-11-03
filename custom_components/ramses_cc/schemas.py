@@ -257,7 +257,7 @@ def normalise_config(config: _SchemaT) -> tuple[str, _SchemaT, _SchemaT]:
 
     port_name, port_config = extract_serial_port(config.pop(SZ_SERIAL_PORT))
 
-    # Phase 4: known_list is no longer in the config entry.  Remote commands
+    # known_list is no longer in the config entry.  Remote commands
     # live in the schema as _commands.  Extract them from there.
     schema = config.get(CONF_SCHEMA, {}) or {}
     remote_commands: dict[str, Any] = {}
@@ -670,7 +670,7 @@ def merge_schemas(
     """Return the config schema deep merged into the cached schema.
 
     The **config schema is authoritative** for which devices exist — but
-    only when *schema_is_ssot* is True (passive scan mode).  In legacy
+    only when *schema_is_ssot* is True (passive scan mode).  In pre-0.60
     mode (no passive scan), the cache is the source of truth for topology
     because the config may not have a ``CONF_SCHEMA`` key at all (old YAML
     format stores device keys at the top level of options).
@@ -684,7 +684,7 @@ def merge_schemas(
     :param config_schema: The schema defined in the integration configuration.
     :param cached_schema: The schema restored from the client state cache.
     :param schema_is_ssot: When True, config schema is authoritative for
-        device existence.  When False (legacy), cache is kept as-is.
+        device existence.  When False (pre-0.60), cache is kept as-is.
     :return: A merged schema dictionary if successful, or None if the cached
         schema is incompatible or less complete than the config.
     """
@@ -780,7 +780,7 @@ def merge_schemas(
     # Filter: remove device-ID keys from the result that are NOT in the
     # config schema.  The config schema is authoritative — the cache
     # cannot resurrect devices the user removed.  Only applies in SSOT
-    # mode (passive scan).  In legacy mode, the cache is kept as-is.
+    # mode (passive scan).  In pre-0.60 mode, the cache is kept as-is.
     if not schema_is_ssot:
         return cast(_SchemaT | None, result)
 
@@ -1405,15 +1405,15 @@ _VALID_ZONE_INDEX_RE = re.compile(r"^0[0-9AB]$")
 def migrate_known_list_traits(
     schema: dict[str, Any], known_list: dict[str, Any]
 ) -> dict[str, Any]:
-    """Merge legacy known_list traits into schema entries.
+    """Merge pre-0.60 known_list traits into schema entries.
 
-    Iterates through the legacy known_list entries and transfers trait
+    Iterates through the pre-0.60 known_list entries and transfers trait
     attributes (_class, _faked, _bound, _scheme, _alias) into the
     corresponding schema entry dictionaries.
 
     :param schema: Target schema dictionary to update.
     :type schema: dict[str, Any]
-    :param known_list: Source legacy known_list dictionary.
+    :param known_list: Source pre-0.60 known_list dictionary.
     :type known_list: dict[str, Any]
     :returns: Enriched schema dictionary containing merged traits.
     :rtype: dict[str, Any]
@@ -1840,7 +1840,7 @@ def sync_learned_topology(
             )
     # Also backfill _owner on non-HGI device entries already in the
     # config schema — the TCS controller is a system object (never in
-    # client.devices / active_device_ids), and legacy schemas written
+    # client.devices / active_device_ids), and pre-0.60 schemas written
     # before owner tracking have ownerless entries throughout.  Without
     # the stamp, eligible_devices() would gate them out of entity
     # creation (issue 1257).  HGI discovery candidates stay ownerless

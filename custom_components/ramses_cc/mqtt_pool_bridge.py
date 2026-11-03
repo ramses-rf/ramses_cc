@@ -843,7 +843,7 @@ class RamsesMqttPoolBridge:
         Used when a serial primary discovers its HGI ID and that
         same HGI is also publishing on MQTT — the serial transport
         takes ownership, and the MQTT child should be made
-        non-sendable to avoid duplicate packet ingestion (Phase 2
+        non-sendable to avoid duplicate packet ingestion
         hybrid pool, issue 1119).
 
         This does NOT structurally remove the child from the pool —

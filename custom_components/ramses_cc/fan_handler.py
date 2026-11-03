@@ -218,7 +218,7 @@ class RamsesFanHandler:
         if not isinstance(device, HvacVentilator):
             return
 
-        # Phase 4: bound device IDs come from the schema _bound trait (SSOT).
+        # bound device IDs come from the schema _bound trait (SSOT).
         # The known_list override is no longer stored in config entry options.
         # Fallback: if _bound is not set, use remotes: list (migration adds
         # remotes: under the FAN based on the REM's binding, but doesn't

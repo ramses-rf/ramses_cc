@@ -1539,7 +1539,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
                 rem_commands = remotes.get(str(bound_rem), {})
                 if isinstance(rem_commands, dict):
                     rem_commands, _ = _split_commands(rem_commands)
-                # Phase 4: known_list legacy fallback removed.
+                # known_list pre-0.60 fallback removed.
                 # Commands live in schema _commands (handled above via
                 # remotes, which are populated from schema).
 

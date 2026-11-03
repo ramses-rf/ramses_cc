@@ -1011,7 +1011,7 @@ class BaseRamsesFlow:
                     # Inject HGI into schema if using HA MQTT, and a valid
                     # non-sentinel ID is provided.  This ensures it shows
                     # up in the "System schema" step immediately.
-                    # (Phase 4: was previously injected into known_list —
+                    # was previously injected into known_list —
                     # now goes to schema as _ traits, the single source
                     # of truth.)
                     if (
@@ -1817,7 +1817,7 @@ class RamsesConfigFlow(BaseRamsesFlow, ConfigFlow, domain=DOMAIN):  # type: igno
         ].total_seconds()
         self.options.pop(SZ_RESTORE_CACHE, None)
 
-        # Phase 4: migrate known_list traits into schema (same logic as
+        # migrate known_list traits into schema (same logic as
         # async_migrate_entry v2→v3).  This import flow only runs once
         # (when no config entry exists yet), so it is the only chance to
         # transfer known_list traits from YAML into the config entry
@@ -2141,11 +2141,11 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 CONF_SERIAL_PORT = "serial_port"
                 CONF_ZIGBEE_DEVICE_ADD = "zigbee_device"
 
-                # Phase 2: serial pool children are now supported.
+                # serial pool children are now supported.
                 # MQTT pool children are callback-driven via the
                 # HA-native RamsesMqttPoolBridge (no paho inside HA,
                 # issue 1119).  Both serial and MQTT can be mixed.
-                # Phase 3: Zigbee pool children are supported via ZHA/zigpy.
+                # Zigbee pool children are supported via ZHA/zigpy.
 
                 if add_choice == CONF_MQTT_HA_ID:
                     # HA MQTT device ID — just enter 18:NNNNNN
@@ -2528,11 +2528,11 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
         # The primary HGI is also listed (marked as "primary") so the
         # user can see the full pool composition.
         #
-        # Phase 2: hybrid pools (serial + MQTT) are now supported.
+        # hybrid pools (serial + MQTT) are now supported.
         # Show all accepted HGIs as schema pool members regardless of
         # whether the primary is serial or MQTT.  Each HGI's
         # _preferred_type determines its transport in the hybrid pool.
-        # (Phase 1 restricted this to MQTT-only primaries.)
+        # restricted this to MQTT-only primaries.)
         schema = self.options.get(CONF_SCHEMA, {})
         if not isinstance(schema, dict):
             schema = {}
@@ -2683,7 +2683,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
 
             Shows the transport type (USB serial vs MQTT callback) so
             the user can distinguish pool members in a hybrid pool
-            (Phase 2, issue 1119).
+            , issue 1119).
 
             When the runtime port-to-HGI mapping is available (from the
             coordinator), the actual serial port is shown for each USB
@@ -2787,7 +2787,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 if explicit:
                     return f"HGI: {dev_id} (MQTT, {_mask_mqtt_url(explicit)})"
             # If the primary is serial, schema HGIs are MQTT
-            # callback-driven pool members (Phase 2 hybrid pool).
+            # callback-driven pool members hybrid pool).
             if isinstance(primary_port, str) and (
                 primary_port.startswith("/dev/")
                 or primary_port.startswith("socket://")
@@ -2829,11 +2829,11 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             )
 
         # Build options for the "add new port" dropdown.
-        # Phase 2: serial and MQTT HGIs are supported as pool children.
+        # serial and MQTT HGIs are supported as pool children.
         # Serial children are transport-driven (serialx); MQTT children
         # are callback-driven via the HA-native RamsesMqttPoolBridge
         # (no paho inside HA — issue 1119).
-        # Phase 3: Zigbee HGIs are supported as transport-driven children
+        # Zigbee HGIs are supported as transport-driven children
         # via ZHA/zigpy.
         CONF_MQTT_HA_ID = "mqtt_ha_id"
         CONF_MQTT_FULL_URL = "mqtt_full_url"
@@ -2856,7 +2856,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             ),
         ]
         # List removed HGIs so the user can re-add them directly.
-        # Phase 2: re-add works for both serial and MQTT primaries
+        # re-add works for both serial and MQTT primaries
         # (hybrid pool support).
         if isinstance(schema, dict):
             for dev_id, entry in schema.items():
@@ -2954,7 +2954,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             )
 
         # Build per-HGI _preferred_type selectors so the user can
-        # mark which transport each HGI uses (Phase 2 hybrid pool).
+        # mark which transport each HGI uses hybrid pool).
         # Show for both serial and MQTT primary so the user can
         # switch the primary transport via _preferred_type.
         # Always show all transport options, but mark which ones were
@@ -3199,7 +3199,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 # not a real gateway — it cannot be a pool member.
                 errors["base"] = "hgi_id_invalid"
             else:
-                # Phase 1: MQTT pool children share the HA MQTT
+                # MQTT pool children share the HA MQTT
                 # integration's broker/topic — no separate host/port
                 # or credentials are needed, and no paho client is
                 # created inside HA (issue 1119).
@@ -3227,7 +3227,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 )
                 return await self._async_save_live()
 
-        # Phase 1: only the HGI ID is needed — the broker and topic
+        # only the HGI ID is needed — the broker and topic
         # come from the HA MQTT integration.  No host/port/credentials
         # are stored, and no paho client is created (issue 1119).
         data_schema = {
@@ -3412,7 +3412,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
     ) -> ConfigFlowResult:
         """Select a serial/USB port as an additional pool member.
 
-        Phase 2: serial children are transport-driven (serialx) and
+        serial children are transport-driven (serialx) and
         fully send-capable after identity is established.  The port
         is added to CONF_ADDITIONAL_PORTS.
 
@@ -3936,7 +3936,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                                 if per_device_owner
                                 else root_owner
                             )
-                            # Phase 2: save _preferred_type for HGI
+                            # save _preferred_type for HGI
                             # devices and update _comment.
                             if is_hgi_id(device_id):
                                 pref_val = user_input.get(
@@ -4011,7 +4011,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             if has_class_update and coordinator.store:
                 await coordinator.store.async_save_backup(
                     config_schema,
-                    {},  # known_list removed in Phase 4 — schema is sole SSOT
+                    {},  # known_list removed in — schema is sole SSOT
                     reason="class_update",
                 )
 
@@ -4492,7 +4492,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 )
             ] = selector.TextSelector()
 
-            # Phase 2: for HGI devices, add a _preferred_type selector
+            # for HGI devices, add a _preferred_type selector
             # so the user can set the transport preference when accepting.
             if is_hgi_id(device_id):
                 # Parse existing _comment for detected transports.
@@ -5168,7 +5168,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                                 isinstance(packet, dict)
                                 and packet.get("code") not in msg_code_filter
                             )
-                            or (  # legacy 0.54.x string packets
+                            or (  # pre-0.60 0.54.x string packets
                                 isinstance(packet, str)
                                 and not any(
                                     f" {code} " in packet
@@ -5347,7 +5347,7 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
             prob.Required(
                 "clear_discovery", default=False
             ): selector.BooleanSelector(),
-            # clear_known_list was removed in Phase 4 — known_list is now
+            # clear_known_list was removed in — known_list is now
             # derived from schema, so clearing the schema is sufficient.
         }
 

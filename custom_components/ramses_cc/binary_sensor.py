@@ -294,7 +294,7 @@ class RamsesLogbookBinarySensor(RamsesBinarySensor):
 
 
 class RamsesSystemBinarySensor(RamsesBinarySensor):
-    """Legacy representation of a system for EvoControl compatibility.
+    """Pre-0.60 representation of a system for EvoControl compatibility.
 
     NOTE: This entity exists purely to serve the working_schema JSON to the
     EvoControl Wi-Fi display. It evaluates to False (STATE_OFF) to indicate
