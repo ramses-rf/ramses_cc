@@ -2,6 +2,7 @@
     "domain": "ramses_cc",
     "name": "RAMSES RF",
     "after_dependencies": ["mqtt", "zha"],
+    "categories": ["climate"],
     "codeowners": ["@silverailscolo"],
     "config_flow": true,
     "dependencies": ["usb"],
@@ -15,9 +16,9 @@
       "aioesphomeapi>=46.6.0",
       "aiousbwatcher>=1.1.2",
       "pyserial-asyncio-fast>=0.16",
-      "ramses-rf==0.61.3",
+      "ramses-rf==0.61.4",
       "serialx>=1.11.0"
     ],
     "single_config_entry": true,
-    "version": "0.61.3"
+    "version": "0.61.4"
   }
