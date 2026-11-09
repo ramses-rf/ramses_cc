@@ -16,7 +16,7 @@
 # - pip list | grep -E 'prek|ruff|mypy|types-|probatio'
 
 # used for development (linting)
-    prek == 0.5.7
+    prek == 0.5.10
     ruff >= 0.17.3                                 # See also: pre-commit-config.yaml
 
 # used for development (typing)
