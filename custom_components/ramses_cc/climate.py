@@ -1323,6 +1323,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
         self._last_known_curr_temp: float | None = None
         self._last_known_curr_hum: int | None = None
         self._last_known_fan_info: str | None = None
+        self._last_known_fan_mode: str | None = None
 
     async def async_added_to_hass(self) -> None:
         """Handle entity addition to Home Assistant."""
@@ -1384,6 +1385,16 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
             self._last_known_fan_info = fan_info
         return self._last_known_fan_info
 
+    def _get_effective_fan_info(self) -> str | None:
+        """Return fan_info if known, falling back to fan_mode for 31D9-only fans."""
+        fan_info = self._get_cached_fan_info()
+        if fan_info is not None:
+            return fan_info
+        fan_mode = resolve_async_attr(self, self._device, "fan_mode")
+        if isinstance(fan_mode, str) and fan_mode:
+            self._last_known_fan_mode = fan_mode
+        return self._last_known_fan_mode
+
     @property
     def fan_mode(self) -> str | None:
         """Return the fan setting.
@@ -1395,7 +1406,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
 
         :return: The fan mode.
         """
-        fan_info = self._get_cached_fan_info()
+        fan_info = self._get_effective_fan_info()
         return _normalise_fan_info_for_selector(
             fan_info, configured_hvac_strategy(self._device)
         )
@@ -1499,7 +1510,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
 
         :return: The HVAC action.
         """
-        fan_info = self._get_cached_fan_info()
+        fan_info = self._get_effective_fan_info()
         if fan_info is None:
             return None
         if fan_info == "off":
@@ -1512,7 +1523,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
 
         :return: The HVAC mode as an Enum.
         """
-        fan_info = self._get_cached_fan_info()
+        fan_info = self._get_effective_fan_info()
         if fan_info is None:
             return None
         return HVACMode.OFF if fan_info == "off" else HVACMode.AUTO
@@ -1523,7 +1534,7 @@ class RamsesHvac(RamsesEntity, ClimateEntity):
 
         :return: The icon name.
         """
-        if self._get_cached_fan_info() == "off":
+        if self._get_effective_fan_info() == "off":
             return "mdi:hvac-off"
         return "mdi:hvac"
 

@@ -1661,6 +1661,7 @@ def sync_learned_topology(
                 "22:",
                 "23:",
                 "30:",
+                "32:",
                 "34:",
                 "37:",
             )
@@ -1683,6 +1684,11 @@ def sync_learned_topology(
             ac = value[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL)
             if ac:
                 active_device_ids.add(ac)
+        # VCS entry — collect remotes/sensors under a non-skipped FAN (issue 1416)
+        if value.get(SZ_TR_SKIPPED) is not True:
+            for vcs_key in (SZ_REMOTES, SZ_SENSORS):
+                if isinstance(value.get(vcs_key), list):
+                    active_device_ids.update(value[vcs_key])
     for dev_id in active_device_ids:
         entry = new_schema.get(dev_id)
         if isinstance(entry, dict) and entry.get(SZ_TR_SKIPPED) is True:
