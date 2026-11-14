@@ -1426,6 +1426,10 @@ def migrate_known_list_traits(
         "bound": "_bound",
         "scheme": "_scheme",
         "alias": "_alias",
+        "heartbeat_timeout": "_heartbeat_timeout",
+        "polling_interval": "_polling_interval",
+        "is_battery": "_is_battery",
+        "locked": "_locked",
     }
     for dev_id, kl_entry in known_list.items():
         if not isinstance(kl_entry, dict) or not kl_entry:
