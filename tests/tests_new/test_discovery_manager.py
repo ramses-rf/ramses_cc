@@ -727,6 +727,45 @@ class TestGenerateSchemaEntry:
 
         assert "37:123456" in result[SZ_ORPHANS_HVAC]
 
+    def test_ufc_with_ctl_goes_to_underfloor_heating(self) -> None:
+        """UFC (02:) with a known CTL nests under underfloor_heating."""
+        from ramses_rf.schemas import (
+            SZ_ORPHANS_HVAC,
+            SZ_UFH_SYSTEM,
+        )
+
+        result = DiscoveryManager.generate_schema_entry(
+            "02:088037", "UFC", ctl_id="01:071057"
+        )
+        assert "02:088037" in result["01:071057"][SZ_UFH_SYSTEM]
+        assert "02:088037" not in result.get(SZ_ORPHANS_HVAC, [])
+
+    def test_ufc_without_ctl_goes_to_heat_orphans(self) -> None:
+        """UFC (02:) without a CTL is a heat orphan, never orphans_hvac.
+
+        Regression test for ramses_rf#1384: the 02: prefix was missing
+        from _HEAT_PREFIXES, so discovered UFCs landed in orphans_hvac.
+        """
+        from ramses_rf.schemas import (
+            SZ_ORPHANS_HEAT,
+            SZ_ORPHANS_HVAC,
+        )
+
+        result = DiscoveryManager.generate_schema_entry("02:088037", "UFC")
+        assert "02:088037" in result[SZ_ORPHANS_HEAT]
+        assert "02:088037" not in result.get(SZ_ORPHANS_HVAC, [])
+
+    def test_unclassified_ufc_prefix_goes_to_heat_orphans(self) -> None:
+        """An unclassified 02: device is heat-side, not HVAC."""
+        from ramses_rf.schemas import (
+            SZ_ORPHANS_HEAT,
+            SZ_ORPHANS_HVAC,
+        )
+
+        result = DiscoveryManager.generate_schema_entry("02:088017", "unknown")
+        assert "02:088017" in result[SZ_ORPHANS_HEAT]
+        assert "02:088017" not in result.get(SZ_ORPHANS_HVAC, [])
+
     def test_co2_with_parent_fan(self) -> None:
         """CO2 sensor (37:) with a parent FAN goes to remotes[], not orphans_heat."""
         result = DiscoveryManager.generate_schema_entry(
