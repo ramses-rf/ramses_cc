@@ -2222,6 +2222,7 @@ class DiscoveryManager:
             SZ_ORPHANS_HVAC,
             SZ_REMOTES,
             SZ_SYSTEM,
+            SZ_UFH_SYSTEM,
         )
 
         likely_type_normalized = likely_type.upper()
@@ -2374,6 +2375,16 @@ class DiscoveryManager:
             # setup time (see issue 813).
             return _merge({SZ_ORPHANS_HEAT: [device_id]})
 
+        # ── UFC: underfloor heating controller ──────────────────────
+        # A UFC belongs under the TCS's underfloor_heating map when the
+        # CTL is known; otherwise it's a heat-side orphan, never
+        # orphans_hvac (ramses_rf#1384 — the 02: prefix was missing from
+        # _HEAT_PREFIXES below, so UFCs landed in orphans_hvac).
+        if likely_type_normalized == "UFC":
+            if ctl_id:
+                return _merge({ctl_id: {SZ_UFH_SYSTEM: {device_id: None}}})
+            return _merge({SZ_ORPHANS_HEAT: [device_id]})
+
         # ── DIS / HUM: HVAC display or humidity sensor — orphan ──────
         if likely_type_normalized in ("DIS", "HUM"):
             return _merge({SZ_ORPHANS_HVAC: [device_id]})
@@ -2381,7 +2392,7 @@ class DiscoveryManager:
         # ── Default: orphan ─────────────────────────────────────────
         # Non-heat prefixes (29:, 32:, 37:, 63:, etc.) go to orphans_hvac.
         _HEAT_PREFIXES = frozenset(
-            ("01:", "04:", "07:", "08:", "10:", "13:", "22:", "34:")
+            ("01:", "02:", "04:", "07:", "08:", "10:", "13:", "22:", "34:")
         )
         if device_id[:3] not in _HEAT_PREFIXES:
             return _merge({SZ_ORPHANS_HVAC: [device_id]})
