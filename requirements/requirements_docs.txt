@@ -11,4 +11,4 @@
     Sphinx==9.2.0
     sphinxcontrib-mermaid==2.1.1
     sphinx-basic-ng==1.0.0b2
-    sphinx_design==0.7.0
+    sphinx_design==0.8.0
