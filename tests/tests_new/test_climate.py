@@ -3006,6 +3006,34 @@ async def test_fan_mode_no_scheme_passes_descriptive_through(
     assert attrs["fan_info"] == "speed 1, low"
 
 
+async def test_hvac_falls_back_to_fan_mode_when_fan_info_none(
+    mock_coordinator: MagicMock, mock_description: MagicMock
+) -> None:
+    """RamsesHvac falls back to device.fan_mode when fan_info is None (issue 1416)."""
+    mock_device = MagicMock(spec=HvacVentilator)
+    mock_device.id = "32:231719"
+    mock_device.get_configured_strategy = MagicMock(
+        return_value=OrconStrategy()
+    )
+    mock_device.get_bound_rem = MagicMock(return_value="29:151989")
+    mock_device.fan_info = MagicMock(return_value=None)
+    mock_device.fan_mode = MagicMock(return_value="high")
+
+    hvac = RamsesHvac(mock_coordinator, mock_device, mock_description)
+
+    assert hvac.fan_mode == "high"
+    assert hvac.hvac_mode == HVACMode.AUTO
+    assert hvac.hvac_action == HVACAction.FAN
+    assert hvac.icon == "mdi:hvac"
+    assert "fan_info" not in hvac.extra_state_attributes
+
+    mock_device.fan_mode = MagicMock(return_value="off")
+    assert hvac.fan_mode == "off"
+    assert hvac.hvac_mode == HVACMode.OFF
+    assert hvac.hvac_action == HVACAction.OFF
+    assert hvac.icon == "mdi:hvac-off"
+
+
 # ---------------------------------------------------------------------------
 # fan_modes dropdown filtering: only 22F1 commands (issue 1116)
 #

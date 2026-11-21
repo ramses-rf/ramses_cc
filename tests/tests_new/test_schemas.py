@@ -2227,6 +2227,30 @@ def test_sync_clears_skipped_for_active_devices() -> None:
     assert result["13:333333"].get("_skipped") is None
 
 
+def test_sync_clears_skipped_for_fan_remotes_and_sensors() -> None:
+    """Devices placed in a FAN's remotes/sensors lists have _skipped cleared (issue 1416)."""
+    config: dict[str, Any] = {
+        "32:231719": {
+            "_class": "FAN",
+            "_scheme": "orcon",
+            "remotes": ["29:151989"],
+            "sensors": ["37:111111"],
+        },
+        "29:151989": {"_skipped": True},
+        "37:111111": {"_skipped": True},
+    }
+    learned: dict[str, Any] = {
+        "32:231719": {
+            "remotes": ["29:151989"],
+            "sensors": ["37:111111"],
+        },
+    }
+    result = sync_learned_topology(config, learned)
+    assert result is not None
+    assert result["29:151989"].get("_skipped") is None
+    assert result["37:111111"].get("_skipped") is None
+
+
 def test_sync_preserves_skipped_for_orphan_only_devices() -> None:
     """Devices that are only in orphans with no zone role keep _skipped."""
     config: dict[str, Any] = {
