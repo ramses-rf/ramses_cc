@@ -3860,6 +3860,37 @@ class TestDeriveKnownListFromSchema:
         assert result["37:111111"]["faked"] is True
         assert result["37:111111"]["class"] == "REM"
 
+    def test_schema_heartbeat_timeout_and_polling_interval_extracted(
+        self,
+    ) -> None:
+        """Schema _heartbeat_timeout, _polling_interval, _is_battery, and _locked are forwarded to known_list (issue 1415)."""
+        schema = {
+            "32:231719": {
+                "_class": "FAN",
+                "_scheme": "orcon",
+                "_heartbeat_timeout": 0,
+                "_polling_interval": 0,
+                "_locked": True,
+                "remotes": ["29:151989"],
+            },
+            "29:151989": {
+                "_class": "REM",
+                "_is_battery": True,
+                "_heartbeat_timeout": False,
+                "_polling_interval": {"10E0": 3600},
+            },
+        }
+        result = RamsesCoordinator.derive_known_list_from_schema(schema)
+        assert result["32:231719"]["heartbeat_timeout"] == 0
+        assert result["32:231719"]["polling_interval"] == {
+            "10E0": 0,
+            "10D0": 0,
+        }
+        assert result["32:231719"]["locked"] is True
+        assert result["29:151989"]["heartbeat_timeout"] == 0
+        assert result["29:151989"]["polling_interval"] == {"10E0": 3600}
+        assert result["29:151989"]["is_battery"] is True
+
 
 class TestExtractDeviceIdsFromStripped:
     """Tests for _extract_device_ids_from_stripped (safety net for known_list)."""

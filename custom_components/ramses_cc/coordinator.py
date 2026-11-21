@@ -2791,6 +2791,35 @@ class RamsesCoordinator(DataUpdateCoordinator):
                     traits["bound"] = mapped["bound"]
                 if mapped.get("scheme"):
                     traits["scheme"] = mapped["scheme"]
+                ht = mapped.get("heartbeat_timeout")
+                if isinstance(ht, bool):
+                    if not ht:
+                        traits["heartbeat_timeout"] = 0
+                elif isinstance(ht, int) and ht >= 0:
+                    traits["heartbeat_timeout"] = ht
+                pi = mapped.get("polling_interval")
+                if isinstance(pi, dict):
+                    traits["polling_interval"] = pi
+                elif (
+                    isinstance(pi, int)
+                    and not isinstance(pi, bool)
+                    and pi >= 0
+                ):
+                    from ramses_rf.pipeline.polling import (
+                        DEFAULT_POLLING_SCHEDULES,
+                    )
+
+                    cls_slug = str(traits.get("class") or "DEFAULT")
+                    sched = DEFAULT_POLLING_SCHEDULES.get(
+                        cls_slug, DEFAULT_POLLING_SCHEDULES["DEFAULT"]
+                    )
+                    traits["polling_interval"] = {
+                        str(code): pi for code in sched
+                    }
+                if isinstance(mapped.get("is_battery"), bool):
+                    traits["is_battery"] = mapped["is_battery"]
+                if isinstance(mapped.get("locked"), bool):
+                    traits["locked"] = mapped["locked"]
             known_list[device_id] = traits
 
         # Normalize class slugs in known_list (ventilator -> FAN, etc.)

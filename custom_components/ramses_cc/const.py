@@ -233,6 +233,12 @@ SZ_TR_SCHEME: Final = (
 SZ_TR_COMMANDS: Final = (
     "_commands"  # dict[str, str]: learned RF payloads for REM entities
 )
+SZ_TR_HEARTBEAT_TIMEOUT: Final = "_heartbeat_timeout"  # int | bool: silence seconds before unavailable (0 disables)
+SZ_TR_POLLING_INTERVAL: Final = "_polling_interval"  # int | dict[str, int]: per-device or per-code poll interval
+SZ_TR_IS_BATTERY: Final = (
+    "_is_battery"  # bool: override battery-powered detection
+)
+SZ_TR_LOCKED: Final = "_locked"  # bool: lock device class against promotion
 
 # Root-level schema key for the system owner name.
 # Devices whose _owner matches this value are "ours" (included in known_list).
@@ -252,6 +258,10 @@ SZ_TRAITS: Final = (
     SZ_TR_BOUND,
     SZ_TR_UNBOUND,
     SZ_TR_SCHEME,
+    SZ_TR_HEARTBEAT_TIMEOUT,
+    SZ_TR_POLLING_INTERVAL,
+    SZ_TR_IS_BATTERY,
+    SZ_TR_LOCKED,
 )
 
 
