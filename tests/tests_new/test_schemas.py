@@ -5190,3 +5190,47 @@ def test_sync_learned_topology_skips_comment_placement_for_configured_devices() 
     assert zones["0B"].get(SZ_SENSOR) == "34:124201"
     assert zones["00"].get(SZ_SENSOR) is None
     assert "34:124201" not in zones["00"].get(SZ_ACTUATORS, [])
+
+
+def test_drop_invalid_composite_keys() -> None:
+    """drop_invalid_composite_keys removes only composite child keys."""
+    from custom_components.ramses_cc.schemas import drop_invalid_composite_keys
+
+    schema: dict[str, Any] = {
+        "main_tcs": "01:150000",
+        "orphans_heat": [],
+        "orphans_hvac": [],
+        "_owner": "me",
+        "device_comments": {"04:056053": "hall"},
+        "removed_children": {},
+        "01:150000": {"_class": "CTL", "zones": {}},
+        "04:056053": {"_class": "TRV"},
+        "01:150000_00": {"_skipped": True},
+        "01:150000_HW": {"_skipped": True},
+        "02:123456_00": {"_owner": "me"},
+    }
+    cleaned, dropped = drop_invalid_composite_keys(schema)
+
+    assert dropped == ["01:150000_00", "01:150000_HW", "02:123456_00"]
+    for key in dropped:
+        assert key not in cleaned
+    # everything else preserved
+    for key in schema:
+        if key not in dropped:
+            assert key in cleaned, f"wrongly dropped: {key}"
+    # original schema not mutated
+    assert "01:150000_00" in schema
+
+
+def test_drop_invalid_composite_keys_clean_schema() -> None:
+    """A clean schema is returned unchanged with no dropped keys."""
+    from custom_components.ramses_cc.schemas import drop_invalid_composite_keys
+
+    schema: dict[str, Any] = {
+        "main_tcs": "01:150000",
+        "orphans_heat": ["04:056053"],
+        "01:150000": {"_class": "CTL"},
+    }
+    cleaned, dropped = drop_invalid_composite_keys(schema)
+    assert dropped == []
+    assert cleaned == schema

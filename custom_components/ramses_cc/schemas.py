@@ -129,6 +129,44 @@ _DEVICE_ID_RE: Final[re.Pattern[str]] = re.compile(
     r"^[0-9A-F]{2}:[0-9A-F]{6}$", re.I
 )
 
+# Composite child ids (``<device_id>_<idx>`` zones, ``_HW`` DHW zones,
+# UFH circuits).  These are NEVER valid as top-level schema keys —
+# children live under their parent entry.  Written by accident in
+# ramses-rf/ramses_cc issue 1435, they fail ramses_rf validation.
+_COMPOSITE_CHILD_KEY_RE: Final[re.Pattern[str]] = re.compile(
+    r"^[0-9A-F]{2}:[0-9A-F]{6}_.+$", re.I
+)
+
+
+def drop_invalid_composite_keys(
+    schema: _SchemaT,
+) -> tuple[_SchemaT, list[str]]:
+    """Drop invalid composite child keys from the top level of a schema.
+
+    Keys such as ``01:072034_06`` can never be valid — zone/circuit
+    children belong under their parent controller entry.  Earlier
+    versions could persist such keys (e.g. ``{"_skipped": true}`` from
+    the review flow, ramses-rf/ramses_cc issue 1435), after which
+    ramses_rf schema validation fails and the config entry cannot set
+    up at all.  Dropping them lets the entry load; the zone itself can
+    be re-learned or re-added through normal paths.
+
+    :param schema: The schema dict to clean.
+    :return: ``(cleaned_schema, dropped_keys)`` — a copy of the schema
+        without the invalid keys, and the list of keys that were
+        dropped (empty if none).
+    """
+    dropped = [
+        k
+        for k in schema
+        if isinstance(k, str) and _COMPOSITE_CHILD_KEY_RE.match(k)
+    ]
+    if not dropped:
+        return schema, []
+    cleaned = {k: v for k, v in schema.items() if k not in dropped}
+    return cleaned, sorted(dropped)
+
+
 # Heat-side prefixes (CH/DHW domain) — devices with these prefixes are NOT
 # treated as VCS at root level (they don't need remotes/sensors).  Any
 # non-heat device at root level without remotes/sensors is moved to

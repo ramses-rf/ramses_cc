@@ -158,6 +158,7 @@ from .notifications import (
 from .schemas import (
     _SCHEMA_EXTENSION_KEYS,
     device_in_schema,
+    drop_invalid_composite_keys,
     eligible_devices,
     merge_schemas,
     remove_device_from_schema,
@@ -1081,6 +1082,48 @@ class RamsesCoordinator(DataUpdateCoordinator):
             new_options = {**self.entry.options, CONF_SCHEMA: config_schema}
             self.persist_options_no_reload(new_options)
 
+        # Repair invalid composite child keys (``<ctl>_<idx>`` etc.) at
+        # the top level of the schema.  These can never be valid —
+        # children belong under their parent entry — but earlier
+        # versions could persist them (ramses-rf/ramses_cc issue 1435),
+        # after which ramses_rf validation fails and the config entry
+        # cannot set up at all.  Drop them with a warning so users
+        # already in the corrupted state recover without manual schema
+        # surgery.
+        if isinstance(config_schema, dict):
+            repaired_schema, dropped_keys = drop_invalid_composite_keys(
+                config_schema
+            )
+            if dropped_keys:
+                _LOGGER.warning(
+                    "Dropping invalid composite child keys from the "
+                    "schema top level: %s — child zones/circuits belong "
+                    "under their parent controller entry.  The affected "
+                    "zones can be re-learned or re-added normally.",
+                    dropped_keys,
+                )
+                config_schema = repaired_schema
+                self.options[CONF_SCHEMA] = config_schema
+                new_options = {
+                    **self.entry.options,
+                    CONF_SCHEMA: config_schema,
+                }
+                self.persist_options_no_reload(new_options)
+                async_create_notification(
+                    self.hass,
+                    "schema_repair",
+                    title="Schema repaired",
+                    message=(
+                        "RAMSES RF dropped invalid top-level schema "
+                        f"key(s): {', '.join(dropped_keys)}. Zone and "
+                        "circuit entries belong under their parent "
+                        "controller, not at the schema top level.  The "
+                        "affected zones can be re-learned or re-added "
+                        "normally; check your zones and re-configure "
+                        "any that are missing."
+                    ),
+                )
+
         # Backfill _owner on pre-owner-gating schema entries (issue
         # 1257, 2.3).  Schemas saved before owner tracking have device
         # entries without _owner — without this stamp, eligible_devices()
@@ -1131,6 +1174,18 @@ class RamsesCoordinator(DataUpdateCoordinator):
                 )
 
         cached_schema = client_state.get(SZ_SCHEMA, {})
+        if isinstance(cached_schema, dict):
+            # The cache may carry the same corruption (it is rewritten
+            # on the next save cycle, so no need to persist this).
+            cached_schema, _dropped = drop_invalid_composite_keys(
+                cached_schema
+            )
+            if _dropped:
+                _LOGGER.info(
+                    "Dropped invalid composite child keys from cached "
+                    "schema: %s",
+                    _dropped,
+                )
         _LOGGER.debug("CACHED_SCHEMA: %s", cached_schema)
 
         # For serial/USB with a clean schema, the HGI ID isn't known

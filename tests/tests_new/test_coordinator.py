@@ -12348,3 +12348,81 @@ def test_zone_ids_for_packet_unknown_zone_index() -> None:
         raw_payload="07064000FFFFFF",
     )
     assert _zone_ids_for_packet(dto, gateway) == []
+
+
+async def test_setup_repairs_composite_child_keys(
+    hass: HomeAssistant, mock_entry: MagicMock
+) -> None:
+    """Invalid composite child keys (``<ctl>_<idx>``) are dropped at startup.
+
+    Regression test for ramses-rf/ramses_cc issue 1435: earlier versions
+    could persist keys such as ``01:150000_00`` as top-level schema keys,
+    after which ramses_rf validation failed and the config entry could
+    not set up at all.  Startup now drops them with a warning so users
+    already in the corrupted state recover automatically.
+    """
+    # Mock async_update_entry so the repaired schema is persisted
+    hass.config_entries.async_update_entry = MagicMock()
+
+    coordinator = RamsesCoordinator(hass, mock_entry)
+    mock_client = MagicMock(spec=Gateway)
+    cast(Any, mock_client).start = AsyncMock()
+    cast(Any, coordinator)._create_client = MagicMock(return_value=mock_client)
+
+    mock_entry.options = {
+        CONF_SCHEMA: {
+            "01:150000": {"_class": "CTL", "zones": {}},
+            "01:150000_00": {"_skipped": True},
+            "01:150000_HW": {"_skipped": True},
+        },
+        SZ_KNOWN_LIST: {},
+        CONF_RAMSES_RF: {},
+        "serial_port": "/dev/ttyUSB0",
+    }
+    coordinator.options = dict(mock_entry.options)
+
+    cast(Any, coordinator.store).async_load = AsyncMock(return_value={})
+
+    await coordinator.async_setup()
+
+    # composite keys dropped in memory...
+    schema = coordinator.options.get(CONF_SCHEMA, {})
+    assert "01:150000_00" not in schema
+    assert "01:150000_HW" not in schema
+    # ...but the controller entry survives
+    assert "01:150000" in schema
+    # ...and the repair is persisted to the config entry
+    hass.config_entries.async_update_entry.assert_called()
+    updated_options = hass.config_entries.async_update_entry.call_args[1][
+        "options"
+    ]
+    assert "01:150000_00" not in updated_options.get(CONF_SCHEMA, {})
+
+
+async def test_setup_clean_schema_no_repair_write(
+    hass: HomeAssistant, mock_entry: MagicMock
+) -> None:
+    """A schema without composite keys is not rewritten at startup."""
+    hass.config_entries.async_update_entry = MagicMock()
+
+    coordinator = RamsesCoordinator(hass, mock_entry)
+    mock_client = MagicMock(spec=Gateway)
+    cast(Any, mock_client).start = AsyncMock()
+    cast(Any, coordinator)._create_client = MagicMock(return_value=mock_client)
+
+    mock_entry.options = {
+        CONF_SCHEMA: {
+            "01:150000": {"_class": "CTL", "zones": {}},
+        },
+        SZ_KNOWN_LIST: {},
+        CONF_RAMSES_RF: {},
+        "serial_port": "/dev/ttyUSB0",
+    }
+    coordinator.options = dict(mock_entry.options)
+
+    cast(Any, coordinator.store).async_load = AsyncMock(return_value={})
+
+    await coordinator.async_setup()
+
+    schema = coordinator.options.get(CONF_SCHEMA, {})
+    assert "01:150000" in schema
