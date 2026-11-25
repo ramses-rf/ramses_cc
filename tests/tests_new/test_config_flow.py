@@ -9871,3 +9871,79 @@ async def test_full_user_flow_smoke(hass: HomeAssistant) -> None:
         user_input={CONF_SCAN_INTERVAL: 60},
     )
     assert result.get("step_id") == "schema"
+
+
+# ---------------------------------------------------------------------------
+# review_discovered: composite zone id must never corrupt the schema
+# ---------------------------------------------------------------------------
+
+
+async def test_review_discovered_skip_zone_child_id_no_corruption(
+    hass: HomeAssistant,
+) -> None:
+    """Skipping a composite zone id must not remove the zone or write a
+    top-level ``<ctl>_<idx>`` key (ramses-rf/ramses_cc issue 1435).
+
+    Defense-in-depth: even if a composite child id somehow ends up in the
+    new-device review list (as happened with name-mismatch metadata), the
+    skip path must not treat it as a removable device.
+    """
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            CONF_SCHEMA: {
+                SZ_OWNER: "me",
+                "01:145038": {
+                    SZ_ZONES: {
+                        "00": {
+                            SZ_TR_NAME: "Old Name",
+                            SZ_SENSOR: "22:111111",
+                            SZ_ACTUATORS: ["04:111111"],
+                        }
+                    },
+                },
+            },
+        },
+    )
+    config_entry.add_to_hass(hass)
+
+    mock_entry = MagicMock()
+    mock_entry.device.device_id = "01:145038_00"
+    mock_entry.device.likely_type = "SEN"
+    mock_entry.device.confidence = "low"
+    mock_entry.device.rssi = None
+    mock_entry.device.codes_seen = ["0004"]
+    mock_entry.device.bound_to = None
+    mock_entry.device.zone_index = "00"
+    mock_entry.device.is_battery = False
+    mock_entry.device.source_count = 2
+    mock_entry.device.destination_count = 0
+
+    mock_coord = MagicMock()
+    # The pre-fix misclassification: the zone appears as a NEW device
+    mock_coord.discovery_manager.get_devices.return_value = [mock_entry]
+    mock_coord.discovery_manager.get_mismatched_devices.return_value = []
+    mock_coord.discovery_manager.get_missing_class_devices.return_value = []
+    mock_coord.discovery_manager.get_name_mismatch_devices.return_value = []
+    mock_coord.discovery_manager.metadata = {}
+    mock_coord.async_save_client_state = AsyncMock()
+    config_entry.runtime_data = mock_coord
+
+    flow = RamsesOptionsFlowHandler(config_entry)
+    flow.hass = hass
+    flow.get_options()
+
+    result = await flow.async_step_review_discovered(
+        user_input={
+            "device_01:145038_00": "skip",
+            "bulk_action": "none",
+            "owner_name": "me",
+        }
+    )
+    assert result.get("type") == FlowResultType.CREATE_ENTRY
+
+    saved_schema = flow.options.get(CONF_SCHEMA, {})
+    # The zone must still be present under the controller
+    assert "00" in saved_schema["01:145038"][SZ_ZONES]
+    # No invalid top-level composite key may be written
+    assert "01:145038_00" not in saved_schema

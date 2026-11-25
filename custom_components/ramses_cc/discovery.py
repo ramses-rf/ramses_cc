@@ -73,6 +73,18 @@ CHECKPOINT_INTERVAL_MINUTES: Final[int] = 30
 LOST_DEVICE_THRESHOLD_DAYS: Final[int] = 7
 
 
+def _is_child_id(device_id: str) -> bool:
+    """Return whether an id is a composite child id (``<parent>_<idx>``).
+
+    Zone ids (``01:072034_06``), DHW zone ids (``<ctl>_HW``) and UFH
+    circuit ids are children of a schema parent — they are not devices
+    and must never participate in the device discovery lifecycle
+    (ramses-rf/ramses_cc issue 1435).  Real device ids (``NN:NNNNNN``)
+    never contain an underscore.
+    """
+    return "_" in device_id
+
+
 class DiscoveryStatus(StrEnum):
     """Discovery state of a device."""
 
@@ -662,6 +674,12 @@ class DiscoveryManager:
         for device_id, meta in list(self.metadata.items()):
             # Skip local active HGI gateway
             if self._active_hgi_id and device_id == self._active_hgi_id:
+                continue
+            # Composite child ids (zones, DHW, UFH circuits) are not
+            # devices — they are never in schema_device_ids, so lifecycle
+            # transitions would flap them straight to REMOVED.  Their
+            # metadata only carries review annotations (issue 1435).
+            if _is_child_id(device_id):
                 continue
             # Remove foreign-owner devices from discovery metadata —
             # they should not appear in the discovery UI at all.
@@ -2014,6 +2032,15 @@ class DiscoveryManager:
                 continue
             meta = self.metadata.get(device_id)
 
+            # Composite child ids (zones, DHW, UFH circuits) are not
+            # devices — they have no discovery lifecycle status.  Metadata
+            # may exist for them only as a carrier for review annotations
+            # (e.g. name_mismatch, issue 947).  Exclude them whenever a
+            # lifecycle filter is applied so they can never surface in the
+            # new-device review section (ramses-rf/ramses_cc issue 1435).
+            if _is_child_id(device_id) and status is not None:
+                continue
+
             # When a status/enabled filter is applied, skip devices that
             # have no persisted metadata rather than synthesizing a
             # default DeviceMetadata() (whose status defaults to NEW).
@@ -2495,14 +2522,23 @@ class DiscoveryManager:
         blocked = {
             dev_id
             for dev_id, meta in self.metadata.items()
-            if meta.status
-            in (DiscoveryStatus.DISCARDED, DiscoveryStatus.REMOVED)
-            or (
-                meta.status == DiscoveryStatus.NEW
-                and not self._is_hgi(dev_id)
-                and (
-                    dev_id not in self._schema_device_ids
-                    or dev_id in self._schema_skipped_ids
+            # Composite child ids (zones, DHW, UFH circuits) are not
+            # devices — removal tombstones for them live in the schema's
+            # removed_children list, not in discovery metadata.  Blocking
+            # them here would make a mere annotation (e.g. a zone
+            # name_mismatch, default status NEW) look like a user removal
+            # (ramses-rf/ramses_cc issue 1435).
+            if not _is_child_id(dev_id)
+            and (
+                meta.status
+                in (DiscoveryStatus.DISCARDED, DiscoveryStatus.REMOVED)
+                or (
+                    meta.status == DiscoveryStatus.NEW
+                    and not self._is_hgi(dev_id)
+                    and (
+                        dev_id not in self._schema_device_ids
+                        or dev_id in self._schema_skipped_ids
+                    )
                 )
             )
         }
