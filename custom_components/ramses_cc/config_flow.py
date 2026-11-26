@@ -3847,6 +3847,20 @@ class RamsesOptionsFlowHandler(BaseRamsesFlow, OptionsFlow):
                 per_device = user_input.get(f"device_{device_id}", "skip")
                 action = per_device if per_device != "skip" else bulk
                 if action in ("none", "skip"):
+                    # Composite child ids (zones ``<ctl>_<idx>``, DHW,
+                    # UFH circuits) are not devices and must never be
+                    # removed or written as top-level schema keys — an
+                    # invalid top-level key fails ramses_rf schema
+                    # validation on the next start (ramses-rf/ramses_cc
+                    # issue 1435).  They should never reach the
+                    # new-device list; this is defense in depth.
+                    if "_" in device_id:
+                        _LOGGER.warning(
+                            "review_discovered: ignoring skip for composite "
+                            "child id %s (not a discoverable device)",
+                            device_id,
+                        )
+                        continue
                     # Mark as skipped in the schema so it's visible and
                     # survives cache loss (lives in config entry, not .storage)
                     from .schemas import remove_device_from_schema

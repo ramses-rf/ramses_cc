@@ -4317,3 +4317,88 @@ class TestClassMismatchPersistentDebug:
             assert count == 1
             # Debug should be called for persistent mismatch
             assert mock_logger.debug.called
+
+
+class TestZoneChildIdLifecycle:
+    """Composite zone/child ids must not enter the device discovery lifecycle.
+
+    Regression tests for ramses-rf/ramses_cc issue 1435: a zone ``_name``
+    mismatch stores metadata under the composite zone id (``<ctl>_<idx>``)
+    with the default status NEW.  Because composite ids are never in the
+    schema device-id set, the zone stayed NEW, appeared in the review
+    form's new-device section, and was returned by get_blocked_ids() —
+    escalating a cosmetic name mismatch to schema corruption.
+    """
+
+    @staticmethod
+    def _make_zone(zone_id: str, runtime_name: str | None) -> MagicMock:
+        zone = MagicMock()
+        zone.id = zone_id
+        zone.zone_state = MagicMock()
+        zone.zone_state.name = runtime_name
+        return zone
+
+    @staticmethod
+    def _setup_mismatch(manager: DiscoveryManager) -> None:
+        schema = {
+            "01:150000": {
+                "zones": {
+                    "03": {"_name": "Lounge"},
+                },
+            },
+        }
+        zones = [
+            TestZoneChildIdLifecycle._make_zone(
+                "01:150000_03", runtime_name="Kitchen"
+            )
+        ]
+        count = manager.check_name_mismatches(schema, zones=zones)
+        assert count == 1
+
+    def test_mismatch_zone_not_in_new_devices(self) -> None:
+        """A name-mismatch zone must not appear as a NEW device to review."""
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        self._setup_mismatch(manager)
+        manager.sync_with_schema({"01:150000", "22:111111"})
+
+        new_ids = {
+            e.device.device_id
+            for e in manager.get_devices(status=DiscoveryStatus.NEW)
+        }
+        assert "01:150000_03" not in new_ids
+
+    def test_mismatch_zone_not_in_blocked_ids(self) -> None:
+        """A name-mismatch zone must not be blocked as an unaccepted device."""
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        self._setup_mismatch(manager)
+        manager.sync_with_schema({"01:150000", "22:111111"})
+
+        assert "01:150000_03" not in manager.get_blocked_ids()
+
+    def test_mismatch_zone_still_in_name_mismatch_devices(self) -> None:
+        """The zone must still surface in the name-mismatch review section."""
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        self._setup_mismatch(manager)
+
+        result = manager.get_name_mismatch_devices()
+        assert {e.device.device_id for e in result} == {"01:150000_03"}
+
+    def test_mismatch_zone_status_not_flapped_to_removed(self) -> None:
+        """sync_with_schema must not lifecycle-flap composite child ids.
+
+        Composite ids are never in the schema device-id set, so without a
+        guard an ACCEPTED child would be marked REMOVED on every sync.
+        """
+        scan = make_mock_scan()
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        self._setup_mismatch(manager)
+
+        manager.sync_with_schema({"01:150000", "22:111111"})
+        manager.sync_with_schema({"01:150000", "22:111111"})
+
+        meta = manager.metadata.get("01:150000_03")
+        assert meta is not None
+        assert meta.status != DiscoveryStatus.REMOVED
