@@ -2589,6 +2589,24 @@ class TestCheckOrphanedDevices:
         assert meta is not None
         assert meta.orphaned is None  # no notification
 
+    def test_foreign_owner_not_orphaned(self) -> None:
+        # Arrange: a neighbour's device (_owner != root _owner) that the
+        # scan last saw long ago, synced as foreign via the schema
+        old_date = (dt.now() - td(days=30)).isoformat()
+        dev = make_discovered_device("37:063334", "CO2", last_seen=old_date)
+        scan = make_mock_scan([dev])
+        manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)
+        schema = {"_owner": "me", "37:063334": {"_owner": "not-me"}}
+        manager.sync_with_schema(set(), {"37:063334"}, schema)
+
+        # Act
+        count = manager.check_orphaned_devices(schema, threshold_days=7)
+
+        # Assert: blocked devices are never reported as orphaned
+        assert count == 0
+        meta = manager.metadata.get("37:063334")
+        assert meta is None or meta.orphaned is None
+
     def test_hgi_not_orphaned(self) -> None:
         scan = make_mock_scan([])
         manager = DiscoveryManager(make_mock_hass(), scan, auto_notify=False)

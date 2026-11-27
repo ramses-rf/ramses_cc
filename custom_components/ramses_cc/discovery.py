@@ -1331,6 +1331,11 @@ class DiscoveryManager:
             # positive (issue 1119).
             if schema_entry.get("_faked") is True:
                 continue
+            # Skip foreign-owner devices (neighbour's devices).  They
+            # are blocked, so not seeing them is expected — mirrors
+            # the other discovery checks.
+            if device_id in self._foreign_device_ids:
+                continue
 
             dev = scan_devices.get(device_id)
             if dev is None:
